@@ -1,0 +1,33 @@
+[project]
+name = "open-econs"
+version = "0.1.0"
+description = "The scikit-learn of empirical economics."
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "statsmodels>=0.14",
+    "formulaic>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-cov", "hypothesis>=6.0"]
+lint = ["mypy>=1.8", "ruff>=0.3"]
+# plot = ["matplotlib>=3.8"]   # reserved for Phase 2
+
+[project.urls]
+Homepage = "https://github.com/anomalyco/open-econs"
+
+[tool.mypy]
+ignore_missing_imports = true
+disallow_untyped_defs = true
+disallow_untyped_calls = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[tool.ruff.lint]
+ignore = ["E501"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
