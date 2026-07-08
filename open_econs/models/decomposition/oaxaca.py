@@ -15,6 +15,9 @@ def oaxaca(
     data: pd.DataFrame,
     by: str,
     decomposition_type: str = "two-fold",
+    std: bool = False,
+    bootstrap_n: int = 500,
+    conf_level: float = 0.95,
 ) -> OaxacaResult:
     """Perform an Oaxaca-Blinder decomposition.
 
@@ -30,6 +33,14 @@ def oaxaca(
         of *formula*.
     decomposition_type : str, default "two-fold"
         Either ``"two-fold"`` or ``"three-fold"``.
+    std : bool, default False
+        If True, compute bootstrapped standard errors.  Bootstrap is
+        computationally expensive; 500 iterations is a reasonable minimum
+        for exploration, 5000+ for publication.
+    bootstrap_n : int, default 1000
+        Number of bootstrap replications (only used when ``std=True``).
+    conf_level : float, default 0.95
+        Confidence level for trimming extreme bootstrap draws.
 
     Returns
     -------
@@ -50,23 +61,18 @@ def oaxaca(
     if len(unique_vals) != 2:
         raise errors.non_binary_error(by, unique_vals)
 
-    call = _capture_call(formula=formula, by=by, decomposition_type=decomposition_type)
+    call = _capture_call(
+        formula=formula, by=by, decomposition_type=decomposition_type,
+        std=std, bootstrap_n=bootstrap_n, conf_level=conf_level,
+    )
 
     yy, XX = parse_formula(formula, data)
     y_arr = yy.values.ravel()
 
-    # Resolve the bifurcate column index
-    # Path A: column name appears verbatim in XX (float column)
-    # Path B: column is categorical and was encoded (e.g. "g" -> "C(g)[T.1]")
-    #         In this case we need to add the original label column to XX.values
-    #         since statsmodels OaxacaBlinder needs it in the exog matrix.
     if by in XX.columns:
         bifurcate_idx = list(XX.columns).index(by)
     else:
-        patterns = [
-            f"C({by})[",      # explicit C(col) encoding
-            f"{by}[",         # auto-detected string encoding
-        ]
+        patterns = [f"C({by})[", f"{by}["]
         encoded_cols = [
             c for c in XX.columns
             if any(c.startswith(p) for p in patterns)
@@ -103,14 +109,16 @@ def oaxaca(
     )
 
     if decomposition_type == "two-fold":
-        stats_result = model.two_fold(std=False)
+        stats_result = model.two_fold(std=std, n=bootstrap_n, conf=conf_level)
         explained = float(stats_result.params[1])
         unexplained = float(stats_result.params[0])
         gap_val = float(stats_result.params[2])
+        interaction = None
     elif decomposition_type == "three-fold":
-        stats_result = model.three_fold(std=False)
+        stats_result = model.three_fold(std=std, n=bootstrap_n, conf=conf_level)
         endowment = float(stats_result.params[0])
         coefficients = float(stats_result.params[1])
+        interaction = float(stats_result.params[2])
         gap_val = float(stats_result.params[3])
         explained = endowment
         unexplained = coefficients
@@ -120,16 +128,25 @@ def oaxaca(
             f"Use 'two-fold' or 'three-fold'."
         )
 
+    std_series: pd.Series | None = None
+    if std and stats_result.std:
+        if decomposition_type == "two-fold":
+            labels = ["Unexplained", "Explained"]
+        else:
+            labels = ["Endowment", "Coefficients", "Interaction"]
+        std_series = pd.Series(stats_result.std, index=labels, name="std_err")
+
     return OaxacaResult(
         formula=formula,
         nobs=int(len(yy)),
         cov_type="nonrobust",
         explained=explained,
         unexplained=unexplained,
+        interaction=interaction,
         total_gap=gap_val,
         decomposition_type=decomposition_type,
         by_groups=(str(model.bi[0]), str(model.bi[1])),
-        std=None,
+        std=std_series,
         call=call,
     )
 

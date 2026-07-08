@@ -4,20 +4,16 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from open_econs._version import __version__
 from open_econs.core.base import BaseModel
 
 
 class OLSResult(BaseModel):
-    """Result of an ordinary least-squares regression.
-
-    All numeric arrays are stored as ``pd.Series`` / ``pd.DataFrame``
-    indexed by variable name.
-    """
-
     def __init__(
         self,
         *,
         formula: str,
+        rhs_formula: str,
         nobs: int,
         df_resid: int,
         df_model: int,
@@ -32,16 +28,20 @@ class OLSResult(BaseModel):
         f_statistic: float,
         f_p_value: float,
         rsd: float,
+        llf: float,
+        aic: float,
+        bic: float,
         fitted: pd.Series,
         residuals: pd.Series,
         call: dict[str, Any],
     ) -> None:
         self.formula = formula
+        self.rhs_formula = rhs_formula
         self.data_shape = (nobs, coefficients.shape[0])
         self.cov_type = cov_type
         self.call = call
         self.timestamp = datetime.now()
-        self.package_version = "0.1.0"
+        self.package_version = __version__
 
         self.nobs = nobs
         self.df_resid = df_resid
@@ -56,6 +56,9 @@ class OLSResult(BaseModel):
         self.f_statistic = f_statistic
         self.f_p_value = f_p_value
         self.rsd = rsd
+        self.llf = llf
+        self.aic = aic
+        self.bic = bic
         self.fitted_values = fitted if fitted is not None else pd.Series(dtype=float)
         self.residuals = residuals
 
@@ -75,6 +78,9 @@ class OLSResult(BaseModel):
         return df
 
     def summary(self) -> str:
+        llf_str = f"{self.llf:.3f}" if self.llf is not None and not self._isnan(self.llf) else "N/A"
+        aic_str = f"{self.aic:.2f}" if self.aic is not None and not self._isnan(self.aic) else "N/A"
+        bic_str = f"{self.bic:.2f}" if self.bic is not None and not self._isnan(self.bic) else "N/A"
         header = (
             f"                            OLS Regression Results                            \n"
             f"======================================================================\n"
@@ -84,23 +90,35 @@ class OLSResult(BaseModel):
             f"Df Model:                    {self.df_model}\n"
             f"Covariance Type:             {self.cov_type}\n"
             f"R-squared:                   {self.r_squared:.6f}\n"
-            f"Adj. R-squared:              {self.adj_r_squared:.6f}\n"
-            f"F-statistic:                 {self.f_statistic:.4f}\n"
-            f"Prob (F-statistic):          {self.f_p_value:.6e}\n"
-            f"Log-Likelihood:              N/A\n"
-            f"AIC:                         N/A\n"
-            f"BIC:                         N/A\n"
+            f"Adj. R-squared:            {self.adj_r_squared:.6f}\n"
+            f"F-statistic:                 {self._fmt(self.f_statistic, '.4f')}\n"
+            f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
+            f"Log-Likelihood:              {llf_str}\n"
+            f"AIC:                         {aic_str}\n"
+            f"BIC:                         {bic_str}\n"
             f"======================================================================\n"
         )
         tbl = self.tidy().to_string(index=False)
         return header + tbl + "\n======================================================================\n"
+
+    def _isnan(self, v: float) -> bool:
+        try:
+            return np.isnan(v)
+        except (TypeError, ValueError):
+            return True
+
+    def _fmt(self, v: float, spec: str) -> str:
+        if self._isnan(v):
+            return "N/A"
+        return f"{v:{spec}}"
 
     def predict(self, newdata: pd.DataFrame | None = None) -> pd.Series:
         from formulaic import Formula
 
         if newdata is None:
             return self.fitted_values
-        XX = Formula(self.formula).get_model_matrix(newdata, na_action="drop").rhs
+        matrices = Formula(self.rhs_formula).get_model_matrix(newdata, na_action="drop")
+        XX = matrices.rhs if hasattr(matrices, "rhs") else matrices
         pred = pd.Series(
             np.dot(XX.values, self.coefficients.values),
             index=XX.index,
@@ -110,12 +128,6 @@ class OLSResult(BaseModel):
 
 
 class OaxacaResult(BaseModel):
-    """Result of an Oaxaca-Blinder decomposition.
-
-    This is **not** a subclass of ``OLSResult`` — decompositions have
-    different semantics and do not support predict().
-    """
-
     def __init__(
         self,
         *,
@@ -124,6 +136,7 @@ class OaxacaResult(BaseModel):
         cov_type: str,
         explained: float,
         unexplained: float,
+        interaction: float | None,
         total_gap: float,
         decomposition_type: str,
         by_groups: tuple[str, str],
@@ -135,11 +148,12 @@ class OaxacaResult(BaseModel):
         self.cov_type = cov_type
         self.call = call
         self.timestamp = datetime.now()
-        self.package_version = "0.1.0"
+        self.package_version = __version__
 
         self.nobs = nobs
         self.explained = explained
         self.unexplained = unexplained
+        self.interaction = interaction if interaction is not None else 0.0
         self.total_gap = total_gap
         self.type = decomposition_type
         self.by_groups = by_groups
@@ -156,7 +170,7 @@ class OaxacaResult(BaseModel):
         else:
             data = {
                 "Component": ["Endowment", "Coefficients", "Interaction", "Total Gap"],
-                "Effect": [self.explained, self.unexplained, 0.0, self.total_gap],
+                "Effect": [self.explained, self.unexplained, self.interaction, self.total_gap],
             }
         df = pd.DataFrame(data)
         if self.std is not None:

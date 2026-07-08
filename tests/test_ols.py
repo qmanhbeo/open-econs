@@ -106,3 +106,33 @@ class TestOLS:
         r = oe.ols("income ~ education + age - 1", data=df_ols)
         assert "Intercept" not in r.coefficients.index
         assert r.df_model == 2
+
+    def test_predict_newdata_without_lhs(self, df_ols):
+        r = oe.ols("income ~ education + age", data=df_ols)
+        test = df_ols[["education", "age"]].iloc[:5]
+        pred = r.predict(test)
+        assert len(pred) == 5
+        assert pred.name == "predicted"
+
+    def test_predict_newdata_no_intercept(self, df_ols):
+        r = oe.ols("income ~ education - 1", data=df_ols)
+        test = df_ols[["education"]].iloc[:3]
+        pred = r.predict(test)
+        assert len(pred) == 3
+
+    def test_rhs_formula_stored(self, df_ols):
+        r = oe.ols("income ~ education + age", data=df_ols)
+        assert r.rhs_formula == "education + age"
+
+    def test_summary_shows_llf_aic_bic(self, df_ols):
+        r = oe.ols("income ~ education + age", data=df_ols)
+        s = r.summary()
+        assert "Log-Likelihood" in s
+        assert "AIC" in s
+        assert "BIC" in s
+        assert "N/A" not in s.split("Log-Likelihood:")[1].split("\n")[0]
+
+    def test_package_version(self, df_ols):
+        r = oe.ols("income ~ education + age", data=df_ols)
+        from open_econs._version import __version__
+        assert r.package_version == __version__

@@ -101,3 +101,71 @@ class TestOaxaca:
     def test_missing_by_column(self, df_oaxaca):
         with pytest.raises(ValueError, match="not found"):
             oe.oaxaca("income ~ education + age", data=df_oaxaca, by="nonexistent")
+
+    def test_three_fold_interaction_stored(self, df_oaxaca):
+        d = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female",
+            decomposition_type="three-fold",
+        )
+        assert isinstance(d.interaction, float)
+
+    def test_three_fold_components_sum_to_gap(self, df_oaxaca):
+        d = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female",
+            decomposition_type="three-fold",
+        )
+        total = d.explained + d.unexplained + d.interaction
+        assert abs(total - d.total_gap) < 1e-10
+
+    def test_two_fold_std_propagates(self, df_oaxaca):
+        d = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female",
+            std=True, bootstrap_n=50,
+        )
+        assert d.std is not None
+        assert isinstance(d.std, pd.Series)
+        assert len(d.std) == 2  # unexplained, explained
+
+    def test_three_fold_std_propagates(self, df_oaxaca):
+        d = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female",
+            decomposition_type="three-fold",
+            std=True, bootstrap_n=50,
+        )
+        assert d.std is not None
+        assert len(d.std) == 3  # endowment, coefficients, interaction
+
+    def test_tidy_with_std_has_std_err_column(self, df_oaxaca):
+        d = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female",
+            std=True, bootstrap_n=50,
+        )
+        tidy = d.tidy()
+        assert "Std Err" in tidy.columns
+
+    def test_interaction_in_tidy_three_fold(self, df_oaxaca):
+        d = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female",
+            decomposition_type="three-fold",
+        )
+        tidy = d.tidy()
+        interaction_row = tidy[tidy["Component"] == "Interaction"]
+        assert not interaction_row.empty
+        assert interaction_row["Effect"].values[0] != 0.0 or abs(
+            d.explained + d.unexplained + d.interaction - d.total_gap
+        ) < 1e-10
+
+    def test_tidy_without_std_has_no_std_err(self, df_oaxaca):
+        d = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female",
+            std=False,
+        )
+        tidy = d.tidy()
+        assert "Std Err" not in tidy.columns

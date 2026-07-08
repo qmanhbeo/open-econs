@@ -46,6 +46,7 @@ def ols(
     >>> result.coefficients["education"]
     """
     call = _capture_call(formula=formula, cluster=cluster, cov_type=cov_type)
+    rhs_formula = formula.split("~", 1)[1].strip()
     yy, XX = parse_formula(formula, data)
 
     y_arr = yy.values.ravel()
@@ -79,6 +80,7 @@ def ols(
 
     return OLSResult(
         formula=formula,
+        rhs_formula=rhs_formula,
         nobs=int(fitted.nobs),
         df_resid=int(fitted.df_resid),
         df_model=int(fitted.df_model),
@@ -93,6 +95,9 @@ def ols(
         f_statistic=_safe_fvalue(fitted),
         f_p_value=_safe_f_pvalue(fitted),
         rsd=float(np.sqrt(fitted.mse_resid)),
+        llf=_safe_llf(fitted),
+        aic=_safe_aic(fitted),
+        bic=_safe_bic(fitted),
         fitted=fitted_values,
         residuals=residuals,
         call=call,
@@ -118,5 +123,26 @@ def _safe_fvalue(fitted: Any) -> float:
 def _safe_f_pvalue(fitted: Any) -> float:
     try:
         return float(fitted.f_pvalue)
+    except (ValueError, AttributeError):
+        return float("nan")
+
+
+def _safe_llf(fitted: Any) -> float:
+    try:
+        return float(fitted.llf)
+    except (ValueError, AttributeError):
+        return float("nan")
+
+
+def _safe_aic(fitted: Any) -> float:
+    try:
+        return float(fitted.aic)
+    except (ValueError, AttributeError):
+        return float("nan")
+
+
+def _safe_bic(fitted: Any) -> float:
+    try:
+        return float(fitted.bic)
     except (ValueError, AttributeError):
         return float("nan")
