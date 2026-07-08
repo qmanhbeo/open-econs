@@ -123,7 +123,7 @@ class TestOaxaca:
         d = oe.oaxaca(
             "income ~ education + age + female",
             data=df_oaxaca, by="female",
-            std=True, bootstrap_n=50,
+            std=True, bootstrap_n=50, seed=42,
         )
         assert d.std is not None
         assert isinstance(d.std, pd.Series)
@@ -134,16 +134,45 @@ class TestOaxaca:
             "income ~ education + age + female",
             data=df_oaxaca, by="female",
             decomposition_type="three-fold",
-            std=True, bootstrap_n=50,
+            std=True, bootstrap_n=50, seed=42,
         )
         assert d.std is not None
         assert len(d.std) == 3  # endowment, coefficients, interaction
+
+    def test_bootstrap_reproducible_with_seed(self, df_oaxaca):
+        d1 = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female",
+            std=True, bootstrap_n=100, seed=99,
+        )
+        d2 = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female",
+            std=True, bootstrap_n=100, seed=99,
+        )
+        assert d1.std is not None and d2.std is not None
+        import numpy.testing as npt
+        npt.assert_allclose(d1.std.values, d2.std.values, rtol=1e-10)
+
+    def test_bootstrap_different_seed_gives_different(self, df_oaxaca):
+        d1 = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female",
+            std=True, bootstrap_n=50, seed=42,
+        )
+        d2 = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female",
+            std=True, bootstrap_n=50, seed=7,
+        )
+        assert d1.std is not None and d2.std is not None
+        assert not (d1.std.values == d2.std.values).all()
 
     def test_tidy_with_std_has_std_err_column(self, df_oaxaca):
         d = oe.oaxaca(
             "income ~ education + age + female",
             data=df_oaxaca, by="female",
-            std=True, bootstrap_n=50,
+            std=True, bootstrap_n=50, seed=42,
         )
         tidy = d.tidy()
         assert "Std Err" in tidy.columns

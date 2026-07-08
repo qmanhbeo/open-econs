@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from statsmodels.stats.oaxaca import OaxacaBlinder
 
@@ -16,8 +17,9 @@ def oaxaca(
     by: str,
     decomposition_type: str = "two-fold",
     std: bool = False,
-    bootstrap_n: int = 500,
+    bootstrap_n: int = 1000,
     conf_level: float = 0.95,
+    seed: int | None = None,
 ) -> OaxacaResult:
     """Perform an Oaxaca-Blinder decomposition.
 
@@ -36,11 +38,15 @@ def oaxaca(
     std : bool, default False
         If True, compute bootstrapped standard errors.  Bootstrap is
         computationally expensive; 500 iterations is a reasonable minimum
-        for exploration, 5000+ for publication.
+        for exploration, 1000+ for publication.
     bootstrap_n : int, default 1000
         Number of bootstrap replications (only used when ``std=True``).
+        Statsmodels' own default is 5000; 1000 is a reasonable trade-off
+        for exploration, 5000+ for publication-grade estimates.
     conf_level : float, default 0.95
         Confidence level for trimming extreme bootstrap draws.
+    seed : int, optional
+        Random seed for reproducible bootstrap standard errors.
 
     Returns
     -------
@@ -63,7 +69,7 @@ def oaxaca(
 
     call = _capture_call(
         formula=formula, by=by, decomposition_type=decomposition_type,
-        std=std, bootstrap_n=bootstrap_n, conf_level=conf_level,
+        std=std, bootstrap_n=bootstrap_n, conf_level=conf_level, seed=seed,
     )
 
     yy, XX = parse_formula(formula, data)
@@ -99,6 +105,9 @@ def oaxaca(
                 f"Available columns in design matrix: {list(XX.columns)}"
             )
     hasconst = any("Intercept" in c for c in XX.columns)
+
+    if seed is not None:
+        np.random.seed(seed)
 
     model = OaxacaBlinder(
         y_arr,
