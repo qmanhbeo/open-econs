@@ -1,0 +1,28 @@
+*! iv_basic.do — IV / 2SLS
+clear all
+set more off
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_iv.csv", clear
+ivregress 2sls y x2 (x = z)
+
+scalar s_N     = e(N)
+scalar s_bx2   = _b[x2]
+scalar s_bx    = _b[x]
+scalar s_sex2  = _se[x2]
+scalar s_sex   = _se[x]
+
+clear
+set obs 5
+gen str20 name  = ""
+gen double value = .
+replace name = "N"     in 1
+replace name = "b_x2"  in 2
+replace name = "b_x"   in 3
+replace name = "se_x2" in 4
+replace name = "se_x"  in 5
+replace value = s_N    in 1
+replace value = s_bx2  in 2
+replace value = s_bx   in 3
+replace value = s_sex2 in 4
+replace value = s_sex  in 5
+
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\iv_basic.dta", replace
