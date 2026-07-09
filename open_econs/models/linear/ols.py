@@ -48,8 +48,17 @@ def ols(
     rhs_formula = formula.split("~", 1)[1].strip()
 
     from formulaic import Formula
-    formula_obj = Formula(formula)
-    model_spec = formula_obj.get_model_matrix(data, na_action="drop")
+    try:
+        formula_obj = Formula(formula)
+        model_spec = formula_obj.get_model_matrix(data, na_action="drop")
+    except Exception as e:
+        msg = str(e)
+        if "not present in the dataset" in msg or "is not present" in msg:
+            import re as _re
+            m = _re.search(r"`(\w+)`", msg)
+            bad_col = m.group(1) if m else formula.split("~", 1)[1].strip()
+            raise errors.missing_column_error(bad_col, data.columns.tolist()) from e
+        raise
     if hasattr(model_spec, "rhs"):
         XX = model_spec.rhs
         yy = model_spec.lhs
@@ -182,8 +191,12 @@ def _safe_bic(fitted: Any) -> float:
 
 
 def _check_collinearity(XX: pd.DataFrame) -> None:
-    from numpy.linalg import cond
+    from numpy.linalg import cond, matrix_rank
     X_vals = XX.values
+    n_params = X_vals.shape[1]
+    rank = matrix_rank(X_vals)
+    if rank < n_params:
+        raise errors.singular_matrix_error()
     cn = cond(X_vals)
     if cn > 1e10:
         import warnings as _w

@@ -38,10 +38,10 @@ r2 = ctx.oaxaca("income ~ education + age + female", by="female")
 ## Installation
 
 ```bash
-pip install open-econs
+pip install git+https://github.com/qmanhbeo/open-econs.git
 ```
 
-Requires Python ≥ 3.12.
+Requires Python ≥ 3.10.
 
 ## Design Principles
 

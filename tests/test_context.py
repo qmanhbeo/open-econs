@@ -1,5 +1,3 @@
-import pandas as pd
-import pytest
 
 import open_econs as oe
 

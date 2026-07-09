@@ -38,14 +38,12 @@ class TestNaNHandling:
 
 
 class TestCollinearity:
-    def test_perfect_collinearity_survives(self, df_ols):
-        """statsmodels silently drops collinear columns — our job is to
-        not crash, and to return a valid result with NaN-free SEs."""
+    def test_perfect_collinearity_raises_or_warns(self, df_ols):
+        """Rank-deficient design matrix should raise singular_matrix_error."""
         df = df_ols.copy()
         df["x_dup"] = df["education"] * 1.0
-        r = oe.ols("income ~ education + age + x_dup", data=df)
-        assert r.nobs == len(df_ols)
-        assert r.std_errors.notna().all()
+        with pytest.raises(RuntimeError, match="Singular design matrix"):
+            oe.ols("income ~ education + age + x_dup", data=df)
 
     def test_singular_cluster_column(self, df_ols):
         with pytest.raises(ValueError, match="Cluster column"):
@@ -53,11 +51,10 @@ class TestCollinearity:
 
 
 class TestExtremeShapes:
-    def test_single_observation(self):
+    def test_single_observation_raises_singular(self):
         df = pd.DataFrame({"y": [5.0], "x": [2.0]})
-        r = oe.ols("y ~ x", data=df)
-        assert r.nobs == 1
-        assert np.isnan(r.f_statistic)  # F-test impossible with df_resid = 0
+        with pytest.raises(RuntimeError, match="Singular design matrix"):
+            oe.ols("y ~ x", data=df)
 
     def test_zero_rows(self):
         df = pd.DataFrame({"y": [], "x": []})

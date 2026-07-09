@@ -1,7 +1,6 @@
 """Numerical correctness tests: compare open-econs output against
 raw statsmodels and hand-calculated reference values."""
 
-import numpy as np
 import numpy.testing as npt
 import pandas as pd
 import pytest
@@ -103,8 +102,6 @@ class TestOLSvsStatsmodels:
         X_no = self.df[["education", "age"]]
         X_no_c = sm.add_constant(X_no)
         sm_r = sm.OLS(self.y, X_no_c).fit(cov_type="nonrobust")
-        raw_intercept = sm_r.params.iloc[0]
-        raw_slopes = sm_r.params.iloc[1:]
 
         oe_r = oe.ols("income ~ education + age", data=self.df, cov_type="nonrobust")
         npt.assert_allclose(oe_r.coefficients.values, sm_r.params.values, rtol=1e-8)

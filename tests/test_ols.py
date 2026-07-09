@@ -150,11 +150,8 @@ class TestOLS:
         assert len(pred) == 3
 
     def test_collinearity_warns(self, df_collinear):
-        import warnings
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
+        with pytest.raises(RuntimeError, match="Singular design matrix"):
             oe.ols("y ~ x + x_dup", data=df_collinear)
-        assert any("near-singular" in str(msg.message).lower() for msg in w)
 
     def test_robust_f_statistic_differs_from_homoskedastic(self, df_ols):
         r_nr = oe.ols("income ~ education + age", data=df_ols, cov_type="nonrobust")
@@ -168,3 +165,23 @@ class TestOLS:
         assert "0.975" in tidy.columns
         assert "[0.025" not in tidy.columns
         assert "0.975]" not in tidy.columns
+
+    def test_truly_singular_matrix_raises(self, df_ols):
+        from pytest import raises as _raises
+        df = df_ols[["income", "education", "age"]].copy()
+        df["x_edu2"] = df["education"] * 2.0
+        df["x_edu3"] = df["education"] * 3.0
+        with _raises(RuntimeError, match="Singular design matrix"):
+            oe.ols("income ~ education + x_edu2 + x_edu3", data=df)
+
+    def test_missing_column_in_formula_raises_friendly(self, df_ols):
+        from pytest import raises as _raises
+        with _raises(ValueError, match="Column.*not found"):
+            oe.ols("income ~ nonexistent_col", data=df_ols)
+
+    def test_predict_missing_column_raises_friendly(self, df_ols):
+        r = oe.ols("income ~ education + age", data=df_ols)
+        bad = df_ols[["education"]].copy()
+        from pytest import raises as _raises
+        with _raises(ValueError, match="Column.*not found"):
+            r.predict(newdata=bad)

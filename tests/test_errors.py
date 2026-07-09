@@ -1,5 +1,3 @@
-import pandas as pd
-import pytest
 
 from open_econs._internal.errors import (
     missing_column_error,

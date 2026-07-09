@@ -117,16 +117,26 @@ class OLSResult(BaseModel):
     def predict(self, newdata: pd.DataFrame | None = None) -> pd.Series:
         if newdata is None:
             return self.fitted_values
-        if self._model_spec is not None:
-            matrices = self._model_spec.get_model_matrix(newdata, na_action="drop")
-            if hasattr(matrices, "rhs"):
-                XX = matrices.rhs
+        try:
+            if self._model_spec is not None:
+                matrices = self._model_spec.get_model_matrix(newdata, na_action="drop")
+                if hasattr(matrices, "rhs"):
+                    XX = matrices.rhs
+                else:
+                    XX = matrices
             else:
-                XX = matrices
-        else:
-            from formulaic import Formula
-            matrices = Formula(self.rhs_formula).get_model_matrix(newdata, na_action="drop")
-            XX = matrices.rhs if hasattr(matrices, "rhs") else matrices
+                from formulaic import Formula
+                matrices = Formula(self.rhs_formula).get_model_matrix(newdata, na_action="drop")
+                XX = matrices.rhs if hasattr(matrices, "rhs") else matrices
+        except Exception as e:
+            msg = str(e)
+            if "not present in the dataset" in msg or "is not present" in msg:
+                import re as _re
+                m = _re.search(r"`(\w+)`", msg)
+                bad_col = m.group(1) if m else self.rhs_formula
+                from open_econs._internal.errors import missing_column_error
+                raise missing_column_error(bad_col, newdata.columns.tolist()) from e
+            raise
         pred = pd.Series(
             np.dot(XX.values, self.coefficients.values),
             index=XX.index,
