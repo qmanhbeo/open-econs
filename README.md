@@ -10,10 +10,11 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (v0.6.2):** robust pseudo-inverse fix for `abond()` weighting
-> matrices improving numerical stability on small panels, plus all v0.6.1 features
-> (Arellano-Bond difference GMM, Callaway-Sant'Anna staggered DiD, sharp/fuzzy
-> RDD, multi-way clustering, Newey-West HAC).
+> **Current version (v0.6.3):** correctness fixes — Cragg-Donald Wald F-stat
+> for multi-endogenous IV, FE intercept stripping by name, IK bandwidth for
+> RDD, Windmeijer two-step SE correction, collapsed instruments for AB,
+> honest staggered-DiD labeling, vectorized within-transform, plus all v0.6.2
+> features.
 
 ## Quick Start
 
@@ -269,7 +270,7 @@ might fit.
   Hausman statistic ≥ 0, etc.); edge-case tests (single entity/time, duplicate
   (entity,time) index, constant outcome, singular Hausman difference); context
   delegation and result-API tests. See `tests/test_panel_*.py`.
-- [x] **v0.6.1–v0.6.2** — see changelog below.
+- [x] **v0.6.1–v0.6.3** — see changelog below.
 
 #### v0.6.1 — Dynamic panels, staggered DiD, RDD, robust SEs
 - [x] `abond()` — Arellano-Bond difference GMM (one/two-step, Windmeijer SEs,
@@ -290,8 +291,29 @@ might fit.
   tiny-panel and near-singular cases.
 - [x] Test coverage expanded for edge-case panels.
 
+#### v0.6.3 — Correctness fixes & applied-econometrics improvements
+- [x] **Cragg-Donald Wald F-stat** for multi-endogenous IV — now uses
+  `linearmodels`' exact `cragg_donald_stat` instead of `min(first_stage_F)`.
+- [x] **FE intercept stripping** — boolean indexing by column name, not
+  position, so formulaic column ordering changes cannot silently break output.
+- [x] **FE `cov_type` default** unified to `"HC2"` (matching `ols()` and
+  modern Stata).
+- [x] **Windmeijer (2005) two-step correction** — replaced centered-moment
+  sandwich with the proper Windmeijer additive correction for AB GMM.
+- [x] **Collapsed instruments** for `abond()` (`collapse=True` default) —
+  one instrument per lag depth (Roodman 2009), mitigating the "too many
+  instruments" problem that biases two-step SEs downward.
+- [x] **IK bandwidth** for `rdd()` — Imbens-Kalyanaraman (2012) MSE-optimal
+  bandwidth replaces Silverman's density rule; Silverman kept as fallback.
+- [x] **Honest staggered-DiD labeling** — renamed to "simplified OLS
+  approximation", added `bootstrap` parameter, docstring caveats.
+- [x] **Vectorized `_within_transform()`** — pandas groupby replaces Python
+  loop for speed on large panels.
+- [x] **Oaxaca `get_dummies` fix** — uses `formulaic` `ensure_full_rank`
+  instead of fragile column-name pattern matching.
+
 #### v0.7 — Regression Discontinuity refinements
-- [ ] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
+- [x] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
 - [ ] McCrary density test for manipulation at the cutoff
 - [ ] Built-in RD plot (binned scatter + fitted lines either side of cutoff)
 

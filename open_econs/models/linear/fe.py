@@ -14,7 +14,7 @@ def fe(
     entity: str | None = None,
     time: str | None = None,
     cluster: str | None = None,
-    cov_type: str = "HC1",
+    cov_type: str = "HC2",
 ) -> OLSResult:
     """Estimate a linear fixed-effects (within) model.
 
@@ -35,7 +35,7 @@ def fe(
         via iterative demeaning for unbalanced panels).
     cluster : str, optional
         Column name for cluster-robust standard errors.
-    cov_type : str, default "HC1"
+    cov_type : str, default "HC2"
         Covariance estimator type. Used when *cluster* is not set.
 
     Returns
@@ -139,17 +139,16 @@ def fe(
     se_arr = fitted.bse
     t_arr = fitted.tvalues
     p_arr = fitted.pvalues
-    conf_arr = fitted.conf_int()
+    conf_arr = np.asarray(fitted.conf_int())
+
+    keep_mask = np.array([c != "Intercept" for c in XX.columns])
+    coef_arr = np.asarray(coef_arr)[keep_mask]
+    se_arr = np.asarray(se_arr)[keep_mask]
+    t_arr = np.asarray(t_arr)[keep_mask]
+    p_arr = np.asarray(p_arr)[keep_mask]
+    conf_arr = conf_arr[keep_mask]
 
     kept_columns = [c for c in XX.columns if c != "Intercept"]
-    n_real = len(kept_columns)
-
-    coef_arr = coef_arr[-n_real:] if len(coef_arr) > n_real else coef_arr
-    se_arr = se_arr[-n_real:] if len(se_arr) > n_real else se_arr
-    t_arr = t_arr[-n_real:] if len(t_arr) > n_real else t_arr
-    p_arr = p_arr[-n_real:] if len(p_arr) > n_real else p_arr
-    if conf_arr.shape[0] > n_real:
-        conf_arr = conf_arr[-n_real:]
 
     conf_int = pd.DataFrame(
         {"lower": conf_arr[:, 0], "upper": conf_arr[:, 1]},
@@ -262,16 +261,14 @@ def _demean_two_way(
 
 
 def _within_transform(z: np.ndarray, groups: np.ndarray) -> np.ndarray:
-    """Subtract group means from z."""
+    """Subtract group means from z (vectorized via pandas groupby)."""
     if z.ndim == 1:
         z = z.reshape(-1, 1)
-    unique = np.unique(groups)
-    result = z.copy()
-    for g in unique:
-        mask = groups == g
-        if np.sum(mask) > 0:
-            result[mask] = z[mask] - z[mask].mean(axis=0)
-    return result.ravel() if z.shape[1] == 1 else result
+    cols = [f"c{i}" for i in range(z.shape[1])]
+    df = pd.DataFrame(z, columns=cols)
+    df["__g"] = groups
+    means = df.groupby("__g")[cols].transform("mean").values
+    return (z - means).ravel() if z.shape[1] == 1 else z - means
 
 
 def _safe_fvalue(fitted: Any) -> float:

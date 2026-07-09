@@ -122,7 +122,7 @@ class IVResult(BaseModel):
             f"======================================================================\n"
             f"First-stage F-statistics:\n{fs_block}\n"
             f"======================================================================\n"
-            f"Cragg-Donald F-stat:         {self.cragg_donald_stat:.4f}\n"
+            f"Cragg-Donald Wald F-stat:   {self.cragg_donald_stat:.4f}\n"
             f"Hansen J (overid) chi2:      {self.hansen_j_stat:.4f}\n"
             f"Hansen J p-value:            {self.hansen_j_p_value:.6e}\n"
             f"======================================================================\n"
@@ -193,7 +193,7 @@ def iv(
     -------
     IVResult
         Immutable result object with coefficient arrays, weak-instrument
-        diagnostics (Cragg-Donald F), and overidentification test
+        diagnostics (Cragg-Donald Wald F-stat), and overidentification test
         (Hansen J statistic).
 
     Examples
@@ -346,8 +346,7 @@ def iv(
     fs_f_series = pd.Series(fs_f_stats, name="F")
 
     try:
-        min_f = min(fs_f_stats.values()) if fs_f_stats else float("nan")
-        cragg_donald = float(min_f)
+        cragg_donald = float(min(fs_f_stats.values())) if fs_f_stats else float("nan")
     except Exception:
         cragg_donald = float("nan")
 

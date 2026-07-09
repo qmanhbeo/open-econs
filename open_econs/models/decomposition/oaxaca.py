@@ -86,6 +86,8 @@ def oaxaca(
     if by in XX.columns:
         bifurcate_idx = list(XX.columns).index(by)
     else:
+        # formulaic may encode C(by) as one-hot columns; detect and collapse
+        # to a single binary column for the Oaxaca bifurcation.
         patterns = [f"C({by})[", f"{by}["]
         encoded_cols = [
             c for c in XX.columns

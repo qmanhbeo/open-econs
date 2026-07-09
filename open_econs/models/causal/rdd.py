@@ -91,6 +91,87 @@ def _triangular_kernel(x: np.ndarray, c: float, h: float) -> np.ndarray:
     return w
 
 
+def _ik_bandwidth(x: np.ndarray, y: np.ndarray, c: float) -> float:
+    """Imbens-Kalyanaraman (2012) MSE-optimal bandwidth selector.
+
+    Computes h_IK = C_IK * [σ̂²_+ / f̂(c) + σ̂²_- / f̂(c)]^(1/5) * n^(-1/5)
+
+    Falls back to the Silverman rule-of-thumb if IK fails (e.g., too few obs).
+    """
+    n = len(x)
+    if n < 10:
+        return 1.06 * np.std(x, ddof=1) * n ** (-1.0 / 5.0)
+
+    d = x - c
+
+    # 1. Conditional variance σ̂² via local linear regression of y² on x.
+    try:
+        X_var = np.column_stack([np.ones(n), d])
+        W_var = np.diag(_triangular_kernel(x, c, 1.0))  # pilot bandwidth
+        XtW = X_var.T @ W_var
+        XtWX = XtW @ X_var
+        XtWy = XtW @ (y ** 2)
+        coef_var = np.linalg.solve(XtWX, XtWy)
+        sigma2 = float(coef_var[0])  # E[y²|x=c]
+        sigma2 = max(sigma2, 1e-10)
+    except Exception:
+        sigma2 = float(np.var(y))
+
+    # 2. Density at cutoff f̂(c) via triangular-kernel density estimator.
+    try:
+        h_pilot = 1.06 * np.std(x, ddof=1) * n ** (-1.0 / 5.0)
+        w = _triangular_kernel(x, c, h_pilot)
+        f_hat = float(np.sum(w)) / (n * h_pilot)
+        f_hat = max(f_hat, 1e-10)
+    except Exception:
+        f_hat = 1.0 / (np.max(x) - np.min(x) + 1e-10)
+
+    # 3. Second-derivative estimates m̈_± from global cubic polynomials.
+    try:
+        X_poly = np.column_stack([np.ones(n), d, d ** 2, d ** 3])
+        # Fit separately on each side of the cutoff.
+        left = d < 0
+        right = d >= 0
+
+        if np.sum(left) > 4 and np.sum(right) > 4:
+            # Left side: fit y = a + b*d + c*d² + d*d³
+            X_l = X_poly[left]
+            y_l = y[left]
+            coef_l = np.linalg.lstsq(X_l, y_l, rcond=None)[0]
+            m2_left = 2.0 * coef_l[2]  # second derivative
+
+            # Right side
+            X_r = X_poly[right]
+            y_r = y[right]
+            coef_r = np.linalg.lstsq(X_r, y_r, rcond=None)[0]
+            m2_right = 2.0 * coef_r[2]
+
+            m2_plus = abs(m2_right)
+            m2_minus = abs(m2_left)
+        else:
+            m2_plus = 0.0
+            m2_minus = 0.0
+    except Exception:
+        m2_plus = 0.0
+        m2_minus = 0.0
+
+    # IK (2012) optimal bandwidth formula.
+    # C_IK ≈ 3.4375 (from Imbens & Kalyanaraman 2012, Table 1)
+    C_IK = 3.4375
+    try:
+        h_IK = C_IK * (
+            sigma2 / f_hat * (m2_plus ** 2 + m2_minus ** 2)
+        ) ** (1.0 / 5.0) * n ** (-1.0 / 5.0)
+        # Sanity bounds.
+        h_max = (np.max(x) - np.min(x)) / 2.0
+        h_IK = max(h_IK, h_max * 0.01)
+        h_IK = min(h_IK, h_max)
+    except Exception:
+        h_IK = 1.06 * np.std(x, ddof=1) * n ** (-1.0 / 5.0)
+
+    return float(h_IK)
+
+
 def rdd(
     data: pd.DataFrame,
     y: str,
@@ -125,8 +206,9 @@ def rdd(
         If True, use the running-variable jump at the cutoff as an instrument
         for ``treatment`` (local linear IV / 2SLS).
     bandwidth : float, optional
-        Half-window width around the cutoff.  Defaults to a simple
-        rule-of-thumb ``1.06 * std(x) * n**(-1/5)``.
+        Half-window width around the cutoff.  Defaults to the
+        Imbens-Kalyanaraman (2012) MSE-optimal bandwidth, falling back
+        to Silverman's rule-of-thumb if IK fails.
     kernel : {"triangular"}, default "triangular"
         Kernel for local weighting (triangular is standard for RDD).
 
@@ -150,7 +232,7 @@ def rdd(
 
     x = data[running].values.astype(float)
     if bandwidth is None:
-        bandwidth = 1.06 * np.std(x, ddof=1) * len(x) ** (-1.0 / 5.0)
+        bandwidth = _ik_bandwidth(x, data[y].values.astype(float), cutoff)
     if kernel != "triangular":
         raise ValueError("Only the triangular kernel is supported.")
 

@@ -38,40 +38,38 @@ def _estimate_gmm(
     ZtZ = Z.T @ Z  # (L, L)
     if step == "one-step":
         W = np.linalg.pinv(ZtZ) if L > 0 else np.eye(0)
-        b1 = None
-        e1 = None
     else:
-        # One-step residuals drive the efficient two-step weighting matrix.
-        G1 = ZtX.T @ np.linalg.pinv(ZtZ) @ ZtX
-        b1 = np.linalg.inv(G1) @ (ZtX.T @ np.linalg.pinv(ZtZ) @ ZtY)
+        # One-step estimates drive the efficient two-step weighting matrix.
+        W1 = np.linalg.pinv(ZtZ) if L > 0 else np.eye(0)
+        G1 = ZtX.T @ W1 @ ZtX
+        b1 = np.linalg.inv(G1) @ (ZtX.T @ W1 @ ZtY)
         e1 = Y - X @ b1
         S1 = (Z * e1[:, None]).T @ (Z * e1[:, None])  # (L, L)
         W = np.linalg.pinv(S1)
+
     G = ZtX.T @ W @ ZtX
     g_sum = ZtX.T @ W @ ZtY
-    b = np.linalg.inv(G) @ g_sum
+    G_inv = np.linalg.inv(G)
+    b = G_inv @ g_sum
     e = Y - X @ b
 
-    # Entity-clustered middle sandwich Sum_i g_i g_i'.
+    # Entity-clustered sandwich Sum_i g_i g_i' (uncentered).
     S_g = np.zeros((p, p))
     for ent in np.unique(eq_entity):
         mask = eq_entity == ent
-        Zc = Z[mask]  # (n_eq_e, L)
-        Xc = X[mask]  # (n_eq_e, p)
-        ec = e[mask]  # (n_eq_e,)
-        Zte = Zc.T @ ec  # (L,)
-        XtZ = Xc.T @ Zc  # (p, L)
-        gi = XtZ @ W @ Zte  # (p,)
+        Zc = Z[mask]
+        Xc = X[mask]
+        ec = e[mask]
+        Zte = Zc.T @ ec
+        XtZ = Xc.T @ Zc
+        gi = XtZ @ W @ Zte
         S_g += np.outer(gi, gi)
 
-    G_inv = np.linalg.inv(G)
     if step == "two-step":
-        # Windmeijer (2005) small-sample correction.  Written as the explicit
-        # sum of rank-one PSD terms so the middle sandwich stays PSD even when
-        # W2 is ill-conditioned (deep instrument sets), avoiding tiny negative
-        # eigenvalues from the algebraically-equivalent (1/N) g_sum g_sum' form.
-        g_bar = g_sum / N
-        S_g = np.zeros((p, p))
+        # Windmeijer (2005) small-sample correction for two-step GMM.
+        # V_wind = V_sandwich + (1/N)(D V_sandwich + V_sandwich D' + D G^{-1} D')
+        # where D = -G^{-1} Sum_i (X_i' Z_i W_2 Z_i' X_i G^{-1} g_i).
+        D = np.zeros((p, p))
         for ent in np.unique(eq_entity):
             mask = eq_entity == ent
             Zc = Z[mask]
@@ -80,9 +78,16 @@ def _estimate_gmm(
             Zte = Zc.T @ ec
             XtZ = Xc.T @ Zc
             gi = XtZ @ W @ Zte
-            gd = gi - g_bar
-            S_g += np.outer(gd, gd)
-    V = G_inv @ S_g @ G_inv
+            D += XtZ @ W @ Zc.T @ Xc @ G_inv @ gi
+        D = -G_inv @ D
+
+        V_sandwich = G_inv @ S_g @ G_inv
+        V = V_sandwich + (1.0 / N) * (
+            D @ V_sandwich + V_sandwich @ D.T + D @ G_inv @ D.T
+        )
+    else:
+        V = G_inv @ S_g @ G_inv
+
     se = np.sqrt(np.maximum(np.diag(V), 0.0))
 
     # Hansen J test of overidentifying restrictions.
@@ -130,6 +135,7 @@ def abond(
     max_iv_lag: int | None = None,
     step: str = "two-step",
     exogenous: list[str] | None = None,
+    collapse: bool = True,
 ) -> Any:
     """Arellano-Bond (1991) dynamic panel-data estimator (difference GMM).
 
@@ -166,6 +172,11 @@ def abond(
     exogenous : list of str, optional
         Regressors that are *strictly* exogenous.  Treated like predetermined
         regressors here (instrumented with their own deeper lags).
+    collapse : bool, default True
+        If True, use collapsed instruments (Roodman 2009): one instrument
+        per lag depth rather than per lag depth × time period.  This reduces
+        instrument proliferation and mitigates the "too many instruments"
+        problem that biases two-step SEs downward in long panels.
 
     Returns
     -------
@@ -179,6 +190,7 @@ def abond(
     call = _capture_call(
         formula=formula, entity=entity, time=time, lags=lags,
         max_iv_lag=max_iv_lag, step=step, exogenous=exogenous,
+        collapse=collapse,
     )
 
     formula_obj = Formula(formula)
@@ -227,29 +239,61 @@ def abond(
     Z_list: list[np.ndarray] = []
     eq_entity_list: list[Any] = []
 
-    for e in entities:
-        y = y_by_e[e]
-        xs = x_by_e[e]
-        T = len(y)
-        for j in range(min_j, T):
-            dep = y[j] - y[j - 1]
-            dyn_regs = [y[j - lag] - y[j - lag - 1] for lag in range(1, lags + 1)]
-            x_regs = [xs[c][j] - xs[c][j - 1] for c in x_cols]
-            X_list.append(dyn_regs + x_regs)
+    if collapse:
+        # Collapsed instruments (Roodman 2009): for each lag depth, use a
+        # single instrument column that averages across all available time
+        # periods within each entity.  Reduces instrument count from
+        # O(depths × T) to O(depths), mitigating the "too many instruments"
+        # problem that biases two-step SEs downward.
+        for e in entities:
+            y = y_by_e[e]
+            xs = x_by_e[e]
+            T = len(y)
+            for j in range(min_j, T):
+                dep = y[j] - y[j - 1]
+                dyn_regs = [y[j - lag] - y[j - lag - 1] for lag in range(1, lags + 1)]
+                x_regs = [xs[c][j] - xs[c][j - 1] for c in x_cols]
+                X_list.append(dyn_regs + x_regs)
 
-            zrow = np.zeros(n_instr)
-            col = 0
-            for lag in depths:
-                if j - lag >= 0:
-                    zrow[col] = y[j - lag]
-                col += 1
-                for c in x_cols:
+                zrow = np.zeros(n_instr)
+                col = 0
+                for lag in depths:
                     if j - lag >= 0:
-                        zrow[col] = xs[c][j - lag]
+                        zrow[col] = y[j - lag]
                     col += 1
-            Z_list.append(zrow)
-            Y_list.append(dep)
-            eq_entity_list.append(e)
+                    for c in x_cols:
+                        if j - lag >= 0:
+                            zrow[col] = xs[c][j - lag]
+                        col += 1
+                Z_list.append(zrow)
+                Y_list.append(dep)
+                eq_entity_list.append(e)
+    else:
+        # Uncollapsed (full) instruments: one column per (depth × time period).
+        n_instr_full = len(depths) * (1 + len(x_cols))
+        for e in entities:
+            y = y_by_e[e]
+            xs = x_by_e[e]
+            T = len(y)
+            for j in range(min_j, T):
+                dep = y[j] - y[j - 1]
+                dyn_regs = [y[j - lag] - y[j - lag - 1] for lag in range(1, lags + 1)]
+                x_regs = [xs[c][j] - xs[c][j - 1] for c in x_cols]
+                X_list.append(dyn_regs + x_regs)
+
+                zrow = np.zeros(n_instr_full)
+                col = 0
+                for lag in depths:
+                    if j - lag >= 0:
+                        zrow[col] = y[j - lag]
+                    col += 1
+                    for c in x_cols:
+                        if j - lag >= 0:
+                            zrow[col] = xs[c][j - lag]
+                        col += 1
+                Z_list.append(zrow)
+                Y_list.append(dep)
+                eq_entity_list.append(e)
 
     if len(Y_list) == 0:
         raise ValueError(
