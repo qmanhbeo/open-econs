@@ -64,7 +64,7 @@ class StaggeredDiDResult(BaseModel):
             f"  Cohorts               : {sorted(self.cohorts)}",
             f"  Time periods          : {self.n_periods}",
             f"  Observations          : {self.n_obs}",
-            f"  NOTE: OLS-based approximation, not doubly-robust CS2021.",
+            "  NOTE: OLS-based approximation, not doubly-robust CS2021.",
             "",
             "  Group-time ATT (post-treatment only):",
         ]
