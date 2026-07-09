@@ -1,6 +1,6 @@
 [project]
 name = "open-econs"
-version = "0.6.1"
+version = "0.6.2"
 description = "The scikit-learn of empirical economics."
 requires-python = ">=3.10"
 dependencies = [
@@ -19,7 +19,7 @@ lint = ["mypy>=1.8", "ruff>=0.3"]
 plot = ["matplotlib>=3.8"]
 
 [project.urls]
-Homepage = "https://github.com/anomalyco/open-econs"
+Homepage = "https://github.com/qmanhbeo/open-econs"
 
 [tool.mypy]
 ignore_missing_imports = true

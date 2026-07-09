@@ -10,10 +10,10 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (v0.6.1):** dynamic panel `abond()` (Arellano-Bond difference
-> GMM, Windmeijer SEs, Hansen J + AR(1)/AR(2) tests), `staggered_did()`
-> (Callaway-Sant'Anna 2021), `rdd()` (sharp/fuzzy regression discontinuity),
-> multi-way clustering, Newey-West HAC, plus all v0.6.0 panel and DiD tools.
+> **Current version (v0.6.2):** robust pseudo-inverse fix for `abond()` weighting
+> matrices improving numerical stability on small panels, plus all v0.6.1 features
+> (Arellano-Bond difference GMM, Callaway-Sant'Anna staggered DiD, sharp/fuzzy
+> RDD, multi-way clustering, Newey-West HAC).
 
 ## Quick Start
 
@@ -85,7 +85,7 @@ r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
 pip install open-econs                           # core: OLS, Oaxaca, FE, IV, Logit, Probit
 pip install open-econs[plot]                      # + matplotlib for .plot()
 pip install open-econs[dev,lint]                  # + development & linting tools
-pip install git+https://github.com/qmanhbeo/open-econs.git   # latest dev
+pip install git+https://github.com/qmanhbeo/open-econs.git    # latest dev
 ```
 
 Requires Python ≥ 3.10.
@@ -269,7 +269,7 @@ might fit.
   Hausman statistic ≥ 0, etc.); edge-case tests (single entity/time, duplicate
   (entity,time) index, constant outcome, singular Hausman difference); context
   delegation and result-API tests. See `tests/test_panel_*.py`.
-- [x] **v0.6.1** — see changelog below.
+- [x] **v0.6.1–v0.6.2** — see changelog below.
 
 #### v0.6.1 — Dynamic panels, staggered DiD, RDD, robust SEs
 - [x] `abond()` — Arellano-Bond difference GMM (one/two-step, Windmeijer SEs,
@@ -284,6 +284,11 @@ might fit.
 - [x] `Context.pooled()` defaults to panel-robust (cluster-by-entity) inference.
 - [x] DRY: `_capture_call` centralized; `to_latex()`/`to_html()` no longer require
   `jinja2`; bug fixes from the v0.6.0 review (FE demeaning, docstrings).
+
+#### v0.6.2 — Numerical stability & patch release
+- [x] Robust pseudo-inverse for `abond()` weighting matrices — stabilizes
+  tiny-panel and near-singular cases.
+- [x] Test coverage expanded for edge-case panels.
 
 #### v0.7 — Regression Discontinuity refinements
 - [ ] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
