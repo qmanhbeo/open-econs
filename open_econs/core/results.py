@@ -271,6 +271,139 @@ class OLSResult(BaseModel):
         plt.show()
 
 
+class BinaryResult(BaseModel):
+    def __init__(
+        self,
+        *,
+        formula: str,
+        rhs_formula: str,
+        nobs: int,
+        df_resid: int,
+        df_model: int,
+        cov_type: str,
+        coefficients: pd.Series,
+        std_errors: pd.Series,
+        z_stats: pd.Series,
+        p_values: pd.Series,
+        conf_int: pd.DataFrame,
+        llf: float,
+        aic: float,
+        bic: float,
+        pseudo_r2: float,
+        fitted: pd.Series,
+        call: dict[str, Any],
+        model_type: str,
+        _sm_fit: Any = None,
+    ) -> None:
+        self.formula = formula
+        self.rhs_formula = rhs_formula
+        self.data_shape = (nobs, coefficients.shape[0])
+        self.cov_type = cov_type
+        self.call = call
+        self.timestamp = datetime.now()
+        self.package_version = __version__
+
+        self.nobs = nobs
+        self.df_resid = df_resid
+        self.df_model = df_model
+        self.coefficients = coefficients
+        self.std_errors = std_errors
+        self.z_stats = z_stats
+        self.p_values = p_values
+        self.conf_int = conf_int
+        self.llf = llf
+        self.aic = aic
+        self.bic = bic
+        self.pseudo_r2 = pseudo_r2
+        self.fitted_values = fitted if fitted is not None else pd.Series(dtype=float)
+        self.model_type = model_type
+        self._sm_fit = _sm_fit
+
+        self._freeze()
+
+    def tidy(self) -> pd.DataFrame:
+        df = pd.DataFrame({
+            "Variable": self.coefficients.index,
+            "Coef": self.coefficients.values,
+            "Std Err": self.std_errors.values,
+            "z": self.z_stats.values,
+            "P>|z|": self.p_values.values,
+            "0.025": self.conf_int["lower"].values,
+            "0.975": self.conf_int["upper"].values,
+        })
+        df.index.name = None
+        return df
+
+    def summary(self) -> str:
+        llf_str = f"{self.llf:.3f}" if self.llf is not None and not self._isnan(self.llf) else "N/A"
+        aic_str = f"{self.aic:.2f}" if self.aic is not None and not self._isnan(self.aic) else "N/A"
+        bic_str = f"{self.bic:.2f}" if self.bic is not None and not self._isnan(self.bic) else "N/A"
+        header = (
+            f"                 {self.model_type.upper()} Regression Results                 \n"
+            f"======================================================================\n"
+            f"Dep. Variable:               {self.formula.split('~')[0].strip()}\n"
+            f"Model:                       {self.model_type.title()}\n"
+            f"No. Observations:            {self.nobs}\n"
+            f"Df Residuals:                {self.df_resid}\n"
+            f"Df Model:                    {self.df_model}\n"
+            f"Pseudo R-squared:          {self.pseudo_r2:.6f}\n"
+            f"Log-Likelihood:              {llf_str}\n"
+            f"AIC:                         {aic_str}\n"
+            f"BIC:                         {bic_str}\n"
+            f"======================================================================\n"
+        )
+        tbl = self.tidy().to_string(index=False)
+        return (
+            header + tbl +
+            "\n======================================================================\n"
+        )
+
+    def margins(self) -> pd.DataFrame:
+        if self._sm_fit is None:
+            raise RuntimeError(
+                "margins() requires a fitted statsmodels result. "
+                "This should not happen with the standard logit()/probit() API."
+            )
+        margeff = self._sm_fit.get_margeff(at="mean")
+        non_const_vars = [c for c in self.coefficients.index if c != "Intercept"]
+        df = pd.DataFrame({
+            "Variable": non_const_vars,
+            "dy/dx": margeff.margeff,
+            "Std Err": margeff.margeff_se,
+            "z": margeff.tvalues,
+            "P>|z|": margeff.pvalues,
+            "0.025": margeff.conf_int()[:, 0],
+            "0.975": margeff.conf_int()[:, 1],
+        })
+        df.index.name = None
+        return df
+
+    def predict(self, newdata: pd.DataFrame | None = None, proba: bool = True) -> pd.Series:
+        if newdata is None:
+            return self.fitted_values if proba else pd.Series(
+                (self.fitted_values >= 0.5).astype(int),
+                index=self.fitted_values.index,
+                name="predicted",
+            )
+        if self._sm_fit is None:
+            raise RuntimeError(
+                "predict(newdata=...) requires a fitted statsmodels result."
+            )
+        from formulaic import Formula
+        matrices = Formula(self.rhs_formula).get_model_matrix(newdata, na_action="drop")
+        XX = matrices.rhs if hasattr(matrices, "rhs") else matrices
+        probs = self._sm_fit.predict(XX)
+        if proba:
+            return pd.Series(probs, index=XX.index, name="predicted_proba")
+        return pd.Series((probs >= 0.5).astype(int), index=XX.index, name="predicted")
+
+    def _isnan(self, v: float) -> bool:
+        try:
+            return np.isnan(v)
+        except (TypeError, ValueError):
+            return True
+
+
 class OaxacaResult(BaseModel):
     def __init__(
         self,
