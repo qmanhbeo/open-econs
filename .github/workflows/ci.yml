@@ -23,7 +23,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e ".[dev,lint]"
+          pip install -e ".[dev,lint,plot]"
 
       - name: Lint with ruff
         run: ruff check open_econs/

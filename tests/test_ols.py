@@ -271,6 +271,7 @@ class TestOLS:
             oe.ols("income ~ education + age", data=df_ols, weights=np.array([1.0]))
 
     def test_plot_smoke(self, df_ols):
+        pytest.importorskip("matplotlib")
         r = oe.ols("income ~ education + age", data=df_ols)
         import matplotlib
         matplotlib.use("Agg")
