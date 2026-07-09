@@ -1,14 +1,18 @@
 # open-econs
 
-**The scikit-learn of empirical economics.**
+[![PyPI version](https://img.shields.io/pypi/v/open-econs?color=blue)](https://pypi.org/project/open-econs/)
+[![Python versions](https://img.shields.io/pypi/pyversions/open-econs)](https://pypi.org/project/open-econs/)
+
+**The scikit-learn of open economics.**
 
 A Python library that bridges the gap between traditional Stata/R econometrics
 workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (0.2.0):** OLS regression and Oaxaca-Blinder decomposition.
-> Additional models (IV, Logit, Probit, FE, DiD) are planned.
+> **Current version (0.3.0):** OLS with WLS, diagnostics, hypothesis tests,
+> Oaxaca-Blinder decomposition with per-variable breakdown.
+> Additional models (FE, IV, Logit, Probit, DiD) are planned.
 
 ## Quick Start
 
@@ -65,7 +69,9 @@ r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
 ## Installation
 
 ```bash
-pip install git+https://github.com/qmanhbeo/open-econs.git
+pip install open-econs                           # core: OLS + Oaxaca
+pip install open-econs[plot]                      # + matplotlib for .plot()
+pip install git+https://github.com/qmanhbeo/open-econs.git   # latest dev
 ```
 
 Requires Python ≥ 3.10.
@@ -104,8 +110,8 @@ Every estimator returns an object with:
 | `.summary()` | Printable string (also `__repr__`) |
 | `.tidy()` | `pd.DataFrame` — coefficient or effect table |
 | `.predict(newdata)` | `pd.Series` — only on regression models |
-| `.export(path)` | JSON serialization (`.json` only in v0.1) |
-| `.plot()` | *Not yet implemented — raises with clear message* |
+| `.export(path)` | JSON / CSV serialization |
+| `.plot()` | Residual diagnostics plot (requires `pip install open-econs[plot]`) |
 | `.to_dict()` | `dict` — full result metadata |
 
 ## Development
@@ -138,51 +144,58 @@ might fit.
 - [x] `.tidy()`, `.summary()`, `.export()` (JSON)
 - [x] Numerical parity verified against raw `statsmodels` output
 
-#### v0.2 — Causal Inference Core
+#### v0.2 — Diagnostics & Quality *(shipped)*
+- [x] Default `cov_type` changed to `HC2` (matches modern Stata)
+- [x] Per-variable Oaxaca breakdown via `.variable_detail` and `tidy(detail=True)`
+- [x] Diagnostic tests: Jarque-Bera, Breusch-Pagan, Durbin-Watson, Ramsey RESET
+- [x] Condition number threshold lowered to 30 (Belsley standard); stored on result
+- [x] `.export()` now supports CSV output
+- [x] Wald / F-test API surface (stored statsmodels result ready for v0.3)
+- [x] README example numbers fixed to match real output
+
+#### v0.3 — Real Regression *(current)*
+- [x] `summary()` shows diagnostics + condition number
+- [x] `wald_test()` / `f_test()` on `OLSResult`
+- [x] `ols(weights=...)` — weighted least squares
+- [x] `.plot()` implemented (matplotlib as optional extra)
+- [x] First PyPI release (`pip install open-econs`)
+
+#### v0.4 — Causal Inference Core
 - [ ] `fe()` — one-way and two-way fixed effects (within transformation + absorbed dummies)
 - [ ] `iv()` — instrumental variables / 2SLS, with first-stage F-stat and weak-instrument warnings
 - [ ] `logit()` / `probit()` — binary choice, with marginal effects (`.margins()`) not just raw coefficients
-- [ ] `.plot()` implemented (matplotlib as an optional extra — `pip install open-econs[plot]`)
-- [ ] Variable-level contribution breakdown for Oaxaca (currently aggregate-only)
+- [ ] `ctx.vif()` — variance inflation factor / collinearity diagnostics
 
-#### v0.3 — Design-Based Causal Inference
+#### v0.5 — Design-Based Causal Inference
 - [ ] `did()` — two-period and staggered difference-in-differences
 - [ ] Callaway–Sant'Anna and Sun–Abraham estimators for staggered treatment timing (the "bad comparisons" problem in TWFE)
 - [ ] Event-study specification with pre-trend coefficient plots
-- [ ] `ctx.vif()` — variance inflation factor / collinearity diagnostics
 - [ ] `ctx.balance()` — covariate balance tables for treatment/control splits
 
-#### v0.4 — Panel Data Engine
+#### v0.6 — Panel Data Engine
 - [ ] First-class `PanelContext(df, entity=, time=)` — panel structure remembered, not re-specified per call
 - [ ] Random effects, Hausman test (`fe()` vs `re()` comparison helper)
 - [ ] Dynamic panel: Arellano-Bond / Blundell-Bond GMM estimator
 - [ ] Driscoll-Kraay standard errors for cross-sectional dependence
 
-#### v0.5 — Regression Discontinuity
+#### v0.7 — Regression Discontinuity
 - [ ] `rdd()` — sharp and fuzzy RDD, local linear/polynomial estimation
 - [ ] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
 - [ ] McCrary density test for manipulation at the cutoff
 - [ ] Built-in RD plot (binned scatter + fitted lines either side of cutoff)
 
-#### v0.6 — Matching & Balance
+#### v0.8 — Matching & Balance
 - [ ] `psm()` — propensity score matching (nearest-neighbor, caliper, kernel)
 - [ ] Coarsened exact matching
-- [ ] Post-matching balance diagnostics reusing `ctx.balance()` from v0.3
+- [ ] Post-matching balance diagnostics reusing `ctx.balance()` from v0.5
 - [ ] Sensitivity analysis (Rosenbaum bounds)
 
-#### v0.7 — Comparative Case Studies
-- [ ] `synth()` — synthetic control (Abadie-Diamond-Hainmueller)
-- [ ] Placebo-in-space and placebo-in-time inference
-- [ ] Generalized synthetic control / interactive fixed effects (Xu 2017)
-
-#### v0.8 — Structural Foundations
+#### v0.9 — Structural Foundations & Release Candidate
 - [ ] `gmm()` — general GMM estimation framework other estimators can build on
 - [ ] Nonlinear least squares
 - [ ] Discrete choice groundwork (multinomial logit, nested logit)
-
-#### v0.9 — Time Series & Release Candidate
-- [ ] `ar()` / `var()` — autoregressive and vector autoregression
-- [ ] Cointegration tests (Engle-Granger, Johansen)
+- [ ] `synth()` — synthetic control (Abadie-Diamond-Hainmueller)
+- [ ] Placebo-in-space and placebo-in-time inference
 - [ ] Newey-West HAC standard errors as a `cov_type` option across estimators
 - [ ] API freeze candidate — no more breaking signature changes without a deprecation cycle
 - [ ] Full docstring coverage + type-checked public API
@@ -194,6 +207,8 @@ might fit.
 - [ ] Numerical parity test suite against Stata/R reference output, **published and re-run in CI on every release**
 - [ ] Benchmark suite (speed vs. statsmodels/linearmodels on large panels)
 - [ ] First tagged PyPI release announced beyond the initial contributor circle
+
+---
 
 ---
 

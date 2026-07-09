@@ -62,6 +62,7 @@ class OLSResult(BaseModel):
         model_spec: Any = None,
         condition_number: float = 0.0,
         _X: pd.DataFrame | None = None,
+        _sm_fit: Any = None,
     ) -> None:
         self.formula = formula
         self.rhs_formula = rhs_formula
@@ -92,6 +93,7 @@ class OLSResult(BaseModel):
         self._model_spec = model_spec
         self.condition_number = condition_number
         self._X = _X
+        self._sm_fit = _sm_fit
 
         self._freeze()
 
@@ -122,6 +124,7 @@ class OLSResult(BaseModel):
             f"Covariance Type:             {self.cov_type}\n"
             f"R-squared:                   {self.r_squared:.6f}\n"
             f"Adj. R-squared:           {self.adj_r_squared:.6f}\n"
+            f"Condition No.:               {self._fmt(self.condition_number, '.2e')}\n"
             f"F-statistic:                 {self._fmt(self.f_statistic, '.4f')}\n"
             f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
             f"Log-Likelihood:              {llf_str}\n"
@@ -130,7 +133,35 @@ class OLSResult(BaseModel):
             f"======================================================================\n"
         )
         tbl = self.tidy().to_string(index=False)
-        return header + tbl + "\n======================================================================\n"
+        diag = self.diagnostics()
+        diag_lines = []
+        try:
+            jb_s, jb_p = diag.get("jarque_bera", (float("nan"), float("nan")))
+            diag_lines.append(f"Jarque-Bera (chi2={jb_s:.3f}, p={jb_p:.4f})")
+        except Exception:
+            diag_lines.append("Jarque-Bera: N/A")
+        try:
+            bp_s, bp_p = diag.get("breusch_pagan", (float("nan"), float("nan")))
+            diag_lines.append(f"Breusch-Pagan (LM={bp_s:.3f}, p={bp_p:.4f})")
+        except Exception:
+            diag_lines.append("Breusch-Pagan: N/A")
+        try:
+            dw = diag.get("durbin_watson", (float("nan"),))[0]
+            diag_lines.append(f"Durbin-Watson:                  {dw:.4f}")
+        except Exception:
+            diag_lines.append("Durbin-Watson: N/A")
+        try:
+            rs_s, rs_p = diag.get("ramsey_reset", (float("nan"), float("nan")))
+            diag_lines.append(f"Ramsey RESET (F={rs_s:.3f}, p={rs_p:.4f})")
+        except Exception:
+            diag_lines.append("Ramsey RESET: N/A")
+        diag_str = "\n".join(diag_lines)
+        return (
+            header + tbl +
+            "\n======================================================================\n"
+            f"Diagnostics:\n{diag_str}\n"
+            "======================================================================\n"
+        )
 
     def _isnan(self, v: float) -> bool:
         try:
@@ -161,18 +192,20 @@ class OLSResult(BaseModel):
         return results
 
     def wald_test(self, r_matrix: Any) -> Any:
-        raise NotImplementedError(
-            "wald_test() requires the statsmodels fitted result object, "
-            "which is not currently stored on OLSResult. "
-            "Use statsmodels directly for hypothesis testing in v0.2.0."
-        )
+        if self._sm_fit is None:
+            raise RuntimeError(
+                "No fitted statsmodels result stored. "
+                "wald_test() is only available when ols() is used directly."
+            )
+        return self._sm_fit.wald_test(r_matrix)
 
     def f_test(self, r_matrix: Any) -> Any:
-        raise NotImplementedError(
-            "f_test() requires the statsmodels fitted result object, "
-            "which is not currently stored on OLSResult. "
-            "Use statsmodels directly for hypothesis testing in v0.2.0."
-        )
+        if self._sm_fit is None:
+            raise RuntimeError(
+                "No fitted statsmodels result stored. "
+                "f_test() is only available when ols() is used directly."
+            )
+        return self._sm_fit.f_test(r_matrix)
 
     def predict(self, newdata: pd.DataFrame | None = None) -> pd.Series:
         if newdata is None:
@@ -203,6 +236,39 @@ class OLSResult(BaseModel):
             name="predicted",
         )
         return pred
+
+    def plot(self) -> None:
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            raise ImportError(
+                "plot() requires matplotlib. Install it with: "
+                "pip install open-econs[plot]  or  pip install matplotlib"
+            )
+        res = self.residuals.values.ravel()
+        fitted = self.fitted_values.values.ravel()
+        fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+        ax1, ax2, ax3, ax4 = axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]
+        ax1.scatter(fitted, res, alpha=0.5, s=20)
+        ax1.axhline(0, color="red", linestyle="--", linewidth=1)
+        ax1.set_xlabel("Fitted values")
+        ax1.set_ylabel("Residuals")
+        ax1.set_title("Residuals vs Fitted")
+        from scipy.stats import probplot
+        probplot(res, dist="norm", plot=ax2)
+        ax2.get_lines()[0].set_marker("o")
+        ax2.get_lines()[0].set_markersize(3)
+        ax2.get_lines()[0].set_alpha(0.5)
+        ax2.set_title("Normal Q-Q")
+        sqrt_abs_res = np.sqrt(np.abs(res))
+        ax3.scatter(fitted, sqrt_abs_res, alpha=0.5, s=20)
+        ax3.set_xlabel("Fitted values")
+        ax3.set_ylabel("Sqrt(|Residuals|)")
+        ax3.set_title("Scale-Location")
+        ax4.text(0.5, 0.5, "Leverage plot: planned for v0.4", ha="center", va="center", transform=ax4.transAxes)
+        ax4.set_title("Residuals vs Leverage")
+        fig.tight_layout()
+        plt.show()
 
 
 class OaxacaResult(BaseModel):

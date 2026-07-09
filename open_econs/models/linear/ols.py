@@ -15,8 +15,9 @@ def ols(
     data: pd.DataFrame,
     cluster: str | None = None,
     cov_type: str = "HC2",
+    weights: str | np.ndarray | pd.Series | None = None,
 ) -> OLSResult:
-    """Estimate an ordinary least-squares regression.
+    """Estimate an ordinary least-squares or weighted least-squares regression.
 
     Parameters
     ----------
@@ -29,8 +30,12 @@ def ols(
     cov_type : str, default "HC2"
         Covariance estimator type. Common choices: ``"HC2"`` (default,
         matches modern Stata ``reg, robust``; changed from HC1 in v0.2.0),
-        ``"HC1"`` (classic White SE), ``"HC0"``, ``"HC3"``, ``"nonrobust"``.
+        ``"HC1`` (classic White SE), ``"HC0"``, ``"HC3"``, ``"nonrobust"``.
         Ignored when *cluster* is provided (cluster-robust is used instead).
+    weights : str or array-like, optional
+        Frequency/analytic weights for weighted least squares. If a string,
+        interpreted as a column name in *data*. If an array, must match the
+        number of rows in *data*.
 
     Returns
     -------
@@ -44,7 +49,7 @@ def ols(
     >>> result.tidy()
     >>> result.coefficients["education"]
     """
-    call = _capture_call(formula=formula, cluster=cluster, cov_type=cov_type)
+    call = _capture_call(formula=formula, cluster=cluster, cov_type=cov_type, weights=weights)
     rhs_formula = formula.split("~", 1)[1].strip()
 
     from formulaic import Formula
@@ -89,18 +94,38 @@ def ols(
 
     condition_number = _check_collinearity(XX)
 
-    if cluster is not None:
-        if cluster not in data.columns:
-            raise errors.cluster_column_error(cluster, data.columns.tolist())
-        aligned_groups = data.loc[XX.index, cluster]
-        fitted = sm.OLS(y_arr, XX.values).fit(
-            cov_type="cluster",
-            cov_kwds={"groups": aligned_groups},
+    if weights is not None:
+        if isinstance(weights, str):
+            if weights not in data.columns:
+                raise errors.missing_column_error(weights, data.columns.tolist())
+            w_arr = data.loc[XX.index, weights].values.astype(float)
+        else:
+            w_arr = np.asarray(weights, dtype=float)
+            if len(w_arr) != original_n:
+                raise ValueError(
+                    f"weights array length ({len(w_arr)}) does not match data rows ({original_n})"
+                )
+            w_arr = w_arr[XX.index]
+        if np.any(w_arr < 0):
+            raise ValueError("Weights must be non-negative.")
+        fitted = sm.WLS(y_arr, XX.values, weights=w_arr).fit(
+            cov_type="cluster" if cluster else cov_type,
+            cov_kwds={"groups": data.loc[XX.index, cluster]} if cluster else {},
         )
-        cov_label = f"cluster({cluster})"
+        cov_label = f"cluster({cluster})" if cluster else cov_type
     else:
-        fitted = sm.OLS(y_arr, XX.values).fit(cov_type=cov_type)
-        cov_label = cov_type
+        if cluster is not None:
+            if cluster not in data.columns:
+                raise errors.cluster_column_error(cluster, data.columns.tolist())
+            aligned_groups = data.loc[XX.index, cluster]
+            fitted = sm.OLS(y_arr, XX.values).fit(
+                cov_type="cluster",
+                cov_kwds={"groups": aligned_groups},
+            )
+            cov_label = f"cluster({cluster})"
+        else:
+            fitted = sm.OLS(y_arr, XX.values).fit(cov_type=cov_type)
+            cov_label = cov_type
 
     coef_arr = fitted.params
     se_arr = fitted.bse
@@ -145,6 +170,7 @@ def ols(
         model_spec=stored_spec,
         condition_number=condition_number,
         _X=XX,
+        _sm_fit=fitted,
     )
 
 
@@ -210,5 +236,3 @@ def _check_collinearity(XX: pd.DataFrame) -> float:
             stacklevel=3,
         )
     return cn
-
-

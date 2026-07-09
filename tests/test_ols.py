@@ -79,10 +79,10 @@ class TestOLS:
         with pytest.raises(NotImplementedError, match="Only .json"):
             r.export(str(tmp_path / "result.md"))
 
-    def test_plot_raises(self, df_ols):
-        r = oe.ols("income ~ education + age", data=df_ols)
-        with pytest.raises(NotImplementedError, match="plot"):
-            r.plot()
+    def test_plot_raises_on_oaxaca(self, df_oaxaca):
+        d = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female")
+        with pytest.raises(NotImplementedError):
+            d.plot()
 
     def test_nonrobust_se(self, df_ols):
         r = oe.ols("income ~ education + age", data=df_ols, cov_type="nonrobust")
@@ -214,3 +214,68 @@ class TestOLS:
         from pytest import raises as _raises
         with _raises(NotImplementedError, match="export"):
             r.export(str(tmp_path / "test.parquet"))
+
+    def test_summary_contains_diagnostics(self, df_ols):
+        r = oe.ols("income ~ education + age", data=df_ols)
+        s = r.summary()
+        assert "Diagnostics" in s
+        assert "Condition No." in s
+        assert "Jarque-Bera" in s
+        assert "Durbin-Watson" in s
+        assert "Ramsey RESET" in s
+
+    def test_wald_test_works(self, df_ols):
+        r = oe.ols("income ~ education + age", data=df_ols, cov_type="nonrobust")
+        w = r.wald_test("x1 = x2")
+        assert hasattr(w, "pvalue")
+        assert hasattr(w, "statistic")
+
+    def test_f_test_works(self, df_ols):
+        r = oe.ols("income ~ education + age", data=df_ols, cov_type="nonrobust")
+        f = r.f_test("x1 = x2")
+        assert hasattr(f, "pvalue")
+        assert hasattr(f, "fvalue")
+
+    def test_wls_weights_column(self, df_ols):
+        r = oe.ols("income ~ education + age", data=df_ols, weights="education", cov_type="nonrobust")
+        assert abs(r.r_squared) > 0
+        assert r.nobs == len(df_ols)
+
+    def test_wls_weights_array(self, df_ols):
+        w = np.random.uniform(0.5, 1.5, len(df_ols))
+        r = oe.ols("income ~ education + age", data=df_ols, weights=w, cov_type="nonrobust")
+        assert abs(r.r_squared) > 0
+
+    def test_wls_matches_statsmodels(self, df_ols):
+        w = np.random.uniform(0.5, 1.5, len(df_ols))
+        import statsmodels.api as sm
+        y = df_ols["income"]
+        X = sm.add_constant(df_ols[["education", "age"]])
+        sm_r = sm.WLS(y, X, weights=w).fit()
+        oe_r = oe.ols("income ~ education + age", data=df_ols, weights=w, cov_type="nonrobust")
+        import numpy.testing as npt
+        npt.assert_allclose(oe_r.coefficients.values, sm_r.params, rtol=1e-10)
+        npt.assert_allclose(oe_r.std_errors.values, sm_r.bse, rtol=1e-8)
+
+    def test_wls_negative_weights_raises(self, df_ols):
+        w = np.array([-1.0] + [1.0] * (len(df_ols) - 1))
+        with pytest.raises(ValueError, match="non-negative"):
+            oe.ols("income ~ education + age", data=df_ols, weights=w)
+
+    def test_wls_invalid_column_raises(self, df_ols):
+        with pytest.raises(ValueError, match="not found"):
+            oe.ols("income ~ education + age", data=df_ols, weights="nonexistent")
+
+    def test_wls_length_mismatch_raises(self, df_ols):
+        with pytest.raises(ValueError, match="does not match"):
+            oe.ols("income ~ education + age", data=df_ols, weights=np.array([1.0]))
+
+    def test_plot_smoke(self, df_ols):
+        r = oe.ols("income ~ education + age", data=df_ols)
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        try:
+            r.plot()
+        finally:
+            plt.close("all")

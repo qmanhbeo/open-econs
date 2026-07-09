@@ -145,10 +145,12 @@ class TestStringColumns:
 
 
 class TestBaseModelStubs:
-    def test_plot_raises_on_all_results(self, df_ols):
-        r = oe.ols("income ~ education + age", data=df_ols)
-        with pytest.raises(NotImplementedError, match="plot"):
-            r.plot()
+    def test_oaxaca_plot_raises(self, df_oaxaca):
+        d = oe.oaxaca(
+            "income ~ education + age + female", data=df_oaxaca, by="female"
+        )
+        with pytest.raises(NotImplementedError):
+            d.plot()
 
     def test_export_md_raises(self, df_ols, tmp_path):
         r = oe.ols("income ~ education + age", data=df_ols)
