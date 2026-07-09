@@ -10,9 +10,9 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (0.3.0):** OLS with WLS, diagnostics, hypothesis tests,
-> Oaxaca-Blinder decomposition with per-variable breakdown.
-> Additional models (FE, IV, Logit, Probit, DiD) are planned.
+> **Current version (0.4.0):** OLS with WLS, diagnostics, hypothesis tests,
+> Oaxaca-Blinder decomposition, fixed effects (one-way & two-way), 2SLS/IV,
+> logit & probit with marginal effects, and VIF diagnostics.
 
 ## Quick Start
 
@@ -42,6 +42,25 @@ r.predict(df.head(2))# out-of-sample predictions
 
 print(r.summary())    # printable summary (also __repr__)
 
+# --- Logit / Probit ---
+r_logit = oe.logit("female ~ education + age", data=df)
+r_logit.tidy()        # coef, z, P>|z| table
+r_logit.margins()     # average marginal effects
+r_logit.predict(proba=False)  # binary class prediction
+
+# --- Fixed effects ---
+r_fe = oe.fe("income ~ education + age", data=df, entity="province")
+r_fe.tidy()           # within-transformed coefficients
+
+# --- IV / 2SLS ---
+r_iv = oe.iv("income ~ education | age", data=df)
+r_iv.tidy()           # 2SLS coefficients
+r_iv.first_stage()    # first-stage F-stat
+
+# --- VIF diagnostics ---
+ctx = oe.Context(df)
+ctx.vif("income ~ education + age")  # VIF per variable
+
 # --- Oaxaca-Blinder decomposition ---
 # NOTE: the 'by' column must also appear on the RHS of the formula
 d = oe.oaxaca("income ~ education + age + female", data=df, by="female")
@@ -49,18 +68,11 @@ d.explained          # 16.00  (covariate-driven gap)
 d.unexplained        #  4.00  (coefficient-driven gap)
 d.total_gap          # 20.00  (female mean - male mean)
 
-# --- Categorical variables ---
-r2 = oe.ols("income ~ education + C(province)", data=df)
-r2.coefficients
-# Intercept          -33.60
-# education            6.37
-# C(province)[T.B]     0.72
-# C(province)[T.C]     3.69
-
 # --- Context remembers the dataset ---
-ctx = oe.Context(df)
 ctx.ols("income ~ education + age")            # same as oe.ols(..., data=df)
-ctx.oaxaca("income ~ education + age", by="female")
+ctx.logit("female ~ education + age")
+ctx.probit("female ~ education + age")
+ctx.vif("education + age")
 
 # --- Immutability ---
 r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
@@ -69,8 +81,9 @@ r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
 ## Installation
 
 ```bash
-pip install open-econs                           # core: OLS + Oaxaca
+pip install open-econs                           # core: OLS, Oaxaca, FE, IV, Logit, Probit
 pip install open-econs[plot]                      # + matplotlib for .plot()
+pip install open-econs[dev,lint]                  # + development & linting tools
 pip install git+https://github.com/qmanhbeo/open-econs.git   # latest dev
 ```
 
@@ -86,20 +99,17 @@ Requires Python ≥ 3.10.
 - **Consistent interface across estimators**: `summary()`, `tidy()`,
   `export()`, `predict()` (where applicable).
 
-## v0.1 Estimators
+## Estimators
 
 | Function | Description |
 |---|---|
-| `ols()` / `reg()` | Ordinary least squares with HC1/robust/clustered SEs |
+| `ols()` / `reg()` | Ordinary least squares with HC1/robust/clustered SEs, WLS |
+| `fe()` | Fixed effects (one-way entity, two-way entity + time) |
+| `iv()` | Instrumental variables / 2SLS with first-stage F-stat |
+| `logit()` | Binary logit with `.margins()`, `.predict()` |
+| `probit()` | Binary probit (same API as logit) |
 | `oaxaca()` | Oaxaca-Blinder decomposition (two-fold, three-fold) |
-
-### Planned (future releases)
-
-- `fe()` — fixed effects
-- `iv()` — instrumental variables
-- `logit()` / `probit()` — binary choice
-- `did()` — difference-in-differences
-- `psm()` — propensity score matching
+| `ctx.vif()` | Variance inflation factor / collinearity diagnostics |
 
 ## Result API
 
@@ -160,11 +170,11 @@ might fit.
 - [x] `.plot()` implemented (matplotlib as optional extra)
 - [x] First PyPI release (`pip install open-econs`)
 
-#### v0.4 — Causal Inference Core
-- [ ] `fe()` — one-way and two-way fixed effects (within transformation + absorbed dummies)
-- [ ] `iv()` — instrumental variables / 2SLS, with first-stage F-stat and weak-instrument warnings
-- [ ] `logit()` / `probit()` — binary choice, with marginal effects (`.margins()`) not just raw coefficients
-- [ ] `ctx.vif()` — variance inflation factor / collinearity diagnostics
+#### v0.4 — Causal Inference Core *(shipped)*
+- [x] `fe()` — one-way and two-way fixed effects (within transformation + absorbed dummies)
+- [x] `iv()` — instrumental variables / 2SLS, with first-stage F-stat
+- [x] `logit()` / `probit()` — binary choice, with marginal effects (`.margins()`)
+- [x] `ctx.vif()` — variance inflation factor / collinearity diagnostics
 
 #### v0.5 — Design-Based Causal Inference
 - [ ] `did()` — two-period and staggered difference-in-differences
