@@ -20,6 +20,7 @@ def oaxaca(
     bootstrap_n: int = 1000,
     conf_level: float = 0.95,
     seed: int | None = None,
+    swap: bool = True,
 ) -> OaxacaResult:
     """Perform an Oaxaca-Blinder decomposition.
 
@@ -47,6 +48,10 @@ def oaxaca(
         Confidence level for trimming extreme bootstrap draws.
     seed : int, optional
         Random seed for reproducible bootstrap standard errors.
+    swap : bool, default True
+        If True, the decomposition is computed as group 1 minus group 0
+        (group 1 is the higher value of the binary ``by`` column). Setting
+        ``swap=False`` reverses this.
 
     Returns
     -------
@@ -70,6 +75,7 @@ def oaxaca(
     call = _capture_call(
         formula=formula, by=by, decomposition_type=decomposition_type,
         std=std, bootstrap_n=bootstrap_n, conf_level=conf_level, seed=seed,
+        swap=swap,
     )
 
     yy, XX = parse_formula(formula, data)
@@ -114,7 +120,7 @@ def oaxaca(
         XX.values,
         bifurcate=bifurcate_idx,
         hasconst=hasconst,
-        swap=True,
+        swap=swap,
     )
 
     if decomposition_type == "two-fold":
@@ -137,6 +143,11 @@ def oaxaca(
             f"Use 'two-fold' or 'three-fold'."
         )
 
+    unique_vals_sorted = sorted(data[by].dropna().unique(), key=str)
+    idx_map = {float(i): str(v) for i, v in enumerate(unique_vals_sorted)}
+    group_labels = (idx_map.get(model.bi[0], str(model.bi[0])),
+                    idx_map.get(model.bi[1], str(model.bi[1])))
+
     std_series: pd.Series | None = None
     if std and stats_result.std:
         if decomposition_type == "two-fold":
@@ -148,13 +159,14 @@ def oaxaca(
     return OaxacaResult(
         formula=formula,
         nobs=int(len(yy)),
+        n_params=XX.shape[1],
         cov_type="nonrobust",
         explained=explained,
         unexplained=unexplained,
         interaction=interaction,
         total_gap=gap_val,
         decomposition_type=decomposition_type,
-        by_groups=(str(model.bi[0]), str(model.bi[1])),
+        by_groups=group_labels,
         std=std_series,
         call=call,
     )

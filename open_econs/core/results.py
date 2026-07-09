@@ -34,6 +34,7 @@ class OLSResult(BaseModel):
         fitted: pd.Series,
         residuals: pd.Series,
         call: dict[str, Any],
+        model_spec: Any = None,
     ) -> None:
         self.formula = formula
         self.rhs_formula = rhs_formula
@@ -61,6 +62,7 @@ class OLSResult(BaseModel):
         self.bic = bic
         self.fitted_values = fitted if fitted is not None else pd.Series(dtype=float)
         self.residuals = residuals
+        self._model_spec = model_spec
 
         self._freeze()
 
@@ -71,8 +73,8 @@ class OLSResult(BaseModel):
             "Std Err": self.std_errors.values,
             "t": self.t_stats.values,
             "P>|t|": self.p_values.values,
-            "[0.025": self.conf_int["lower"].values,
-            "0.975]": self.conf_int["upper"].values,
+            "0.025": self.conf_int["lower"].values,
+            "0.975": self.conf_int["upper"].values,
         })
         df.index.name = None
         return df
@@ -90,7 +92,7 @@ class OLSResult(BaseModel):
             f"Df Model:                    {self.df_model}\n"
             f"Covariance Type:             {self.cov_type}\n"
             f"R-squared:                   {self.r_squared:.6f}\n"
-            f"Adj. R-squared:            {self.adj_r_squared:.6f}\n"
+            f"Adj. R-squared:           {self.adj_r_squared:.6f}\n"
             f"F-statistic:                 {self._fmt(self.f_statistic, '.4f')}\n"
             f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
             f"Log-Likelihood:              {llf_str}\n"
@@ -113,12 +115,18 @@ class OLSResult(BaseModel):
         return f"{v:{spec}}"
 
     def predict(self, newdata: pd.DataFrame | None = None) -> pd.Series:
-        from formulaic import Formula
-
         if newdata is None:
             return self.fitted_values
-        matrices = Formula(self.rhs_formula).get_model_matrix(newdata, na_action="drop")
-        XX = matrices.rhs if hasattr(matrices, "rhs") else matrices
+        if self._model_spec is not None:
+            matrices = self._model_spec.get_model_matrix(newdata, na_action="drop")
+            if hasattr(matrices, "rhs"):
+                XX = matrices.rhs
+            else:
+                XX = matrices
+        else:
+            from formulaic import Formula
+            matrices = Formula(self.rhs_formula).get_model_matrix(newdata, na_action="drop")
+            XX = matrices.rhs if hasattr(matrices, "rhs") else matrices
         pred = pd.Series(
             np.dot(XX.values, self.coefficients.values),
             index=XX.index,
@@ -133,6 +141,7 @@ class OaxacaResult(BaseModel):
         *,
         formula: str,
         nobs: int,
+        n_params: int,
         cov_type: str,
         explained: float,
         unexplained: float,
@@ -144,7 +153,7 @@ class OaxacaResult(BaseModel):
         call: dict[str, Any],
     ) -> None:
         self.formula = formula
-        self.data_shape = (nobs, 0)
+        self.data_shape = (nobs, n_params)
         self.cov_type = cov_type
         self.call = call
         self.timestamp = datetime.now()

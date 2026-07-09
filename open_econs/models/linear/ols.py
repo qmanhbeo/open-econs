@@ -7,7 +7,6 @@ import statsmodels.api as sm
 
 from open_econs._version import __version__
 from open_econs._internal import errors
-from open_econs._internal.formula import parse_formula
 from open_econs.core.results import OLSResult
 
 
@@ -47,9 +46,39 @@ def ols(
     """
     call = _capture_call(formula=formula, cluster=cluster, cov_type=cov_type)
     rhs_formula = formula.split("~", 1)[1].strip()
-    yy, XX = parse_formula(formula, data)
+
+    from formulaic import Formula
+    formula_obj = Formula(formula)
+    model_spec = formula_obj.get_model_matrix(data, na_action="drop")
+    if hasattr(model_spec, "rhs"):
+        XX = model_spec.rhs
+        yy = model_spec.lhs
+    else:
+        from open_econs._internal.formula import parse_formula as _parse
+        yy, XX = _parse(formula, data)
+        model_spec = None
+
+    original_n = len(data)
+    dropped = original_n - len(yy)
+    vars_needed = {str(v) for v in formula_obj.required_variables}
+    cols_with_nas = sorted(v for v in vars_needed if v in data.columns and data[v].isna().any())
+    if dropped > 0:
+        from open_econs._internal.errors import rows_dropped_warning
+        import warnings as _w
+        _w.warn(rows_dropped_warning(dropped, original_n, cols_with_nas), RuntimeWarning, stacklevel=3)
+
+    if len(yy) == 0:
+        from open_econs._internal.errors import empty_data_error
+        raise empty_data_error(original_n, dropped, cols_with_nas)
 
     y_arr = yy.values.ravel()
+
+    if model_spec is not None:
+        stored_spec = model_spec.model_spec.rhs
+    else:
+        stored_spec = None
+
+    _check_collinearity(XX)
 
     if cluster is not None:
         if cluster not in data.columns:
@@ -78,6 +107,9 @@ def ols(
     fitted_values = pd.Series(fitted.fittedvalues, index=XX.index, name="fitted")
     residuals = pd.Series(fitted.resid, index=XX.index, name="residuals")
 
+    f_stat = _safe_fvalue(fitted)
+    f_pval = _safe_f_pvalue(fitted)
+
     return OLSResult(
         formula=formula,
         rhs_formula=rhs_formula,
@@ -92,8 +124,8 @@ def ols(
         conf_int=conf_int,
         r_squared=float(fitted.rsquared),
         adj_r_squared=float(fitted.rsquared_adj),
-        f_statistic=_safe_fvalue(fitted),
-        f_p_value=_safe_f_pvalue(fitted),
+        f_statistic=f_stat,
+        f_p_value=f_pval,
         rsd=float(np.sqrt(fitted.mse_resid)),
         llf=_safe_llf(fitted),
         aic=_safe_aic(fitted),
@@ -101,6 +133,7 @@ def ols(
         fitted=fitted_values,
         residuals=residuals,
         call=call,
+        model_spec=stored_spec,
     )
 
 
@@ -146,3 +179,20 @@ def _safe_bic(fitted: Any) -> float:
         return float(fitted.bic)
     except (ValueError, AttributeError):
         return float("nan")
+
+
+def _check_collinearity(XX: pd.DataFrame) -> None:
+    from numpy.linalg import cond
+    X_vals = XX.values
+    cn = cond(X_vals)
+    if cn > 1e10:
+        import warnings as _w
+        _w.warn(
+            f"Design matrix is near-singular (condition number = {cn:.2e}). "
+            "Coefficients are not uniquely determined. Consider removing "
+            "collinear predictors.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+
+

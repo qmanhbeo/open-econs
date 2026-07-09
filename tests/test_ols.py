@@ -24,7 +24,7 @@ class TestOLS:
         r = oe.ols("income ~ education + age", data=df_ols)
         tidy = r.tidy()
         assert isinstance(tidy, pd.DataFrame)
-        expected_cols = {"Variable", "Coef", "Std Err", "t", "P>|t|", "[0.025", "0.975]"}
+        expected_cols = {"Variable", "Coef", "Std Err", "t", "P>|t|", "0.025", "0.975"}
         assert set(tidy.columns) == expected_cols
         assert len(tidy) == 3
 
@@ -136,3 +136,35 @@ class TestOLS:
         r = oe.ols("income ~ education + age", data=df_ols)
         from open_econs._version import __version__
         assert r.package_version == __version__
+
+    def test_predict_with_C_factor(self, df_categorical):
+        r = oe.ols("income ~ education + C(region)", data=df_categorical)
+        pred = r.predict(df_categorical.head(5))
+        assert len(pred) == 5
+        assert isinstance(pred, pd.Series)
+
+    def test_predict_C_factor_newdata_subset(self, df_categorical):
+        r = oe.ols("income ~ education + C(region)", data=df_categorical)
+        test = df_categorical[["education", "region"]].head(3)
+        pred = r.predict(test)
+        assert len(pred) == 3
+
+    def test_collinearity_warns(self, df_collinear):
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            oe.ols("y ~ x + x_dup", data=df_collinear)
+        assert any("near-singular" in str(msg.message).lower() for msg in w)
+
+    def test_robust_f_statistic_differs_from_homoskedastic(self, df_ols):
+        r_nr = oe.ols("income ~ education + age", data=df_ols, cov_type="nonrobust")
+        r_hc1 = oe.ols("income ~ education + age", data=df_ols, cov_type="HC1")
+        assert r_nr.f_statistic != r_hc1.f_statistic or abs(r_nr.f_p_value - r_hc1.f_p_value) > 1e-12
+
+    def test_tidy_conf_int_columns_no_brackets(self, df_ols):
+        r = oe.ols("income ~ education + age", data=df_ols)
+        tidy = r.tidy()
+        assert "0.025" in tidy.columns
+        assert "0.975" in tidy.columns
+        assert "[0.025" not in tidy.columns
+        assert "0.975]" not in tidy.columns

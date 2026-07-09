@@ -45,3 +45,26 @@ def df_missing_col() -> pd.DataFrame:
         "income": [10, 20, 30],
         "age": [25, 30, 35],
     })
+
+
+@pytest.fixture
+def df_categorical() -> pd.DataFrame:
+    np.random.seed(42)
+    n = 100
+    return pd.DataFrame({
+        "income": np.random.lognormal(mean=4.5, sigma=0.6, size=n),
+        "education": np.random.poisson(lam=14, size=n).clip(8, 22).astype(float),
+        "region": np.random.choice(["north", "central", "south"], size=n),
+    })
+
+
+@pytest.fixture
+def df_collinear() -> pd.DataFrame:
+    np.random.seed(42)
+    n = 50
+    df = pd.DataFrame({
+        "y": np.random.uniform(0, 10, n),
+        "x": np.random.uniform(0, 5, n),
+    })
+    df["x_dup"] = df["x"]
+    return df

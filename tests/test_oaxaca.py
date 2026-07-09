@@ -82,6 +82,23 @@ class TestOaxaca:
     def test_by_groups(self, df_oaxaca):
         d = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female")
         assert len(d.by_groups) == 2
+        assert d.by_groups[0] in ("0.0", "1.0")
+        assert d.by_groups[1] in ("0.0", "1.0")
+
+    def test_by_groups_labels_match_data(self, df_oaxaca):
+        df = df_oaxaca.copy()
+        df["female"] = np.random.choice(["Male", "Female"], len(df))
+        d = oe.oaxaca("income ~ education + age + female", data=df, by="female")
+        assert "Male" in d.by_groups or "Female" in d.by_groups
+
+    def test_swap_ensures_positive_gap(self, df_oaxaca):
+        d = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female", swap=True)
+        assert d.total_gap >= 0
+
+    def test_data_shape(self, df_oaxaca):
+        d = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female")
+        assert d.data_shape[0] == len(df_oaxaca)
+        assert d.data_shape[1] == 4  # Intercept + education + age + female
 
     def test_invalid_decomposition_type(self, df_oaxaca):
         with pytest.raises(ValueError, match="Unknown"):
