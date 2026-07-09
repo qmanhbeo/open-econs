@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Any
 
@@ -9,11 +7,20 @@ import numpy as np
 import pandas as pd
 
 from open_econs._version import __version__
+from open_econs.core.call_capture import capture_call as _capture_call
 from open_econs._internal import errors
 from open_econs.core.base import BaseModel
 
 
 class DiDResult(BaseModel):
+    """Result of a two-period difference-in-differences estimator.
+
+    Immutable result exposing a uniform interface: ``.tidy()`` (coefficients,
+    SEs, t-stats, p-values, CI), ``.summary()`` (text), ``.export()``
+    (CSV/JSON/Pickle), ``.vcov()``, ``.to_latex()`` / ``.to_html()``.  The
+    key DiD quantity is the treatment-on-treated effect ``did_coef`` with its
+    ``did_std_err`` / ``did_t_stat`` / ``did_p_value``.
+    """
     def __init__(
         self,
         *,
@@ -37,7 +44,7 @@ class DiDResult(BaseModel):
         adj_r_squared: float,
         rsd: float,
         call: dict[str, Any],
-        _sm_fit: Any = None,
+        _fit: Any = None,
     ) -> None:
         self.formula = formula
         self.data_shape = (nobs, coefficients.shape[0])
@@ -63,7 +70,7 @@ class DiDResult(BaseModel):
         self.r_squared = r_squared
         self.adj_r_squared = adj_r_squared
         self.rsd = rsd
-        self._sm_fit = _sm_fit
+        self._fit = _fit
 
         self._freeze()
 
@@ -110,10 +117,10 @@ class DiDResult(BaseModel):
         )
 
     def vcov(self) -> pd.DataFrame:
-        if self._sm_fit is None:
+        if self._fit is None:
             raise RuntimeError("vcov() requires a fitted statsmodels result.")
         return pd.DataFrame(
-            self._sm_fit.cov_params(),
+            self._fit.cov_params(),
             index=self.coefficients.index,
             columns=self.coefficients.index,
         )
@@ -127,6 +134,35 @@ def did(
     cluster: str | None = None,
     cov_type: str = "HC2",
 ) -> DiDResult:
+    """Two-period difference-in-differences (interactive fixed-effects) estimator.
+
+    Estimates the canonical DiD specification with a treatment x post
+    interaction term.  The coefficient on ``treatment:post`` is the average
+    treatment effect on the treated (ATT).  Supports heteroskedasticity-robust
+    or cluster-robust standard errors and arbitrary additional controls.
+
+    Parameters
+    ----------
+    formula : str
+        Two-sided formula, e.g. ``"y ~ treatment * post + x1"``.  The
+        interaction ``treatment:post`` is read off automatically.
+    data : pd.DataFrame
+        Analysis data.
+    treatment : str
+        Name of the binary treatment indicator (1 = treated).
+    post : str
+        Name of the binary post-treatment indicator (1 = post period).
+    cluster : str, optional
+        Column to cluster standard errors by (e.g. unit or group id).
+    cov_type : str, default "HC2"
+        Statsmodels covariance type (``"HC0"``, ``"HC1"``, ``"HC2"``,
+        ``"HC3"``, or ``"nonrobust"``).  Ignored when ``cluster`` is given.
+
+    Returns
+    -------
+    DiDResult
+        Immutable result with ``.tidy()``, ``.summary()``, ``.export()``.
+    """
     call = _capture_call(
         formula=formula,
         treatment=treatment,
@@ -246,11 +282,19 @@ def did(
         adj_r_squared=float(fitted.rsquared_adj),
         rsd=float(np.sqrt(fitted.scale)),
         call=call,
-        _sm_fit=fitted,
+        _fit=fitted,
     )
 
 
 class EventStudyResult(BaseModel):
+    """Result of a relative-time event-study (dynamic DiD) estimator.
+
+    Immutable result with the uniform interface (``.tidy()``, ``.summary()``,
+    ``.export()``, ``.to_latex()`` / ``.to_html()``).  ``event_times`` lists
+    the relative periods, ``coefficients`` / ``std_errors`` / ``p_values`` hold
+    the per-period estimates, and ``plot()`` draws the event-study path when
+    matplotlib is installed (otherwise returns ``None``).
+    """
     def __init__(
         self,
         *,
@@ -269,7 +313,7 @@ class EventStudyResult(BaseModel):
         adj_r_squared: float,
         rsd: float,
         call: dict[str, Any],
-        _sm_fit: Any = None,
+        _fit: Any = None,
     ) -> None:
         self.formula = formula
         self.data_shape = (nobs, coefficients.shape[0])
@@ -290,7 +334,7 @@ class EventStudyResult(BaseModel):
         self.r_squared = r_squared
         self.adj_r_squared = adj_r_squared
         self.rsd = rsd
-        self._sm_fit = _sm_fit
+        self._fit = _fit
 
         self._freeze()
 
@@ -351,10 +395,10 @@ class EventStudyResult(BaseModel):
         plt.show()
 
     def vcov(self) -> pd.DataFrame:
-        if self._sm_fit is None:
+        if self._fit is None:
             raise RuntimeError("vcov() requires a fitted statsmodels result.")
         return pd.DataFrame(
-            self._sm_fit.cov_params(),
+            self._fit.cov_params(),
             index=self.coefficients.index,
             columns=self.coefficients.index,
         )
@@ -369,6 +413,39 @@ def event_study(
     cov_type: str = "HC2",
     omitted_period: int = -1,
 ) -> EventStudyResult:
+    """Event-study (relative-time) difference-in-differences estimator.
+
+    Estimates a dynamic DiD with one dummy per relative time-to-treatment
+    period, revealing the pre-trend and the evolution of the treatment effect.
+    The data must contain a column ``"{treatment}_event_time"`` whose values
+    are periods relative to treatment (e.g. -2, -1, 0, 1, 2), with
+    ``omitted_period`` (default -1, the period just before treatment) used as
+    the normalization baseline.
+
+    Parameters
+    ----------
+    formula : str
+        Two-sided formula, e.g. ``"y ~ x1"``.  The relative-time dummies are
+        generated automatically from the ``"{treatment}_event_time"`` column.
+    data : pd.DataFrame
+        Analysis data, including the ``"{treatment}_event_time"`` column.
+    treatment : str
+        Name of the treatment indicator (used to build the event-time column).
+    post : str
+        Name of the post-treatment indicator (used only for diagnostics).
+    cluster : str, optional
+        Column to cluster standard errors by.
+    cov_type : str, default "HC2"
+        Statsmodels covariance type (ignored when ``cluster`` is given).
+    omitted_period : int, default -1
+        Relative period held out as the baseline in the event-study graph.
+
+    Returns
+    -------
+    EventStudyResult
+        Immutable result; ``.tidy()`` shows each relative-period coefficient,
+        ``.plot()`` renders the event-study path if matplotlib is available.
+    """
     call = _capture_call(
         formula=formula,
         treatment=treatment,
@@ -519,14 +596,10 @@ def event_study(
         adj_r_squared=float(fitted.rsquared_adj),
         rsd=float(np.sqrt(fitted.scale)),
         call=call,
-        _sm_fit=fitted,
+        _fit=fitted,
     )
 
 
-def _capture_call(**kwargs: Any) -> dict[str, Any]:
-    kwargs["timestamp"] = str(datetime.now())
-    kwargs["package_version"] = __version__
-    return kwargs
 
 
 def _split_top_level_plus(rhs: str) -> list[str]:

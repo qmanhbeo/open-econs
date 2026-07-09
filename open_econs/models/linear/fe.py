@@ -1,10 +1,9 @@
-from datetime import datetime
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from open_econs._version import __version__
+from open_econs.core.call_capture import capture_call as _capture_call
 from open_econs._internal import errors
 from open_econs.core.results import OLSResult
 
@@ -193,15 +192,25 @@ def fe(
         call=call,
         condition_number=float(np.linalg.cond(X_arr)) if X_arr.shape[1] > 0 else 0.0,
         _X=XX,
-        _sm_fit=fitted,
+        _fit=fitted,
     )
 
 
 def _demean(y: np.ndarray, groups: np.ndarray) -> np.ndarray:
+    """One-way within transform via O(n) group-mean subtraction.
+
+    Subtracts each observation's group mean (the analytical solution to the
+    dummy-regression projection) instead of forming the full dummy matrix and
+    running a least-squares solve — which would cost O(n x G) memory for G
+    groups and is the bottleneck for large panels.
+    """
     if y.ndim == 1:
         y = y.reshape(-1, 1)
-    dummies = pd.get_dummies(pd.Series(groups)).values
-    resid = y - dummies @ np.linalg.lstsq(dummies, y, rcond=None)[0]
+    cols = [f"c{i}" for i in range(y.shape[1])]
+    s = pd.DataFrame(y, columns=cols)
+    s["__g"] = groups
+    means = s[cols].groupby(s["__g"]).transform("mean").values
+    resid = y - means
     return resid.ravel() if y.shape[1] == 1 else resid
 
 
@@ -263,12 +272,6 @@ def _within_transform(z: np.ndarray, groups: np.ndarray) -> np.ndarray:
         if np.sum(mask) > 0:
             result[mask] = z[mask] - z[mask].mean(axis=0)
     return result.ravel() if z.shape[1] == 1 else result
-
-
-def _capture_call(**kwargs: Any) -> dict[str, Any]:
-    kwargs["timestamp"] = str(datetime.now())
-    kwargs["package_version"] = __version__
-    return kwargs
 
 
 def _safe_fvalue(fitted: Any) -> float:

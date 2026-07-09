@@ -32,7 +32,7 @@ class RandomEffectsResult(BaseModel):
         r_squared_between: float,
         r_squared_overall: float,
         cov_type: str,
-        theta: pd.Series,
+        theta: float,
         sigma2_effects: float,
         sigma2_eps: float,
         rho: float,
@@ -243,6 +243,101 @@ class FirstDifferenceResult(OLSResult):
         object.__setattr__(self, "method", method)
 
 
+class ArellanoBondResult(BaseModel):
+    """Result of an Arellano-Bond (1991) dynamic panel-difference GMM."""
+
+    def __init__(
+        self,
+        *,
+        formula: str,
+        coefficients: pd.Series,
+        std_errors: pd.Series,
+        z_stats: pd.Series,
+        p_values: pd.Series,
+        conf_int: pd.DataFrame,
+        step: str,
+        lags: int,
+        n_entities: int,
+        n_obs: int,
+        n_instruments: int,
+        hansen_j: float,
+        hansen_j_pvalue: float,
+        hansen_j_dof: int,
+        ar1_stat: float,
+        ar1_pvalue: float,
+        ar2_stat: float,
+        ar2_pvalue: float,
+        call: dict[str, Any],
+    ) -> None:
+        self.formula = formula
+        self.data_shape = (n_obs, len(coefficients))
+        self.cov_type = f"arellano-bond-{step}"
+        self.call = call
+        self.timestamp = datetime.now()
+        self.package_version = __version__
+
+        self.coefficients = coefficients
+        self.std_errors = std_errors
+        self.z_stats = z_stats
+        self.p_values = p_values
+        self.conf_int = conf_int
+        self.step = step
+        self.lags = lags
+        self.n_entities = n_entities
+        self.n_obs = n_obs
+        self.n_instruments = n_instruments
+        self.hansen_j = hansen_j
+        self.hansen_j_pvalue = hansen_j_pvalue
+        self.hansen_j_dof = hansen_j_dof
+        self.ar1_stat = ar1_stat
+        self.ar1_pvalue = ar1_pvalue
+        self.ar2_stat = ar2_stat
+        self.ar2_pvalue = ar2_pvalue
+
+        self._freeze()
+
+    def tidy(self) -> pd.DataFrame:
+        df = pd.DataFrame({
+            "Variable": self.coefficients.index,
+            "Coef": self.coefficients.values,
+            "Std Err": self.std_errors.values,
+            "z": self.z_stats.values,
+            "P>|z|": self.p_values.values,
+            "0.025": self.conf_int["lower"].values,
+            "0.975": self.conf_int["upper"].values,
+        })
+        df.index.name = None
+        return df
+
+    def summary(self) -> str:
+        header = (
+            f"          Arellano-Bond Dynamic Panel (difference GMM, {self.step})        \n"
+            f"======================================================================\n"
+            f"Dep. Variable:               {self.formula.split('~')[0].strip()}\n"
+            f"No. Entities:                {self.n_entities}\n"
+            f"No. Observations:            {self.n_obs}\n"
+            f"No. Instruments (L):         {self.n_instruments}\n"
+            f"Lags of dep. var:            {self.lags}\n"
+            f"Hansen J:                    {self.hansen_j:.4f} (df={self.hansen_j_dof}, "
+            f"p={self.hansen_j_pvalue:.4f})\n"
+            f"AR(1) test:                  {self.ar1_stat:.4f} (p={self.ar1_pvalue:.4f})\n"
+            f"AR(2) test:                  {self.ar2_stat:.4f} (p={self.ar2_pvalue:.4f})\n"
+            f"======================================================================\n"
+        )
+        tbl = self.tidy().to_string(index=False)
+        return header + tbl + "\n======================================================================\n"
+
+    def to_dict(self) -> dict[str, Any]:
+        d = super().to_dict()
+        d["step"] = self.step
+        d["lags"] = self.lags
+        d["hansen_j"] = self.hansen_j
+        d["hansen_j_pvalue"] = self.hansen_j_pvalue
+        d["ar1_pvalue"] = self.ar1_pvalue
+        d["ar2_pvalue"] = self.ar2_pvalue
+        return d
+
+
 def _panel_ols_result(
     result_cls: type,
     formula: str,
@@ -358,9 +453,9 @@ def _panel_ols_result(
         call=call,
         condition_number=cond,
         _X=X_full,
-        _sm_fit=None,
+        _fit=None,
     )
-    # linearmodels-built results have no statsmodels _sm_fit; store the
+    # linearmodels-built results have no backend fit object; store the
     # covariance directly so vcov() works for FD / Driscoll-Kraay results.
     if cov_df is not None:
         object.__setattr__(result, "_cov", cov_df)
@@ -390,16 +485,38 @@ def _re_result_from_fit(
     )
 
     n = int(fit.nobs)
-    resid = pd.Series(np.asarray(fit.resids, dtype=float).ravel(), name="residuals")
+    resid_arr = np.asarray(fit.resids, dtype=float).ravel()
+    resid = pd.Series(resid_arr, name="residuals")
     fitted = pd.Series(np.asarray(fit.fitted_values, dtype=float).ravel(), name="fitted")
+
+    # linearmodels does not expose the log-likelihood; compute it from the
+    # GLS residuals under the usual normal assumption so AIC/BIC are available.
+    sse = float(np.sum(resid_arr ** 2))
+    k = int(fit.df_model)
+    if sse > 0 and n > 0:
+        llf = float(-0.5 * n * (1.0 + np.log(2.0 * np.pi * sse / n)))
+    else:
+        llf = float("nan")
+    aic = float(2.0 * k - 2.0 * llf) if np.isfinite(llf) else float("nan")
+    bic = float(k * np.log(n) - 2.0 * llf) if np.isfinite(llf) else float("nan")
 
     theta = fit.theta
     if hasattr(theta, "columns"):
-        theta_series = pd.Series(theta["theta"].values, index=theta.index)
+        theta_values = np.asarray(theta["theta"].values, dtype=float).ravel()
+        n_entities = int(len(theta))
+    elif isinstance(theta, pd.Series):
+        theta_values = np.asarray(theta.values, dtype=float).ravel()
+        n_entities = int(len(theta))
     else:
-        theta_series = pd.Series(np.asarray(theta, dtype=float).ravel())
+        theta_values = np.asarray(theta, dtype=float).ravel()
+        # Balanced panel: linearmodels returns a scalar theta.  Recover the
+        # entity count from the fit object when it is exposed, else fall back
+        # to the balanced-panel relationship nobs / n_time.
+        n_entities = int(getattr(fit, "nentity", 0)) or int(
+            round(n / getattr(fit, "ntime", n) if getattr(fit, "ntime", n) else n)
+        )
+    theta_scalar = float(np.mean(theta_values)) if theta_values.size else float("nan")
 
-    n_entities = int(len(theta_series))
     n_time = int(round(n / n_entities)) if n_entities > 0 else 0
 
     sigma2_effects = float(getattr(fit, "_sigma2_effects", float("nan")))
@@ -422,13 +539,13 @@ def _re_result_from_fit(
         r_squared_between=float(getattr(fit, "rsquared_between", float("nan"))),
         r_squared_overall=float(getattr(fit, "rsquared_overall", float("nan"))),
         cov_type=cov_type,
-        theta=theta_series,
+        theta=theta_scalar,
         sigma2_effects=sigma2_effects,
         sigma2_eps=sigma2_eps,
         rho=rho,
-        llf=float("nan"),
-        aic=float("nan"),
-        bic=float("nan"),
+        llf=llf,
+        aic=aic,
+        bic=bic,
         fitted=fitted,
         residuals=resid,
         call=call,

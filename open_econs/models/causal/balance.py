@@ -8,6 +8,31 @@ def balance(
     treatment: str,
     covariates: list[str] | None = None,
 ) -> pd.DataFrame:
+    """Covariate balance table for a binary treatment.
+
+    For each covariate, compares means between the treated and control groups
+    with a Welch (unequal-variance) two-sample t-test.  This is the standard
+    pre-treatment balance check that should accompany any DiD / matching /
+    RCT analysis: large, significant differences indicate the groups are not
+    comparable and the design is at risk.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Analysis data.
+    treatment : str
+        Name of the binary treatment column (must take exactly two values).
+    covariates : list of str, optional
+        Covariates to compare.  If omitted, all numeric columns other than
+        ``treatment`` are used.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per covariate with treated/control means, the difference,
+        standard deviations, the t-statistic and p-value, sorted by p-value
+        ascending (largest imbalance first).
+    """
     treatment_vals = data[treatment].unique()
     if len(treatment_vals) != 2:
         raise ValueError(

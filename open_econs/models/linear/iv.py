@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from open_econs._version import __version__
+from open_econs.core.call_capture import capture_call as _capture_call
 from open_econs._internal import errors
 from open_econs.core.base import BaseModel
 
@@ -57,7 +58,7 @@ class IVResult(BaseModel):
         fitted: pd.Series,
         residuals: pd.Series,
         call: dict[str, Any],
-        _sm_fit: Any = None,
+        _fit: Any = None,
     ) -> None:
         self.formula = formula
         self.data_shape = (nobs, coefficients.shape[0])
@@ -81,7 +82,7 @@ class IVResult(BaseModel):
         self.hansen_j_p_value = hansen_j_p
         self.fitted_values = fitted if fitted is not None else pd.Series(dtype=float)
         self.residuals = residuals
-        self._sm_fit = _sm_fit
+        self._fit = _fit
 
         self._freeze()
 
@@ -133,22 +134,22 @@ class IVResult(BaseModel):
         )
 
     def _exog_names(self) -> str:
-        if self._sm_fit is None:
+        if self._fit is None:
             return "N/A"
-        return ", ".join(self._sm_fit.model.exog.cols) if self._sm_fit.model.exog else "none"
+        return ", ".join(self._fit.model.exog.cols) if self._fit.model.exog else "none"
 
     def _endog_names(self) -> str:
-        if self._sm_fit is None:
+        if self._fit is None:
             return "N/A"
-        return ", ".join(self._sm_fit.model.endog.cols)
+        return ", ".join(self._fit.model.endog.cols)
 
     def vcov(self) -> pd.DataFrame:
-        if self._sm_fit is None:
+        if self._fit is None:
             raise RuntimeError(
                 "vcov() requires a fitted model result."
             )
         return pd.DataFrame(
-            self._sm_fit.cov,
+            self._fit.cov,
             index=self.coefficients.index,
             columns=self.coefficients.index,
         )
@@ -377,7 +378,7 @@ def iv(
         fitted=pd.Series(fitted_arr, index=XX.index, name="fitted"),
         residuals=pd.Series(residuals_arr, index=XX.index, name="residuals"),
         call=call,
-        _sm_fit=fitted,
+        _fit=fitted,
     )
 
 
@@ -392,7 +393,3 @@ def _extract_vars(expr: str) -> list[str]:
     return result
 
 
-def _capture_call(**kwargs: Any) -> dict[str, Any]:
-    kwargs["timestamp"] = str(datetime.now())
-    kwargs["package_version"] = __version__
-    return kwargs

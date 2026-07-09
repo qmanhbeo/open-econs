@@ -1,11 +1,9 @@
-from datetime import datetime
-from typing import Any
 
 import numpy as np
 import pandas as pd
 from statsmodels.stats.oaxaca import OaxacaBlinder
 
-from open_econs._version import __version__
+from open_econs.core.call_capture import capture_call as _capture_call
 from open_econs._internal import errors
 from open_econs._internal.formula import parse_formula
 from open_econs.core.results import OaxacaResult
@@ -203,7 +201,3 @@ def oaxaca(
     )
 
 
-def _capture_call(**kwargs: Any) -> dict[str, Any]:
-    kwargs["timestamp"] = str(datetime.now())
-    kwargs["package_version"] = __version__
-    return kwargs

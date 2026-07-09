@@ -68,7 +68,8 @@ def test_fe_slopes_match_within_reference(n_unit, n_time, seed):
 def test_re_theta_in_unit_interval(n_unit, n_time, seed):
     df = _random_panel(n_unit, n_time, seed)
     r = oe.PanelContext(df, entity="entity", time="time").re("y ~ x + z")
-    assert ((r.theta >= 0.0) & (r.theta <= 1.0 + 1e-9)).all()
+    assert isinstance(r.theta, float)
+    assert 0.0 <= r.theta <= 1.0 + 1e-9
     assert 0.0 <= r.rho <= 1.0 + 1e-9
 
 

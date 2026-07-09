@@ -1,10 +1,8 @@
-from datetime import datetime
-from typing import Any
 
 import pandas as pd
 import statsmodels.api as sm
 
-from open_econs._version import __version__
+from open_econs.core.call_capture import capture_call as _capture_call
 from open_econs._internal import errors
 from open_econs.core.results import BinaryResult
 
@@ -111,14 +109,8 @@ def logit(
         fitted=fitted_values,
         call=call,
         model_type="logit",
-        _sm_fit=fitted,
+        _fit=fitted,
     )
-
-
-def _capture_call(**kwargs: Any) -> dict[str, Any]:
-    kwargs["timestamp"] = str(datetime.now())
-    kwargs["package_version"] = __version__
-    return kwargs
 
 
 def _check_collinearity(XX: pd.DataFrame) -> None:

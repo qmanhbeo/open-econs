@@ -143,8 +143,17 @@ class Context:
 
         return PanelContext(self._data, entity=entity, time=time)
 
-    def pooled(self, formula: str, cov_type: str = "unadjusted") -> Any:
-        return self._to_panel().pooled(formula, cov_type=cov_type)
+    def pooled(
+        self,
+        formula: str,
+        cov_type: str = "unadjusted",
+        cluster: str | None = None,
+        entity: str | None = None,
+        time: str | None = None,
+    ) -> Any:
+        return self._to_panel(entity, time).pooled(
+            formula, cov_type=cov_type, cluster=cluster, entity=entity, time=time,
+        )
 
     def fe(
         self,
@@ -175,6 +184,20 @@ class Context:
 
     def hausman(self, fe_result: Any, re_result: Any, alpha: float = 0.05) -> Any:
         return self._to_panel().hausman(fe_result, re_result, alpha=alpha)
+
+    def abond(
+        self,
+        formula: str,
+        entity: str,
+        time: str,
+        lags: int = 1,
+        max_iv_lag: int | None = None,
+        step: str = "two-step",
+        exogenous: list[str] | None = None,
+    ) -> Any:
+        return self._to_panel(entity, time).abond(
+            formula, lags=lags, max_iv_lag=max_iv_lag, step=step, exogenous=exogenous,
+        )
 
     def __repr__(self) -> str:
         return f"Context ({self._data.shape[0]} rows, {self._data.shape[1]} cols)"

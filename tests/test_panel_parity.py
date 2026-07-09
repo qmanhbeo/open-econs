@@ -126,7 +126,23 @@ class TestREWrapperParity:
 
 class TestPooledAndFDParity:
     def test_pooled_matches_statsmodels_ols(self, df_panel):
+        # Pooled OLS now defaults to panel-robust (cluster-by-entity) standard
+        # errors, matching Stata's xtreg, vce(cluster) for a pooled model.  The
+        # point estimates are identical to iid OLS; the SEs match statsmodels'
+        # cluster-robust estimate.
         r = oe.PanelContext(df_panel, entity="entity", time="time").pooled("y ~ x + z")
+        X = sm.add_constant(df_panel[["x", "z"]])
+        smr_iid = sm.OLS(df_panel["y"], X).fit()
+        smr_clu = sm.OLS(df_panel["y"], X).fit(
+            cov_type="cluster", cov_kwds={"groups": df_panel["entity"].values},
+        )
+        npt.assert_allclose(r.coefficients.values, smr_iid.params.values, rtol=1e-9)
+        npt.assert_allclose(r.std_errors.values, smr_clu.bse.values, rtol=1e-9)
+
+    def test_pooled_nonrobust_matches_statsmodels(self, df_panel):
+        r = oe.PanelContext(df_panel, entity="entity", time="time").pooled(
+            "y ~ x + z", cov_type="nonrobust", cluster=None,
+        )
         smr = sm.OLS(df_panel["y"], sm.add_constant(df_panel[["x", "z"]])).fit()
         npt.assert_allclose(r.coefficients.values, smr.params.values, rtol=1e-9)
         npt.assert_allclose(r.std_errors.values, smr.bse.values, rtol=1e-9)

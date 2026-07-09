@@ -95,13 +95,36 @@ class PanelContext:
         self,
         formula: str,
         cov_type: str = "unadjusted",
+        cluster: str | None = None,
+        entity: str | None = None,
+        time: str | None = None,
     ) -> Any:
-        """Pooled OLS (constant coefficients across entities and time)."""
+        """Pooled OLS (constant coefficients across entities and time).
+
+        When the panel ``entity`` is known (either from the context or via the
+        ``entity`` argument) standard errors default to panel-robust
+        cluster-by-entity inference, matching Stata's ``xtreg, vce(cluster)``
+        for a pooled specification.  Pass ``cluster`` to override, or
+        ``cov_type="nonrobust"`` with ``cluster=None`` for iid errors.
+        """
         from open_econs.models.linear.ols import ols as _ols
 
+        ent = entity if entity is not None else self._entity
         # linearmodels uses "unadjusted"; statsmodels uses "nonrobust".
         sm_cov = "nonrobust" if cov_type == "unadjusted" else cov_type
-        return _ols(formula=formula, data=self._data, cov_type=sm_cov)
+        # Pooled OLS defaults to panel-robust (cluster-by-entity) inference when
+        # the panel entity is known, matching Stata's xtreg, vce(cluster) for a
+        # pooled model.  Pass cov_type="nonrobust" (with cluster=None) for iid
+        # errors, or an explicit cluster column to override.
+        if cluster is not None:
+            use_cluster = cluster
+        elif ent is not None and cov_type != "nonrobust":
+            use_cluster = ent
+        else:
+            use_cluster = None
+        return _ols(
+            formula=formula, data=self._data, cov_type=sm_cov, cluster=use_cluster,
+        )
 
     def driscoll_kraay(self, formula: str) -> Any:
         """Pooled OLS with Driscoll-Kraay (spatial/time-series-robust) SEs."""
@@ -180,6 +203,30 @@ class PanelContext:
     ) -> HausmanResult:
         """Hausman test of FE vs RE consistency."""
         return _hausman_test(fe_result, re_result, alpha=alpha)
+
+    def abond(
+        self,
+        formula: str,
+        lags: int = 1,
+        max_iv_lag: int | None = None,
+        step: str = "two-step",
+        exogenous: list[str] | None = None,
+        entity: str | None = None,
+        time: str | None = None,
+    ) -> Any:
+        """Arellano-Bond dynamic panel estimator (difference GMM)."""
+        from open_econs.models.linear.abond import abond as _abond
+
+        ent = entity if entity is not None else self._entity
+        tm = time if time is not None else self._time
+        if ent is None or tm is None:
+            raise ValueError(
+                "abond() requires entity/time either in PanelContext or as arguments."
+            )
+        return _abond(
+            formula=formula, data=self._data, entity=ent, time=tm,
+            lags=lags, max_iv_lag=max_iv_lag, step=step, exogenous=exogenous,
+        )
 
     # ── delegation to the cross-sectional estimators ───────────────
 

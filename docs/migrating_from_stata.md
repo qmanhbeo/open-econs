@@ -1,0 +1,45 @@
+# Migrating from Stata to open-econs
+
+`open-econs` aims to be the "scikit-learn of empirical economics": one uniform,
+immutable result object (`tidy()` / `summary()` / `export()` / `vcov()`) for
+every estimator, so the mental model you build once transfers across methods.
+
+## Side-by-side cheat sheet
+
+| Stata | open-econs |
+| --- | --- |
+| `reg y x1 x2` | `oe.ols("y ~ x1 + x2", data=df)` |
+| `reg y x, robust` | `oe.ols("y ~ x", data=df, cov_type="HC2")` |
+| `reg y x, cluster(firm)` | `oe.ols("y ~ x", data=df, cluster="firm")` |
+| `reg y x, cluster(firm year)` | `oe.ols("y ~ x", data=df, cluster=["firm", "year"])` |
+| `newey y x, lag(2)` | `oe.ols("y ~ x", data=df, cov_type="HAC", lags=2, time="year")` |
+| `xtset firm year` + `xtreg y x, fe` | `oe.PanelContext(df, "firm", "year").fe("y ~ x")` |
+| `xtreg y x, re` | `.re("y ~ x")` |
+| `xtreg y x, be` | `.fe("y ~ x")` after mean-centering, or pooled OLS |
+| `ivregress 2sls y (x = z)` | `oe.iv("y ~ x | z", data=df)` |
+| `xtabond / xtdpdsys` (dynamic panel) | `oe.abond("y ~ x", data=df, entity="firm", time="year")` |
+| `logit y x` / `probit y x` | `oe.logit("y ~ x", data=df)` / `oe.probit(...)` |
+| `did` (two-period) | `oe.did("y ~ treat*post", data=df, treatment="treat", post="post")` |
+| `did_multiplegt` / `csdid` (staggered) | `oe.staggered_did(df, y="y", entity="firm", time="year", treatment="treat")` |
+| `rdrobust y x, c(0)` | `oe.rdd(df, y="y", running="x", cutoff=0.0)` |
+| `esttab` (LaTeX/HTML) | `result.to_latex()` / `result.to_html()` |
+
+## Differences to know
+
+- **Formula syntax** uses Python `formulaic` (R-style): `y ~ x1 + x2`.
+- **Inference is entity-clustered by default for panel-pooled OLS** (Stata's
+  `xtreg, vce(cluster)` behaviour), matching modern applied practice.
+- **Dynamic panels** use the Arellano-Bond difference GMM estimator with
+  Windmeijer (2005) two-step standard errors, the Hansen J overidentification
+  test, and Arellano-Bond AR(1)/AR(2) serial-correlation tests — the same
+  diagnostics `xtabond2` reports.
+- **Results are immutable** and return named `pandas` Series/DataFrames, so
+  they are easy to consume programmatically and from AI agents.
+- **Export** any result with `result.export("out.json")` or `result.export("out.csv")`.
+
+## Not yet ported (on the roadmap)
+
+- `reghdfe`-style multi-way *absorbed* fixed effects (efficient). Current
+  `fe()` absorbs entity and time via the within transform.
+- Synthetic control (`synth`) — planned for a future release.
+- Bootstrap inference for staggered DiD (currently uses cluster-robust SEs).

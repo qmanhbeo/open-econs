@@ -106,12 +106,22 @@ class BaseModel(ABC):
         }
 
     def to_latex(self, caption: str = "", label: str = "") -> str:
-        return self.tidy().style.hide(axis="index").to_latex(
-            caption=caption, label=label, hrules=True,
-        )
+        tex = self.tidy().to_latex(index=False)
+        if caption or label:
+            head = "\\begin{table}\n\\centering\n"
+            mid = ""
+            if caption:
+                mid += f"\\caption{{{caption}}}\n"
+            if label:
+                mid += f"\\label{{{label}}}\n"
+            tex = head + mid + tex + "\\end{table}\n"
+        return tex
 
     def to_html(self, caption: str = "") -> str:
-        return self.tidy().style.hide(axis="index").to_html(caption=caption)
+        html = self.tidy().to_html(index=False)
+        if caption:
+            html = html.replace("<table", f'<table\n<caption>{caption}</caption>', 1)
+        return html
 
     def __repr__(self) -> str:
         return self.summary()

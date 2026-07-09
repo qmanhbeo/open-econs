@@ -1,11 +1,10 @@
-from datetime import datetime
 from typing import Any
 
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
-from open_econs._version import __version__
+from open_econs.core.call_capture import capture_call as _capture_call
 from open_econs._internal import errors
 from open_econs.core.results import OLSResult
 
@@ -13,9 +12,11 @@ from open_econs.core.results import OLSResult
 def ols(
     formula: str,
     data: pd.DataFrame,
-    cluster: str | None = None,
+    cluster: str | list[str] | None = None,
     cov_type: str = "HC2",
     weights: str | np.ndarray | pd.Series | None = None,
+    lags: int | None = None,
+    time: str | None = None,
 ) -> OLSResult:
     """Estimate an ordinary least-squares or weighted least-squares regression.
 
@@ -32,6 +33,20 @@ def ols(
         matches modern Stata ``reg, robust``; changed from HC1 in v0.2.0),
         ``"HC1`` (classic White SE), ``"HC0"``, ``"HC3"``, ``"nonrobust"``.
         Ignored when *cluster* is provided (cluster-robust is used instead).
+
+        Set ``cov_type="HAC"`` to use Newey-West (1987) heteroskedasticity- and
+        autocorrelation-robust standard errors; the number of lags is given by
+        *lags* and the time ordering by *time* (or *cluster* for panel HAC).
+    cluster : str or list of str, optional
+        Column name(s) for cluster-robust standard errors.  Passing a *list*
+        requests multi-way clustering (e.g. ``["firm", "year"]``), implemented
+        via the Cameron-Gelbach-Miller (2011) minik estimator.  Ignored when
+        ``cov_type="HAC"``.
+    lags : int, optional
+        Number of lags for Newey-West HAC (required when ``cov_type="HAC"``).
+    time : str, optional
+        Column with the time index used to order observations for Newey-West
+        HAC (or the panel time id when combined with *cluster*).
     weights : str or array-like, optional
         Frequency/analytic weights for weighted least squares. If a string,
         interpreted as a column name in *data*. If an array, must match the
@@ -49,7 +64,10 @@ def ols(
     >>> result.tidy()
     >>> result.coefficients["education"]
     """
-    call = _capture_call(formula=formula, cluster=cluster, cov_type=cov_type, weights=weights)
+    call = _capture_call(
+        formula=formula, cluster=cluster, cov_type=cov_type, weights=weights,
+        lags=lags, time=time,
+    )
     rhs_formula = formula.split("~", 1)[1].strip()
 
     from formulaic import Formula
@@ -94,6 +112,10 @@ def ols(
 
     condition_number = _check_collinearity(XX)
 
+    clusters = list(cluster) if isinstance(cluster, (list, tuple)) else None
+    multiway = clusters is not None and len(clusters) >= 1
+    use_hac = cov_type == "HAC"
+
     if weights is not None:
         if isinstance(weights, str):
             if weights not in data.columns:
@@ -108,30 +130,81 @@ def ols(
             w_arr = w_arr[XX.index]
         if np.any(w_arr < 0):
             raise ValueError("Weights must be non-negative.")
+        if multiway or use_hac:
+            raise ValueError(
+                "Weights are not supported together with multi-way clustering "
+                "or Newey-West HAC in this version."
+            )
         fitted = sm.WLS(y_arr, XX.values, weights=w_arr).fit(
-            cov_type="cluster" if cluster else cov_type,
-            cov_kwds={"groups": data.loc[XX.index, cluster]} if cluster else {},
+            cov_type="cluster" if isinstance(cluster, str) else cov_type,
+            cov_kwds={"groups": data.loc[XX.index, cluster]} if isinstance(cluster, str) else {},
         )
-        cov_label = f"cluster({cluster})" if cluster else cov_type
+        cov_label = f"cluster({cluster})" if isinstance(cluster, str) else cov_type
+        coef_arr = fitted.params
+        se_arr = fitted.bse
+        t_arr = fitted.tvalues
+        p_arr = fitted.pvalues
+        conf_arr = fitted.conf_int()
     else:
-        if cluster is not None:
+        # Fit OLS (nonrobust) to obtain point estimates and residuals; the
+        # covariance is then computed explicitly below so we can support
+        # multi-way clustering and Newey-West HAC.
+        fitted = sm.OLS(y_arr, XX.values).fit(cov_type="nonrobust")
+        coef_arr = fitted.params
+        if multiway:
+            assert clusters is not None  # guaranteed by `multiway`
+            from open_econs.core.cov import multiway_cluster_cov, _as_int_labels
+
+            groups = [_as_int_labels(data.loc[XX.index, c].values) for c in clusters]
+            V = multiway_cluster_cov(XX.values, fitted.resid, groups)
+            se_arr = np.sqrt(np.maximum(np.diag(V), 0.0))
+            cov_label = "cluster(" + ", ".join(clusters) + ")"
+            t_arr = np.where(se_arr > 0, coef_arr / se_arr, np.nan)
+            from scipy.stats import norm as _norm
+
+            p_arr = 2.0 * (1.0 - _norm.cdf(np.abs(t_arr)))
+            conf_arr = np.column_stack(
+                [coef_arr - 1.96 * se_arr, coef_arr + 1.96 * se_arr]
+            )
+        elif use_hac:
+            from open_econs.core.cov import newey_west_cov, _as_int_labels
+
+            if lags is None:
+                raise ValueError("Newey-West HAC requires `lags` (e.g. lags=1).")
+            time_arr = data.loc[XX.index, time].values if time else None
+            cl = _as_int_labels(data.loc[XX.index, cluster].values) if isinstance(cluster, str) else None
+            V = newey_west_cov(
+                XX.values, fitted.resid, max_lags=lags,
+                time_index=time_arr, cluster=cl,
+            )
+            se_arr = np.sqrt(np.maximum(np.diag(V), 0.0))
+            cov_label = f"HAC({lags})" + (f" cluster({cluster})" if isinstance(cluster, str) else "")
+            t_arr = np.where(se_arr > 0, coef_arr / se_arr, np.nan)
+            from scipy.stats import norm as _norm
+
+            p_arr = 2.0 * (1.0 - _norm.cdf(np.abs(t_arr)))
+            conf_arr = np.column_stack(
+                [coef_arr - 1.96 * se_arr, coef_arr + 1.96 * se_arr]
+            )
+        elif isinstance(cluster, str):
             if cluster not in data.columns:
                 raise errors.cluster_column_error(cluster, data.columns.tolist())
-            aligned_groups = data.loc[XX.index, cluster]
             fitted = sm.OLS(y_arr, XX.values).fit(
                 cov_type="cluster",
-                cov_kwds={"groups": aligned_groups},
+                cov_kwds={"groups": data.loc[XX.index, cluster]},
             )
+            se_arr = fitted.bse
+            t_arr = fitted.tvalues
+            p_arr = fitted.pvalues
+            conf_arr = fitted.conf_int()
             cov_label = f"cluster({cluster})"
         else:
             fitted = sm.OLS(y_arr, XX.values).fit(cov_type=cov_type)
+            se_arr = fitted.bse
+            t_arr = fitted.tvalues
+            p_arr = fitted.pvalues
+            conf_arr = fitted.conf_int()
             cov_label = cov_type
-
-    coef_arr = fitted.params
-    se_arr = fitted.bse
-    t_arr = fitted.tvalues
-    p_arr = fitted.pvalues
-    conf_arr = fitted.conf_int()
 
     conf_int = pd.DataFrame(
         {"lower": conf_arr[:, 0], "upper": conf_arr[:, 1]},
@@ -144,7 +217,7 @@ def ols(
     f_stat = _safe_fvalue(fitted)
     f_pval = _safe_f_pvalue(fitted)
 
-    return OLSResult(
+    result = OLSResult(
         formula=formula,
         rhs_formula=rhs_formula,
         nobs=int(fitted.nobs),
@@ -170,17 +243,18 @@ def ols(
         model_spec=stored_spec,
         condition_number=condition_number,
         _X=XX,
-        _sm_fit=fitted,
+        _fit=fitted,
     )
+    if "V" in dir() and (multiway or use_hac):
+        object.__setattr__(
+            result,
+            "_cov",
+            pd.DataFrame(V, index=XX.columns, columns=XX.columns),
+        )
+    return result
 
 
 reg = ols
-
-
-def _capture_call(**kwargs: Any) -> dict[str, Any]:
-    kwargs["timestamp"] = str(datetime.now())
-    kwargs["package_version"] = __version__
-    return kwargs
 
 
 def _safe_fvalue(fitted: Any) -> float:

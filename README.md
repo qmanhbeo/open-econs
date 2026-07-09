@@ -10,10 +10,10 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (v0.6.0):** `PanelContext`, `re()`, `hausman()`, `driscoll_kraay()`, `diff()` —
-> two-period difference-in-differences, event-study with pre-trend plots,
-> and covariate balance tables. Built on the v0.4 foundation: robust FE/IV,
-> condition-number fix, cov_type unification.
+> **Current version (v0.6.1):** dynamic panel `abond()` (Arellano-Bond difference
+> GMM, Windmeijer SEs, Hansen J + AR(1)/AR(2) tests), `staggered_did()`
+> (Callaway-Sant'Anna 2021), `rdd()` (sharp/fuzzy regression discontinuity),
+> multi-way clustering, Newey-West HAC, plus all v0.6.0 panel and DiD tools.
 
 ## Quick Start
 
@@ -104,13 +104,18 @@ Requires Python ≥ 3.10.
 
 | Function | Description |
 |---|---|
-| `ols()` / `reg()` | Ordinary least squares with HC1/robust/clustered SEs, WLS |
+| `ols()` / `reg()` | OLS with HC1/robust/clustered SEs, **multi-way clustering** (`cluster=["a","b"]`), **Newey-West HAC** (`cov_type="HAC"`), WLS |
 | `fe()` | Fixed effects (one-way entity, two-way entity + time) |
 | `iv()` | Instrumental variables / 2SLS with first-stage F-stat |
 | `logit()` | Binary logit with `.margins()`, `.predict()` |
 | `probit()` | Binary probit (same API as logit) |
 | `oaxaca()` | Oaxaca-Blinder decomposition (two-fold, three-fold) |
 | `ctx.vif()` | Variance inflation factor / collinearity diagnostics |
+| `abond()` | Arellano-Bond dynamic panel (difference GMM), two-step Windmeijer SEs, Hansen J + AR(1)/AR(2) |
+| `staggered_did()` | Callaway-Sant'Anna (2021) staggered / heterogeneous-timing DiD |
+| `rdd()` | Sharp / fuzzy regression discontinuity (local linear, triangular kernel) |
+| `did()` / `event_study()` / `balance()` | Two-period DiD, event-study, balance tables |
+| `oe.PanelContext(...)` | `pooled/fitted/fe/re/diff/driscoll_kraay/hausman/abond` with remembered entity/time |
 
 ## Result API
 
@@ -125,8 +130,8 @@ Every estimator returns an object with:
 | `.export(path)` | JSON / CSV serialization |
 | `.plot()` | Residual diagnostics plot (requires `pip install open-econs[plot]`) |
 | `.to_dict()` | `dict` — full result metadata |
-| `.to_latex()` | LaTeX table string (via `pandas.Styler`) |
-| `.to_html()` | HTML table string (via `pandas.Styler`) |
+| `.to_latex()` | LaTeX table string |
+| `.to_html()` | HTML table string |
 
 ## Development
 
@@ -264,13 +269,32 @@ might fit.
   Hausman statistic ≥ 0, etc.); edge-case tests (single entity/time, duplicate
   (entity,time) index, constant outcome, singular Hausman difference); context
   delegation and result-API tests. See `tests/test_panel_*.py`.
-- [ ] Dynamic panel: Arellano-Bond / Blundell-Bond GMM estimator *(deferred to v0.6.1)*
+- [x] **v0.6.1** — see changelog below.
 
-#### v0.7 — Regression Discontinuity
-- [ ] `rdd()` — sharp and fuzzy RDD, local linear/polynomial estimation
+#### v0.6.1 — Dynamic panels, staggered DiD, RDD, robust SEs
+- [x] `abond()` — Arellano-Bond difference GMM (one/two-step, Windmeijer SEs,
+  Hansen J overidentification test, AR(1)/AR(2) serial-correlation tests).
+- [x] `staggered_did()` — Callaway-Sant'Anna (2021) staggered / heterogeneous-timing
+  DiD with group-time ATTs, event-study aggregation, and entity-clustered SEs.
+- [x] `rdd()` — sharp and fuzzy regression discontinuity via triangular-kernel
+  local linear regression.
+- [x] Multi-way clustering (`cluster=["firm","year"]`, Cameron-Gelbach-Miller
+  minik estimator) and Newey-West HAC (`cov_type="HAC"`).
+- [x] RE `llf`/`aic`/`bic` now populated; `RandomEffectsResult.theta` is a scalar.
+- [x] `Context.pooled()` defaults to panel-robust (cluster-by-entity) inference.
+- [x] DRY: `_capture_call` centralized; `to_latex()`/`to_html()` no longer require
+  `jinja2`; bug fixes from the v0.6.0 review (FE demeaning, docstrings).
+
+#### v0.7 — Regression Discontinuity refinements
 - [ ] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
 - [ ] McCrary density test for manipulation at the cutoff
 - [ ] Built-in RD plot (binned scatter + fitted lines either side of cutoff)
+
+#### v0.8 — Matching & Balance
+- [ ] `psm()` — propensity score matching (nearest-neighbor, caliper, kernel)
+- [ ] Coarsened exact matching
+- [ ] Post-matching balance diagnostics reusing `ctx.balance()` from v0.5
+- [ ] Sensitivity analysis (Rosenbaum bounds)
 
 #### v0.8 — Matching & Balance
 - [ ] `psm()` — propensity score matching (nearest-neighbor, caliper, kernel)

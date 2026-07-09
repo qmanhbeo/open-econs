@@ -74,8 +74,8 @@ class TestFixedEffects:
         # The reported df_resid must match the degrees of freedom that
         # statsmodels used to compute the reported standard errors / rsd,
         # otherwise rsd and std_errors disagree.
-        assert r.df_resid == int(r._sm_fit.df_resid)
-        assert np.isclose(r.rsd, float(np.sqrt(r._sm_fit.scale)), atol=1e-9)
+        assert r.df_resid == int(r._fit.df_resid)
+        assert np.isclose(r.rsd, float(np.sqrt(r._fit.scale)), atol=1e-9)
 
     def test_one_way_fe_consistency(self, df_panel):
         r = oe.fe("y ~ x + z", data=df_panel, entity="entity")
@@ -86,7 +86,7 @@ class TestFixedEffects:
             np.zeros(len(df_panel)),
         )
         assert np.isclose(r.r_squared, float(fit.rsquared), atol=1e-6)
-        assert r.df_resid == int(r._sm_fit.df_resid)
+        assert r.df_resid == int(r._fit.df_resid)
 
     def test_no_entity_or_time_raises(self):
         df = pd.DataFrame({"y": [1.0, 2.0], "x": [1.0, 2.0]})

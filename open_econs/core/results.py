@@ -34,6 +34,14 @@ def _ramsey_reset(
 
 
 class OLSResult(BaseModel):
+    """Result of an OLS (or WLS / robust / clustered) linear regression.
+
+    Immutable result with a uniform interface: ``.tidy()`` (coefficients, SEs,
+    t/z-stats, p-values, CI), ``.summary()`` (text), ``.export()``
+    (CSV/JSON/Pickle), ``.vcov()``, ``.to_latex()`` / ``.to_html()``, plus
+    diagnostics ``.wald_test()`` / ``.f_test()`` and ``.ramsey_reset()`` for
+    functional-form misspecification.
+    """
     def __init__(
         self,
         *,
@@ -62,7 +70,7 @@ class OLSResult(BaseModel):
         model_spec: Any = None,
         condition_number: float = 0.0,
         _X: pd.DataFrame | None = None,
-        _sm_fit: Any = None,
+        _fit: Any = None,
     ) -> None:
         self.formula = formula
         self.rhs_formula = rhs_formula
@@ -93,7 +101,7 @@ class OLSResult(BaseModel):
         self._model_spec = model_spec
         self.condition_number = condition_number
         self._X = _X
-        self._sm_fit = _sm_fit
+        self._fit = _fit
 
         self._freeze()
 
@@ -192,15 +200,22 @@ f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
         return results
 
     def vcov(self) -> pd.DataFrame:
-        if self._sm_fit is not None:
-            cov = np.asarray(self._sm_fit.cov_params(), dtype=float)
+        # An explicitly stored covariance (multi-way cluster, Newey-West HAC,
+        # or a linearmodels-backed result) takes precedence over the backend
+        # fit object so the reported SEs stay consistent with vcov().
+        cov_df = getattr(self, "_cov", None)
+        if cov_df is not None:
+            common = [c for c in self.coefficients.index if c in cov_df.index]
+            return cov_df.loc[common, common]
+        if self._fit is not None:
+            cov = np.asarray(self._fit.cov_params(), dtype=float)
             # Align to the reported coefficients. The full design matrix
             # (self._X) keeps the (absorbed) Intercept column, while the
             # reported coefficients drop it for FE fits; slice accordingly.
             if self._X is not None and self._X.shape[1] == cov.shape[0]:
                 full_names = list(self._X.columns)
-            elif getattr(self._sm_fit.model, "exog_names", None):
-                full_names = list(self._sm_fit.model.exog_names)
+            elif getattr(self._fit.model, "exog_names", None):
+                full_names = list(self._fit.model.exog_names)
             else:
                 full_names = list(self.coefficients.index)
             full = pd.DataFrame(cov, index=full_names, columns=full_names)
@@ -208,31 +223,26 @@ f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
             if not common:
                 common = full_names
             return full.loc[common, common]
-        # linearmodels-backed results store the covariance directly.
-        cov_df = getattr(self, "_cov", None)
-        if cov_df is not None:
-            common = [c for c in self.coefficients.index if c in cov_df.index]
-            return cov_df.loc[common, common]
         raise RuntimeError(
             "vcov() requires a fitted statsmodels result. "
             "This should not happen with the standard API."
         )
 
     def wald_test(self, r_matrix: Any) -> Any:
-        if self._sm_fit is None:
+        if self._fit is None:
             raise RuntimeError(
                 "No fitted statsmodels result stored. "
                 "wald_test() is only available when ols() is used directly."
             )
-        return self._sm_fit.wald_test(r_matrix)
+        return self._fit.wald_test(r_matrix)
 
     def f_test(self, r_matrix: Any) -> Any:
-        if self._sm_fit is None:
+        if self._fit is None:
             raise RuntimeError(
                 "No fitted statsmodels result stored. "
                 "f_test() is only available when ols() is used directly."
             )
-        return self._sm_fit.f_test(r_matrix)
+        return self._fit.f_test(r_matrix)
 
     def predict(self, newdata: pd.DataFrame | None = None) -> pd.Series:
         if newdata is None:
@@ -299,6 +309,14 @@ f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
 
 
 class BinaryResult(BaseModel):
+    """Result of a binary-choice (logit or probit) regression.
+
+    Immutable result with the uniform interface (``.tidy()``, ``.summary()``,
+    ``.export()``, ``.vcov()``, ``.to_latex()`` / ``.to_html()``).  Adds
+    ``.margins()`` (average marginal effects at the mean) and ``.predict()``
+    (fitted probabilities).  Standard errors and z-stats are reported on the
+    index (latent) scale.
+    """
     def __init__(
         self,
         *,
@@ -320,7 +338,7 @@ class BinaryResult(BaseModel):
         fitted: pd.Series,
         call: dict[str, Any],
         model_type: str,
-        _sm_fit: Any = None,
+        _fit: Any = None,
     ) -> None:
         self.formula = formula
         self.rhs_formula = rhs_formula
@@ -344,7 +362,7 @@ class BinaryResult(BaseModel):
         self.pseudo_r2 = pseudo_r2
         self.fitted_values = fitted if fitted is not None else pd.Series(dtype=float)
         self.model_type = model_type
-        self._sm_fit = _sm_fit
+        self._fit = _fit
 
         self._freeze()
 
@@ -386,12 +404,12 @@ class BinaryResult(BaseModel):
         )
 
     def margins(self) -> pd.DataFrame:
-        if self._sm_fit is None:
+        if self._fit is None:
             raise RuntimeError(
                 "margins() requires a fitted statsmodels result. "
                 "This should not happen with the standard logit()/probit() API."
             )
-        margeff = self._sm_fit.get_margeff(at="mean")
+        margeff = self._fit.get_margeff(at="mean")
         non_const_vars = [c for c in self.coefficients.index if c != "Intercept"]
         df = pd.DataFrame({
             "Variable": non_const_vars,
@@ -406,12 +424,12 @@ class BinaryResult(BaseModel):
         return df
 
     def vcov(self) -> pd.DataFrame:
-        if self._sm_fit is None:
+        if self._fit is None:
             raise RuntimeError(
                 "vcov() requires a fitted statsmodels result."
             )
         return pd.DataFrame(
-            self._sm_fit.cov_params(),
+            self._fit.cov_params(),
             index=self.coefficients.index,
             columns=self.coefficients.index,
         )
@@ -423,14 +441,14 @@ class BinaryResult(BaseModel):
                 index=self.fitted_values.index,
                 name="predicted",
             )
-        if self._sm_fit is None:
+        if self._fit is None:
             raise RuntimeError(
                 "predict(newdata=...) requires a fitted statsmodels result."
             )
         from formulaic import Formula
         matrices = Formula(self.rhs_formula).get_model_matrix(newdata, na_action="drop")
         XX = matrices.rhs if hasattr(matrices, "rhs") else matrices
-        probs = self._sm_fit.predict(XX)
+        probs = self._fit.predict(XX)
         if proba:
             return pd.Series(probs, index=XX.index, name="predicted_proba")
         return pd.Series((probs >= 0.5).astype(int), index=XX.index, name="predicted")
@@ -443,6 +461,14 @@ class BinaryResult(BaseModel):
 
 
 class OaxacaResult(BaseModel):
+    """Result of an Oaxaca-Blinder (or Neumark) wage-gap decomposition.
+
+    Immutable result with the uniform interface (``.tidy()``, ``.summary()``,
+    ``.export()``, ``.to_latex()`` / ``.to_html()``).  Decomposes a mean
+    outcome gap between two groups into an ``explained`` part (endowments) and
+    an ``unexplained`` part (coefficients / treatment), with the overall total
+    and gap stored as scalars.
+    """
     def __init__(
         self,
         *,
