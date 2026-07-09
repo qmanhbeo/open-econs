@@ -10,7 +10,7 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (v0.5.0):** `did()`, `event_study()`, and `balance()` —
+> **Current version (v0.5.1):** `did()`, `event_study()`, and `balance()` —
 > two-period difference-in-differences, event-study with pre-trend plots,
 > and covariate balance tables. Built on the v0.4 foundation: robust FE/IV,
 > condition-number fix, cov_type unification.
@@ -233,6 +233,12 @@ might fit.
   with Welch t-tests. Accessible as ``ctx.balance(treatment="treated")``
   or standalone ``oe.balance(df, treatment="treated")``.
 - [x] **All v0.4 features preserved** — no breaking changes to OLS, FE, IV, logit, probit.
+- [x] **v0.5.1 bug fixes** — fixed FE `df_resid`/`rsd`/`adj_r2` being inconsistent with
+  the reported standard errors (they now use the within fit's actual degrees of
+  freedom, matching a manual group-demeaned OLS reference); fixed `event_study()`
+  crashing on interaction-only formulas like ``y ~ treated * post`` and on the
+  numeric `Treatment` reference period (the covariance RHS is now parsed by
+  splitting on top-level `+` terms rather than fragile string surgery).
 
 #### v0.6 — Panel Data Engine
 - [ ] First-class ``PanelContext(df, entity=, time=)`` — panel structure remembered, not re-specified per call

@@ -98,27 +98,16 @@ def fe(
     y_arr = yy.values.ravel().astype(float)
     X_arr = XX.values.astype(float)
 
-    n_absorbed = 0
-
     if entity is not None and time is not None:
         entity_arr = data.loc[XX.index, entity].values
         time_arr = data.loc[XX.index, time].values
-        unique_entities = np.unique(entity_arr)
-        unique_times = np.unique(time_arr)
-        n_entity = len(unique_entities)
-        n_time = len(unique_times)
-        n_absorbed = n_entity + n_time - 1
         y_arr, X_arr = _demean_two_way(y_arr, X_arr, entity_arr, time_arr)
     elif entity is not None:
         entity_arr = data.loc[XX.index, entity].values
-        unique_entities = np.unique(entity_arr)
-        n_absorbed = len(unique_entities)
         y_arr = _demean(y_arr, entity_arr)
         X_arr = _demean(X_arr, entity_arr)
     else:
         time_arr = data.loc[XX.index, time].values
-        unique_times = np.unique(time_arr)
-        n_absorbed = len(unique_times)
         y_arr = _demean(y_arr, time_arr)
         X_arr = _demean(X_arr, time_arr)
 
@@ -137,10 +126,15 @@ def fe(
         fitted = sm.OLS(y_arr, X_arr).fit(cov_type=cov_type)
         cov_label = cov_type
 
-    k = X_arr.shape[1]
     n = int(fitted.nobs)
-    df_resid_adj = n - k - n_absorbed
-    df_model_adj = k
+    # Use the degrees of freedom from the actual statsmodels fit. The within
+    # (demeaned) design matrix contains a degenerate Intercept column (all
+    # zeros after demeaning), so statsmodels reports df_resid = n - rank, which
+    # already accounts for it. Reporting this same df keeps df_resid, rsd and
+    # adj_r2 consistent with the standard errors / t-stats below and with a
+    # manual group-demeaned OLS reference.
+    df_resid_adj = int(fitted.df_resid)
+    df_model_adj = int(fitted.df_model)
 
     coef_arr = fitted.params
     se_arr = fitted.bse

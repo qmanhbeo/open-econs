@@ -401,10 +401,8 @@ def event_study(
     data = data.copy()
     data[f"{treatment}_event_cat"] = data[event_col].astype("category")
 
-    event_fml = f"{dep_var} ~ C({treatment}_event_cat, Treatment('{omitted_period}'))"
-    cov_rhs = rhs.replace(treatment, "")
-    cov_rhs = cov_rhs.replace(f"+ {post}", "").replace(f"{post} +", "").replace(post, "").strip()
-    cov_rhs = cov_rhs.strip(" +")
+    cov_rhs = _covariates_excluding(rhs, treatment, post)
+    event_fml = f"{dep_var} ~ C({treatment}_event_cat, Treatment({omitted_period}))"
     if cov_rhs:
         event_fml = f"{event_fml} + {cov_rhs}"
 
@@ -468,10 +466,10 @@ def event_study(
 
     fitted = sm.OLS(y_arr, X_arr).fit(**kwargs)
 
-    coef_arr = fitted.params.values
-    se_arr = fitted.bse.values
-    t_arr = fitted.tvalues.values
-    p_arr = fitted.pvalues.values
+    coef_arr = fitted.params
+    se_arr = fitted.bse
+    t_arr = fitted.tvalues
+    p_arr = fitted.pvalues
     conf_arr = fitted.conf_int()
 
     conf_int = pd.DataFrame(
@@ -484,7 +482,7 @@ def event_study(
     event_lower = []
     event_upper = []
     for c in event_cols:
-        raw_name = c.replace(f"C({treatment}_event_cat, Treatment('{omitted_period}'))[T.", "").rstrip("]")
+        raw_name = c.replace(f"C({treatment}_event_cat, Treatment({omitted_period}))[T.", "").rstrip("]")
         try:
             period = float(raw_name)
         except ValueError:
@@ -529,3 +527,47 @@ def _capture_call(**kwargs: Any) -> dict[str, Any]:
     kwargs["timestamp"] = str(datetime.now())
     kwargs["package_version"] = __version__
     return kwargs
+
+
+def _split_top_level_plus(rhs: str) -> list[str]:
+    """Split a formula RHS on `+` tokens that are not nested inside parentheses."""
+    parts: list[str] = []
+    depth = 0
+    current = ""
+    for ch in rhs:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            if depth > 0:
+                depth -= 1
+        if ch == "+" and depth == 0:
+            parts.append(current)
+            current = ""
+        else:
+            current += ch
+    if current.strip():
+        parts.append(current)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _covariates_excluding(rhs: str, *drop: str) -> str:
+    """Return the RHS with any term referencing *drop* variables removed.
+
+    Handles interaction terms (e.g. ``treated * post``) and covariates nested
+    in functions such as ``C(...)``. Terms are matched on word boundaries so a
+    covariate named ``treated_x`` is not accidentally removed by ``treated``.
+    """
+    import re as _re
+
+    drop_terms = [d.strip() for d in drop if d and d.strip()]
+    patterns = [
+        _re.compile(r"(?<![\w])" + _re.escape(d) + r"(?![\w])")
+        for d in drop_terms
+    ]
+
+    keep: list[str] = []
+    for term in _split_top_level_plus(rhs):
+        if any(p.search(term) for p in patterns):
+            continue
+        keep.append(term)
+    return " + ".join(keep)
