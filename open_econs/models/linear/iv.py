@@ -282,19 +282,29 @@ def iv(
     X_full = XX.values.astype(float)
     all_cols = XX.columns.tolist()
 
+    instr_matrices = Formula(instr_expr).get_model_matrix(data, na_action="drop")
+    Z_mat = instr_matrices.rhs if hasattr(instr_matrices, "rhs") else instr_matrices
+    instr_cols = [c for c in Z_mat.columns if c != "Intercept"]
+    Z_raw = Z_mat[instr_cols].values.astype(float) if instr_cols else None
+
+    if not has_inner_endog:
+        import warnings as _w
+        _w.warn(
+            "The legacy IV syntax 'y ~ rhs | instruments' treats ALL RHS variables "
+            "as endogenous. This is almost certainly wrong if you have exogenous "
+            "controls. Use the new syntax: 'y ~ exog | endog ~ instruments'. "
+            "See the iv() docstring for details.",
+            FutureWarning, stacklevel=3,
+        )
+        Z_arr = np.column_stack([X_full, Z_raw]) if Z_raw is not None else X_full
+    else:
+        Z_arr = Z_raw
+
     exog_cols_in_model = [c for c in all_cols if c not in endog_vars and c != "Intercept"]
     endog_cols_in_model = [c for c in all_cols if c in endog_vars]
 
     exog_idx = [i for i, c in enumerate(all_cols) if c in exog_cols_in_model]
     endog_idx = [i for i, c in enumerate(all_cols) if c in endog_cols_in_model]
-
-    instr_matrices = Formula(instr_expr).get_model_matrix(data, na_action="drop")
-    Z_mat = instr_matrices.rhs if hasattr(instr_matrices, "rhs") else instr_matrices
-    instr_cols = [c for c in Z_mat.columns if c != "Intercept"]
-    Z_arr = Z_mat[instr_cols].values.astype(float) if instr_cols else None
-
-    X_exog = X_full[:, exog_idx] if exog_idx else None
-    X_endog = X_full[:, endog_idx] if endog_idx else None
 
     X_exog = X_full[:, exog_idx] if exog_idx else None
     X_endog = X_full[:, endog_idx] if endog_idx else None

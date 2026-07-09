@@ -10,11 +10,11 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (0.4.2):** IV now separates exogenous/endogenous regressors,
-> honors `cov_type`, reports Cragg-Donald F & Hansen J. FE degrees-of-freedom
-> corrected for absorbed units; two-way FE uses iterative demeaning for
-> unbalanced panels. `Context.ols()` defaults to HC2 (matching `ols()`).
-> Condition-number warning excludes intercept and column-scales the matrix.
+> **Current version (0.4.3):** Legacy IV syntax `y ~ x | z` now includes RHS
+> variables in the instrument matrix to match textbook 2SLS (previously omitted
+> them, causing wrong coefficients with exogenous controls). Also includes all
+> v0.4.2 fixes: IV with new syntax `y ~ exog | endog ~ instr`, FE df correction
+> and iterative two-way demeaning, condition-number fix, cov_type unification.
 
 ## Quick Start
 
@@ -191,10 +191,9 @@ might fit.
 > ⚠️ v0.4.1 incorrectly claimed to block `object.__setattr__` bypass — that is
 > impossible in pure Python. v0.4.2 corrects this claim.
 
-#### v0.4.2 — External Audit Fixes *(shipped)*
+#### v0.4.2 — External Audit Fixes *(superseded by v0.4.3)*
 - [x] **IV rewritten** — formula syntax ``y ~ exog | endog ~ instruments`` separates
-  exogenous controls from endogenous regressors; legacy ``y ~ x | z`` still
-  accepted (treats all RHS as endogenous, emits a warning).  Honors ``cov_type``.
+  exogenous controls from endogenous regressors. Honors ``cov_type``.
   Reports Cragg-Donald weak-instrument F-statistic and Hansen J overidentification
   test.
 - [x] **FE degrees-of-freedom corrected** — ``df_resid`` now accounts for absorbed
@@ -209,6 +208,21 @@ might fit.
 - [x] **Condition-number warning** — now excludes the intercept column and
   column-scales the design matrix before computing the condition number,
   reducing false positives for routine regressions with a constant.
+
+> ⚠️ v0.4.2 legacy IV syntax omitted exogenous controls from the instrument
+> matrix — a classic 2SLS error producing wrong coefficients. v0.4.3 fixes this.
+
+#### v0.4.3 — Instrument-Matrix Correction *(current)*
+- [x] **Legacy IV syntax fixed** — ``y ~ x1 + x2 | z1`` now constructs the
+  instrument matrix as ``[x1, x2, z1]`` (not just ``[z1]``), matching the
+  textbook 2SLS requirement that included exogenous regressors must also
+  appear as instruments. Previously, all RHS variables were treated as
+  endogenous and instrumented only by the post-``|`` variables — a classic
+  error producing plausible-looking wrong coefficients.
+- [x] **FutureWarning added** — legacy syntax now warns users to adopt
+  ``y ~ exog | endog ~ instruments`` for clarity.
+- [x] **New syntax unchanged** — ``y ~ w | x ~ z`` correctly passes
+  ``w`` as exogenous, ``x`` as endogenous, ``z`` as instrument.
 
 #### v0.5 — Design-Based Causal Inference
 - [ ] `did()` — two-period and staggered difference-in-differences
