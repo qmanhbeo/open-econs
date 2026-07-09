@@ -53,8 +53,10 @@ class TestEventStudy:
     @pytest.fixture(autouse=True)
     def _run(self, df_did):
         self.s = _stata("event_study")
-        self.oe_r = oe.event_study("y ~ treat * post", data=df_did,
-                                   treatment="treat", post="post")
+        df = df_did.copy()
+        df["treat_event_time"] = df["post"].astype(int)
+        self.oe_r = oe.event_study("y ~ treat * post", data=df,
+                                    treatment="treat", post="post")
 
     def test_intercept(self):
         npt.assert_allclose([self.oe_r.coefficients.values[0]],

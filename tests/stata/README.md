@@ -1,60 +1,130 @@
-# Stata Parity Tests
+# Stata Parity Tests — Maintainer Guide
 
-Compare open-econs results against StataMP output to validate numerical correctness.
+## How to write a correct `.do` file
 
-## Architecture
+### 1. File encoding: NO BOM
 
-```
-tests/stata/
-  fixtures/          Fixed CSV datasets (committed to repo)
-  do/                Hand-written Stata .do files (committed to repo)
-  stata_runner.py    Subprocess wrapper for calling StataMP
-  conftest.py        Pytest fixtures that load the fixed CSVs
-  test_stata_*.py    Parity tests
-```
+Stata cannot parse UTF-8 BOM (`EF BB BF`). If your `.do` file starts with `﻿`, Stata
+will error with `is not a valid command name`.
 
-**Flow:**
-1. Fixed CSV datasets in `fixtures/` are imported by both Python and Stata
-2. Stata `.do` files import CSVs, run commands, export `.dta` result files
-3. Python tests import the same CSVs, run open-econs, compare against `.dta`
-
-## Prerequisites
-
-- StataMP 17 installed at `C:\Program Files\Stata17\StataMP-64.exe`
-- Override path with env var `STATA_EXE` if different
-- SSC packages: `oaxaca`, `xtabond2`, `rdrobust`, `csdid`, `drdid`
-
-## Running
-
-```bash
-# Run all parity tests
-python -m pytest tests/stata/ -v
-
-# Run only non-SSC tests (no Stata packages needed)
-python -m pytest tests/stata/ -v -k "not oaxaca and not abond and not rdd and not staggered"
+**Wrong** (Python `Path.write_text(encoding="utf-8")` adds BOM on Windows):
+```python
+Path("my_file.do").write_text(content, encoding="utf-8")  # BROKEN
 ```
 
-## Test Status
+**Correct**:
+```python
+Path("my_file.do").write_bytes(content.encode("ascii"))  # SAFE
+```
 
-| Module | Tests | Status |
-|--------|-------|--------|
-| OLS (basic, robust, cluster, HAC, predict, confint) | 12 | All pass |
-| Panel (FE, RE, pooled, FD, Hausman) | 14 | Stata correct, open-econs API needs adaptation |
-| IV / 2SLS | 3 | Stata correct, open-econs formula needs fixing |
-| Logit / Probit | 10 | Stata correct, open-econs API needs adaptation |
-| DiD (basic, cluster) | 3 | Pass |
-| Event Study | 1 | Stata correct, open-econs needs `treat_event_time` column |
-| Balance | 2 | Stata correct, open-econs returns different column names |
-| Oaxaca (two-fold, three-fold) | 3 | Stata correct, open-econs uses different decomposition method |
-| Arellano-Bond | 2 | Stata correct, open-econs returns different coefficient count |
-| RDD (sharp, fuzzy) | 5 | Stata correct, different bandwidth algorithm = different point estimates |
-| Staggered DiD | 1 | Stata correct, open-econs API needs fixing |
+Or manually strip BOM after writing:
+```powershell
+$bytes = [System.IO.File]::ReadAllBytes("file.do")
+if ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+    [System.IO.File]::WriteAllBytes("file.do", $bytes[3..($bytes.Length-1)])
+}
+```
 
-**17 pass, 29 fail from open-econs API mismatches (not Stata issues).**
+### 2. Export ALL coefficients (including intercept)
 
-## Notes
+When open-econs returns 3 coefficients `[intercept, x, z]` and your `.do` exports 2
+`[x, z]`, the test gets a shape mismatch. **Always export the intercept.**
 
-- All `.do` files must be ASCII/UTF-8 **without BOM** — Stata cannot parse BOM
-- Stata `xtreg, fd` is not valid in Stata 17 — use manual first-differencing
-- Stata `oaxaca` two-fold uses `pooled` or `omega`, not `two-fold`
-- Stata `csdid` `gvar` must be the treatment year (e.g., 0, 3, 5), not binary 0/1
+```stata
+* WRONG — missing intercept
+scalar s_bx = _b[x]
+scalar s_bz = _b[z]
+
+* CORRECT — export intercept too
+scalar s_b0  = _b[_cons]
+scalar s_bx  = _b[x]
+scalar s_bz  = _b[z]
+```
+
+### 3. Use `scalar` + `clear` + `set obs` + `replace` pattern
+
+`postfile` creates binary `.dta` that may have encoding issues. The scalar pattern is
+more reliable:
+
+```stata
+* Run estimation
+regress y x1 x2
+
+* Store scalars BEFORE clear
+scalar s_N   = e(N)
+scalar s_b0  = _b[_cons]
+scalar s_b1  = _b[x1]
+scalar s_se0 = _se[_cons]
+scalar s_se1 = _se[x1]
+
+* Build output dataset
+clear
+set obs 5
+gen str20 name  = ""
+gen double value = .
+replace name = "N"     in 1
+replace name = "b_int" in 2
+replace name = "b_x1"  in 3
+replace name = "se_int" in 4
+replace name = "se_x1"  in 5
+replace value = s_N    in 1
+replace value = s_b0   in 2
+replace value = s_b1   in 3
+replace value = s_se0  in 4
+replace value = s_se1  in 5
+
+save "path/to/output.dta", replace
+```
+
+### 4. Read the Stata manual before writing the command
+
+Do NOT assume command syntax. Common mistakes:
+
+| Assumed | Actual Stata syntax |
+|---------|-------------------|
+| `xtreg, fd` | Not valid in Stata 17. Use manual first-differencing: `gen dy = D.y` then `regress dy dx dz` |
+| `oaxaca ... two-fold` | `oaxaca ... pooled` (two-fold) or `oaxaca ...` (three-fold is default) |
+| `csdid ... gvar(binary)` | `gvar` must be treatment YEAR (0=never, 3=treat at t=3, etc.), not binary |
+| `rdrobust y x` (default bw) | Different default bw selectors between packages. Specify `h()` explicitly for parity. |
+
+### 5. Use absolute paths in `.do` files
+
+```stata
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_ols.csv", clear
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\ols_basic.dta", replace
+```
+
+### 6. Check the open-econs API before writing the test
+
+Do NOT guess the API. Read the source:
+
+- `oe.fe()` → `OLSResult` with `.coefficients`, `.std_errors`, etc.
+- `oe.fe()` default `cov_type="HC2"` — Stata uses conventional SEs by default. Match with
+  `cov_type="nonrobust"`.
+- `oe.balance()` returns a DataFrame with column `Difference` (not `mean_diff`).
+- `oe.event_study()` requires a `"{treatment}_event_time"` column in the data.
+- `oe.staggered_did()` is OLS-based, **not** Callaway & Sant'Anna doubly-robust.
+- `oe.iv()` formula: `"y ~ exog | endog ~ instruments"` (new syntax).
+
+### 7. Match defaults exactly
+
+If open-econs uses `cov_type="HC2"` by default but Stata uses conventional SEs, either:
+- Pass `cov_type="nonrobust"` to open-econs, OR
+- Widen the tolerance in the test
+
+### 8. File naming convention
+
+```
+tests/stata/do/
+  {estimator}_{variant}.do        # e.g., ols_basic.do, panel_fe.do
+  {estimator}_{variant}.dta       # output (gitignored)
+```
+
+### 9. Quick checklist before committing a new `.do` file
+
+- [ ] File is ASCII/UTF-8 without BOM
+- [ ] Uses absolute paths for import and save
+- [ ] Exports ALL coefficients including intercept
+- [ ] Command syntax verified against `help {command}` in Stata
+- [ ] Scalars saved BEFORE `clear`
+- [ ] Output `.dta` is in `tests/stata/do/` (gitignored)

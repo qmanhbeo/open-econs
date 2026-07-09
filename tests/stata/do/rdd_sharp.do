@@ -5,9 +5,9 @@ capture ssc install rdrobust
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_rdd.csv", clear
 rdrobust y_sharp x, c(0)
 
-scalar s_bw   = e(bw)
+scalar s_bw   = e(h_l)
 scalar s_coef = e(tau_cl)
-scalar s_se   = e(se_cl)
+scalar s_se   = e(se_tau_cl)
 
 clear
 set obs 3

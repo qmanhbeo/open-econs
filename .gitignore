@@ -9,3 +9,4 @@ build/
 .env
 tests/stata/do/*.dta
 tests/stata/do/*.log
+*.log

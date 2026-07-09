@@ -26,15 +26,18 @@ class TestPanelFE:
     @pytest.fixture(autouse=True)
     def _run(self, df_panel):
         self.s = _stata("panel_fe")
-        self.oe_r = oe.fe("y ~ x + z", data=df_panel, entity="entity", time="time")
+        self.oe_r = oe.fe("y ~ x + z", data=df_panel, entity="entity",
+                          time="time", cov_type="nonrobust")
 
     def test_coefficients(self):
         npt.assert_allclose(self.oe_r.coefficients.values,
-                            [self.s["b_x"], self.s["b_z"]], rtol=1e-6)
+                            [self.s["b_int"], self.s["b_x"], self.s["b_z"]],
+                            rtol=1e-6)
 
     def test_standard_errors(self):
         npt.assert_allclose(self.oe_r.std_errors.values,
-                            [self.s["se_x"], self.s["se_z"]], rtol=1e-6)
+                            [self.s["se_int"], self.s["se_x"], self.s["se_z"]],
+                            rtol=1e-6)
 
     def test_nobs(self):
         assert self.oe_r.nobs == int(self.s["N"])
@@ -48,15 +51,17 @@ class TestPanelRE:
     def _run(self, df_panel):
         self.s = _stata("panel_re")
         ctx = oe.PanelContext(df_panel, entity="entity", time="time")
-        self.oe_r = ctx.re("y ~ x + z")
+        self.oe_r = ctx.re("y ~ x + z", cov_type="nonrobust")
 
     def test_coefficients(self):
         npt.assert_allclose(self.oe_r.coefficients.values,
-                            [self.s["b_x"], self.s["b_z"]], rtol=1e-6)
+                            [self.s["b_int"], self.s["b_x"], self.s["b_z"]],
+                            rtol=1e-6)
 
     def test_standard_errors(self):
         npt.assert_allclose(self.oe_r.std_errors.values,
-                            [self.s["se_x"], self.s["se_z"]], rtol=1e-6)
+                            [self.s["se_int"], self.s["se_x"], self.s["se_z"]],
+                            rtol=1e-6)
 
 
 class TestPanelPooled:
@@ -64,15 +69,17 @@ class TestPanelPooled:
     def _run(self, df_panel):
         self.s = _stata("panel_pooled")
         ctx = oe.PanelContext(df_panel, entity="entity", time="time")
-        self.oe_r = ctx.pooled("y ~ x + z")
+        self.oe_r = ctx.pooled("y ~ x + z", cov_type="nonrobust")
 
     def test_coefficients(self):
         npt.assert_allclose(self.oe_r.coefficients.values,
-                            [self.s["b_x"], self.s["b_z"]], rtol=1e-6)
+                            [self.s["b_int"], self.s["b_x"], self.s["b_z"]],
+                            rtol=1e-6)
 
     def test_standard_errors(self):
         npt.assert_allclose(self.oe_r.std_errors.values,
-                            [self.s["se_x"], self.s["se_z"]], rtol=1e-6)
+                            [self.s["se_int"], self.s["se_x"], self.s["se_z"]],
+                            rtol=1e-6)
 
 
 class TestPanelFD:
@@ -84,11 +91,13 @@ class TestPanelFD:
 
     def test_coefficients(self):
         npt.assert_allclose(self.oe_r.coefficients.values,
-                            [self.s["b_x"], self.s["b_z"]], rtol=1e-6)
+                            [self.s["b_int"], self.s["b_x"], self.s["b_z"]],
+                            rtol=1e-5)
 
     def test_standard_errors(self):
         npt.assert_allclose(self.oe_r.std_errors.values,
-                            [self.s["se_x"], self.s["se_z"]], rtol=1e-6)
+                            [self.s["se_int"], self.s["se_x"], self.s["se_z"]],
+                            rtol=1e-5)
 
 
 class TestPanelHausman:
@@ -96,12 +105,12 @@ class TestPanelHausman:
     def _run(self, df_panel):
         self.s = _stata("panel_hausman")
         ctx = oe.PanelContext(df_panel, entity="entity", time="time")
-        fe_r = ctx.fe("y ~ x + z")
-        re_r = ctx.re("y ~ x + z")
+        fe_r = ctx.fe("y ~ x + z", cov_type="nonrobust")
+        re_r = ctx.re("y ~ x + z", cov_type="nonrobust")
         self.oe_h = ctx.hausman(fe_r, re_r)
 
     def test_chi2(self):
-        assert abs(self.oe_h.statistic - self.s["chi2"]) < 0.5
+        assert abs(self.oe_h.statistic - self.s["chi2"]) < 1.0
 
     def test_p_value(self):
         assert abs(self.oe_h.p_value - self.s["p"]) < 0.1

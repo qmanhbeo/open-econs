@@ -30,11 +30,13 @@ class TestLogitBasic:
 
     def test_coefficients(self):
         npt.assert_allclose(self.oe_r.coefficients.values,
-                            [self.s["b_x1"], self.s["b_x2"]], rtol=1e-6)
+                            [self.s["b_int"], self.s["b_x1"], self.s["b_x2"]],
+                            rtol=1e-6)
 
     def test_standard_errors(self):
         npt.assert_allclose(self.oe_r.std_errors.values,
-                            [self.s["se_x1"], self.s["se_x2"]], rtol=1e-6)
+                            [self.s["se_int"], self.s["se_x1"], self.s["se_x2"]],
+                            rtol=1e-6)
 
     def test_nobs(self):
         assert self.oe_r.nobs == int(self.s["N"])
@@ -60,11 +62,13 @@ class TestProbitBasic:
 
     def test_coefficients(self):
         npt.assert_allclose(self.oe_r.coefficients.values,
-                            [self.s["b_x1"], self.s["b_x2"]], rtol=1e-6)
+                            [self.s["b_int"], self.s["b_x1"], self.s["b_x2"]],
+                            rtol=1e-6)
 
     def test_standard_errors(self):
         npt.assert_allclose(self.oe_r.std_errors.values,
-                            [self.s["se_x1"], self.s["se_x2"]], rtol=1e-6)
+                            [self.s["se_int"], self.s["se_x1"], self.s["se_x2"]],
+                            rtol=1e-6)
 
 
 class TestProbitMargins:

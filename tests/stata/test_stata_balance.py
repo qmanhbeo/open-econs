@@ -30,7 +30,9 @@ class TestBalanceBasic:
         self.oe_r = oe.balance(df, treatment="treat", covariates=["x1", "x2"])
 
     def test_diff_x1(self):
-        assert abs(self.oe_r.loc["x1", "mean_diff"] - self.s["diff_x1"]) < 1e-6
+        oe_diff = self.oe_r.loc[self.oe_r["Variable"] == "x1", "Difference"].values[0]
+        assert abs(oe_diff - self.s["diff_x1"]) < 1e-6
 
     def test_diff_x2(self):
-        assert abs(self.oe_r.loc["x2", "mean_diff"] - self.s["diff_x2"]) < 1e-6
+        oe_diff = self.oe_r.loc[self.oe_r["Variable"] == "x2", "Difference"].values[0]
+        assert abs(oe_diff - self.s["diff_x2"]) < 1e-6
