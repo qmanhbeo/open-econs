@@ -37,16 +37,16 @@ def _estimate_gmm(
     #   Var(b) = G^{-1} (Sum_i g_i g_i') G^{-1}
     ZtZ = Z.T @ Z  # (L, L)
     if step == "one-step":
-        W = np.linalg.inv(ZtZ) if L > 0 else np.eye(0)
+        W = np.linalg.pinv(ZtZ) if L > 0 else np.eye(0)
         b1 = None
         e1 = None
     else:
         # One-step residuals drive the efficient two-step weighting matrix.
-        G1 = ZtX.T @ np.linalg.inv(ZtZ) @ ZtX
-        b1 = np.linalg.inv(G1) @ (ZtX.T @ np.linalg.inv(ZtZ) @ ZtY)
+        G1 = ZtX.T @ np.linalg.pinv(ZtZ) @ ZtX
+        b1 = np.linalg.inv(G1) @ (ZtX.T @ np.linalg.pinv(ZtZ) @ ZtY)
         e1 = Y - X @ b1
         S1 = (Z * e1[:, None]).T @ (Z * e1[:, None])  # (L, L)
-        W = np.linalg.inv(S1)
+        W = np.linalg.pinv(S1)
     G = ZtX.T @ W @ ZtX
     g_sum = ZtX.T @ W @ ZtY
     b = np.linalg.inv(G) @ g_sum

@@ -87,15 +87,22 @@ def test_abond_panelcontext_and_context_wrappers():
 
 
 def test_abond_tiny_panel_finite():
+    # A small but identified panel: 3 entities x T=5 -> 9 differenced
+    # equations, 6 instruments, 2 regressors (overidentified).  The estimator
+    # must return finite coefficients and standard errors.
     rng = np.random.default_rng(7)
-    T = 4
-    y = np.zeros(T)
-    x = rng.normal(size=T)
-    y[0] = rng.normal()
-    for j in range(1, T):
-        y[j] = 0.5 * y[j - 1] + x[j] + rng.normal(0, 0.1)
-    df = pd.DataFrame({"y": y, "x": x, "entity": 0, "time": np.arange(T)})
+    n, T = 3, 5
+    ent = np.repeat(np.arange(n), T)
+    t = np.tile(np.arange(T), n)
+    x = rng.normal(size=n * T)
+    y = np.zeros(n * T)
+    for e in range(n):
+        for j in range(T):
+            idx = e * T + j
+            lag = y[e * T + j - 1] if j > 0 else 0.0
+            y[idx] = 0.5 * lag + x[idx] + rng.normal(0, 0.1)
+    df = pd.DataFrame({"y": y, "x": x, "entity": ent, "time": t})
     r = oe.abond("y ~ x", data=df, entity="entity", time="time", step="one-step")
     assert np.all(np.isfinite(r.coefficients.values))
     assert np.all(np.isfinite(r.std_errors.values))
-    assert r.n_entities == 1
+    assert r.n_entities == n
