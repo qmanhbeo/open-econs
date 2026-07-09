@@ -8,11 +8,12 @@ from .models.linear.iv import iv
 from .models.causal.did import did, event_study
 from .models.causal.balance import balance
 from .core.context import Context
+from .core.panel_context import PanelContext
 
 reg = ols
 
 __all__ = [
     "ols", "reg", "logit", "probit", "fe", "iv", "oaxaca",
     "did", "event_study", "balance",
-    "Context", "__version__",
+    "Context", "PanelContext", "__version__",
 ]

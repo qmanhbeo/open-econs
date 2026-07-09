@@ -192,15 +192,30 @@ f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
         return results
 
     def vcov(self) -> pd.DataFrame:
-        if self._sm_fit is None:
-            raise RuntimeError(
-                "vcov() requires a fitted statsmodels result. "
-                "This should not happen with the standard API."
-            )
-        return pd.DataFrame(
-            self._sm_fit.cov_params(),
-            index=self.coefficients.index,
-            columns=self.coefficients.index,
+        if self._sm_fit is not None:
+            cov = np.asarray(self._sm_fit.cov_params(), dtype=float)
+            # Align to the reported coefficients. The full design matrix
+            # (self._X) keeps the (absorbed) Intercept column, while the
+            # reported coefficients drop it for FE fits; slice accordingly.
+            if self._X is not None and self._X.shape[1] == cov.shape[0]:
+                full_names = list(self._X.columns)
+            elif getattr(self._sm_fit.model, "exog_names", None):
+                full_names = list(self._sm_fit.model.exog_names)
+            else:
+                full_names = list(self.coefficients.index)
+            full = pd.DataFrame(cov, index=full_names, columns=full_names)
+            common = [c for c in self.coefficients.index if c in full.index]
+            if not common:
+                common = full_names
+            return full.loc[common, common]
+        # linearmodels-backed results store the covariance directly.
+        cov_df = getattr(self, "_cov", None)
+        if cov_df is not None:
+            common = [c for c in self.coefficients.index if c in cov_df.index]
+            return cov_df.loc[common, common]
+        raise RuntimeError(
+            "vcov() requires a fitted statsmodels result. "
+            "This should not happen with the standard API."
         )
 
     def wald_test(self, r_matrix: Any) -> Any:

@@ -134,5 +134,47 @@ class Context:
             covariates=covariates,
         )
 
+    # ── panel-data engine (delegates to a transient PanelContext) ──
+
+    def _to_panel(
+        self, entity: str | None = None, time: str | None = None,
+    ) -> Any:
+        from open_econs.core.panel_context import PanelContext
+
+        return PanelContext(self._data, entity=entity, time=time)
+
+    def pooled(self, formula: str, cov_type: str = "unadjusted") -> Any:
+        return self._to_panel().pooled(formula, cov_type=cov_type)
+
+    def fe(
+        self,
+        formula: str,
+        entity: str | None = None,
+        time: str | None = None,
+        cov_type: str = "HC1",
+        cluster: str | None = None,
+    ) -> Any:
+        return self._to_panel(entity, time).fe(
+            formula, cov_type=cov_type, cluster=cluster,
+        )
+
+    def re(
+        self,
+        formula: str,
+        entity: str,
+        time: str,
+        cov_type: str = "unadjusted",
+    ) -> Any:
+        return self._to_panel(entity, time).re(formula, cov_type=cov_type)
+
+    def diff(self, formula: str, entity: str, time: str) -> Any:
+        return self._to_panel(entity, time).diff(formula)
+
+    def driscoll_kraay(self, formula: str, entity: str, time: str) -> Any:
+        return self._to_panel(entity, time).driscoll_kraay(formula)
+
+    def hausman(self, fe_result: Any, re_result: Any, alpha: float = 0.05) -> Any:
+        return self._to_panel().hausman(fe_result, re_result, alpha=alpha)
+
     def __repr__(self) -> str:
         return f"Context ({self._data.shape[0]} rows, {self._data.shape[1]} cols)"

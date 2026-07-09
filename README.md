@@ -10,7 +10,7 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (v0.5.1):** `did()`, `event_study()`, and `balance()` —
+> **Current version (v0.6.0):** `PanelContext`, `re()`, `hausman()`, `driscoll_kraay()`, `diff()` —
 > two-period difference-in-differences, event-study with pre-trend plots,
 > and covariate balance tables. Built on the v0.4 foundation: robust FE/IV,
 > condition-number fix, cov_type unification.
@@ -240,14 +240,31 @@ might fit.
   numeric `Treatment` reference period (the covariance RHS is now parsed by
   splitting on top-level `+` terms rather than fragile string surgery).
 
-#### v0.6 — Panel Data Engine
-- [ ] First-class ``PanelContext(df, entity=, time=)`` — panel structure remembered, not re-specified per call
-
-#### v0.6 — Panel Data Engine
-- [ ] First-class `PanelContext(df, entity=, time=)` — panel structure remembered, not re-specified per call
-- [ ] Random effects, Hausman test (`fe()` vs `re()` comparison helper)
-- [ ] Dynamic panel: Arellano-Bond / Blundell-Bond GMM estimator
-- [ ] Driscoll-Kraay standard errors for cross-sectional dependence
+#### v0.6 — Panel Data Engine *(current)*
+- [x] First-class `PanelContext(df, entity=, time=)` — panel structure remembered,
+  not re-specified per call. Exposes `pooled()`, `fe()`, `re()`, `diff()`,
+  `driscoll_kraay()`, `hausman()`, plus cross-sectional delegates (`ols`, `logit`,
+  `probit`, `did`, `event_study`, `balance`).
+- [x] `re()` — random-effects (GLS) estimator via `linearmodels.RandomEffects`,
+  returning a `RandomEffectsResult` with `theta`, `sigma2_u`/`sigma2_e`, `rho`, and
+  within/between/overall R². An explicit intercept is always included.
+- [x] `hausman()` — Hausman test of FE vs RE consistency:
+  `H = (b_fe − b_re)'(V_fe − V_re)⁺(b_fe − b_re) ~ χ²(k)`, with Möbius
+  pseudoinverse for non-positive-definite differences. Returns a `HausmanResult`
+  with `statistic`, `p_value`, `df`, and `rejected_at(alpha)`.
+- [x] `driscoll_kraay()` — pooled OLS with Driscoll-Kraay (spatial/time-series-robust)
+  standard errors via `linearmodels.PooledOLS(cov_type="kernel")`.
+- [x] `diff()` — first-difference estimator (`FirstDifferenceOLS`), returned as a
+  `FirstDifferenceResult` (an `OLSResult` tagged `method="first-difference"`).
+- [x] Legacy `Context` gains panel methods (`fe`, `re`, `pooled`, `diff`,
+  `driscoll_kraay`, `hausman`) that delegate to a transient `PanelContext`.
+- [x] **Excessive test coverage** — numerical parity vs `linearmodels`/`statsmodels`
+  on the Grunfeld dataset and deterministic synthetic panels; `hypothesis`
+  property tests (FE slopes match within-OLS reference, RE `theta ∈ [0,1]`,
+  Hausman statistic ≥ 0, etc.); edge-case tests (single entity/time, duplicate
+  (entity,time) index, constant outcome, singular Hausman difference); context
+  delegation and result-API tests. See `tests/test_panel_*.py`.
+- [ ] Dynamic panel: Arellano-Bond / Blundell-Bond GMM estimator *(deferred to v0.6.1)*
 
 #### v0.7 — Regression Discontinuity
 - [ ] `rdd()` — sharp and fuzzy RDD, local linear/polynomial estimation

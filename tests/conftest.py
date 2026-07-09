@@ -68,3 +68,56 @@ def df_collinear() -> pd.DataFrame:
     })
     df["x_dup"] = df["x"]
     return df
+
+
+def _make_panel(n_unit: int = 60, n_time: int = 6, seed: int = 7) -> pd.DataFrame:
+    """Balanced panel with entity and time fixed effects plus noise."""
+    np.random.seed(seed)
+    n = n_unit * n_time
+    entity = np.repeat(np.arange(n_unit), n_time)
+    time = np.tile(np.arange(n_time), n_unit)
+    alpha = np.random.normal(0, 2, n_unit)
+    beta_t = np.random.normal(0, 1.5, n_time)
+    x = np.random.normal(0, 1, n)
+    z = np.random.normal(0, 1, n)
+    y = 1.5 * x - 0.7 * z + alpha[entity] + beta_t[time] + np.random.normal(0, 0.5, n)
+    return pd.DataFrame({"y": y, "x": x, "z": z, "entity": entity, "time": time})
+
+
+@pytest.fixture
+def df_panel() -> pd.DataFrame:
+    return _make_panel()
+
+
+@pytest.fixture
+def df_panel_unbalanced() -> pd.DataFrame:
+    df = _make_panel(n_unit=60, n_time=6, seed=11)
+    # Drop ~15% of rows to make the panel unbalanced.
+    rng = np.random.default_rng(11)
+    drop = rng.choice(df.index, size=int(0.15 * len(df)), replace=False)
+    return df.drop(index=drop).reset_index(drop=True)
+
+
+@pytest.fixture
+def df_panel_single_entity() -> pd.DataFrame:
+    df = _make_panel(n_unit=1, n_time=12, seed=5)
+    return df
+
+
+@pytest.fixture
+def df_grunfeld() -> pd.DataFrame:
+    from statsmodels.datasets import grunfeld
+
+    g = grunfeld.load_pandas().data
+    g = g.rename(columns={"firm": "firm", "year": "year"})
+    g["firm"] = g["firm"].astype("category").cat.codes
+    g["year"] = g["year"].astype(int)
+    return g[["invest", "value", "capital", "firm", "year"]]
+
+
+@pytest.fixture
+def df_panel_dup_index() -> pd.DataFrame:
+    df = _make_panel(n_unit=20, n_time=4, seed=9)
+    # Duplicate one (entity, time) pair.
+    dup_row = df.iloc[[5]].copy()
+    return pd.concat([df, dup_row], ignore_index=True)
