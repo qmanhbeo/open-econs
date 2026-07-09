@@ -225,7 +225,12 @@ def _check_collinearity(XX: pd.DataFrame) -> float:
     rank = matrix_rank(X_vals)
     if rank < n_params:
         raise errors.singular_matrix_error()
-    cn = float(cond(X_vals))
+    X_no_intercept = X_vals[:, [c != "Intercept" for c in XX.columns]]
+    if X_no_intercept.shape[1] == 0:
+        return float(cond(X_vals))
+    from numpy import std as _std
+    X_scaled = X_no_intercept / _std(X_no_intercept, axis=0)
+    cn = float(cond(X_scaled))
     if cn > 30:
         import warnings as _w
         _w.warn(

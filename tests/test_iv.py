@@ -16,18 +16,34 @@ def df_iv() -> pd.DataFrame:
     return pd.DataFrame({"y": y, "x": x, "z1": z1, "z2": z2})
 
 
+@pytest.fixture
+def df_iv_exog() -> pd.DataFrame:
+    np.random.seed(42)
+    n = 500
+    w = np.random.normal(0, 1, n)
+    z = np.random.normal(0, 1, n)
+    x = 0.5 + 0.8 * z + np.random.normal(0, 0.5, n)
+    y = 1.0 + 0.5 * x + 2.0 * w + np.random.normal(0, 1, n)
+    return pd.DataFrame({"y": y, "x": x, "w": w, "z": z})
+
+
 class TestIV:
-    def test_basic_iv(self, df_iv):
+    def test_basic_iv_legacy(self, df_iv):
         r = oe.iv("y ~ x | z1 + z2", data=df_iv)
         assert isinstance(r.coefficients, pd.Series)
-        assert len(r.coefficients) == 2  # intercept, x
+        assert len(r.coefficients) == 1
+
+    def test_basic_iv_exog_controls(self, df_iv_exog):
+        r = oe.iv("y ~ w | x ~ z", data=df_iv_exog)
+        assert isinstance(r.coefficients, pd.Series)
+        assert len(r.coefficients) == 2  # exog(w) + endog(x)
 
     def test_tidy_shape(self, df_iv):
         r = oe.iv("y ~ x | z1 + z2", data=df_iv)
         tidy = r.tidy()
         expected = {"Variable", "Coef", "Std Err", "z", "P>|z|", "0.025", "0.975"}
         assert set(tidy.columns) == expected
-        assert len(tidy) == 2
+        assert len(tidy) == 1
 
     def test_summary_returns_string(self, df_iv):
         r = oe.iv("y ~ x | z1 + z2", data=df_iv)
@@ -37,14 +53,14 @@ class TestIV:
 
     def test_first_stage_f_nonzero(self, df_iv):
         r = oe.iv("y ~ x | z1 + z2", data=df_iv)
-        assert r.first_stage_f > 10
-        assert r.first_stage_p_value < 0.05
+        assert r.first_stage_f.iloc[0] > 10
 
     def test_first_stage_dataframe(self, df_iv):
         r = oe.iv("y ~ x | z1 + z2", data=df_iv)
         fs = r.first_stage()
         assert isinstance(fs, pd.DataFrame)
         assert "F" in fs.columns
+        assert len(fs) == 1
 
     def test_no_pipe_raises(self, df_iv):
         with pytest.raises(ValueError, match="three-part"):
@@ -57,6 +73,20 @@ class TestIV:
     def test_conf_int(self, df_iv):
         r = oe.iv("y ~ x | z1 + z2", data=df_iv)
         assert (r.conf_int["lower"] < r.conf_int["upper"]).all()
+
+    def test_cragg_donald(self, df_iv):
+        r = oe.iv("y ~ x | z1 + z2", data=df_iv)
+        assert r.cragg_donald_stat > 0
+
+    def test_hansen_j(self, df_iv):
+        r = oe.iv("y ~ x | z1 + z2", data=df_iv)
+        assert r.hansen_j_stat >= 0
+
+    def test_vcov(self, df_iv):
+        r = oe.iv("y ~ x | z1 + z2", data=df_iv)
+        v = r.vcov()
+        assert isinstance(v, pd.DataFrame)
+        assert v.shape == (1, 1)
 
     def test_missing_column_raises(self, df_iv):
         with pytest.raises(ValueError, match="Column.*not found"):

@@ -10,10 +10,11 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (0.4.1):** OLS with WLS, diagnostics, hypothesis tests,
-> Oaxaca-Blinder decomposition, fixed effects (one-way & two-way), 2SLS/IV,
-> logit & probit with marginal effects, and VIF diagnostics. Also: `.vcov()`,
-> `.to_latex()`, `.to_html()`, immutability hardened against `object.__setattr__` bypass.
+> **Current version (0.4.2):** IV now separates exogenous/endogenous regressors,
+> honors `cov_type`, reports Cragg-Donald F & Hansen J. FE degrees-of-freedom
+> corrected for absorbed units; two-way FE uses iterative demeaning for
+> unbalanced panels. `Context.ols()` defaults to HC2 (matching `ols()`).
+> Condition-number warning excludes intercept and column-scales the matrix.
 
 ## Quick Start
 
@@ -180,13 +181,34 @@ might fit.
 - [x] `logit()` / `probit()` — binary choice, with marginal effects (`.margins()`)
 - [x] `ctx.vif()` — variance inflation factor / collinearity diagnostics
 
-#### v0.4.1 — Audit Response *(shipped)*
-- [x] Immutability hardened: `__delattr__` blocks deletion, `__setattr__` bypass via `object.__setattr__` blocked (user-facing API only; internal `_freeze()` still uses the escape hatch)
+#### v0.4.1 — Audit Response *(superseded by v0.4.2)*
+- [x] `__delattr__` blocks deletion of frozen result attributes
 - [x] Oaxaca `swap` parameter documented honestly: only affects sign guarantee, does not reverse decomposition direction
 - [x] `.vcov()` on `OLSResult`, `BinaryResult` — returns named `pd.DataFrame` variance-covariance matrix
 - [x] `.to_latex()` and `.to_html()` on all result types
 - [x] Summary shows `F-statistic ({cov_type}):` so users know which VCV the F-test used
-- [x] All existing tests pass
+
+> ⚠️ v0.4.1 incorrectly claimed to block `object.__setattr__` bypass — that is
+> impossible in pure Python. v0.4.2 corrects this claim.
+
+#### v0.4.2 — External Audit Fixes *(shipped)*
+- [x] **IV rewritten** — formula syntax ``y ~ exog | endog ~ instruments`` separates
+  exogenous controls from endogenous regressors; legacy ``y ~ x | z`` still
+  accepted (treats all RHS as endogenous, emits a warning).  Honors ``cov_type``.
+  Reports Cragg-Donald weak-instrument F-statistic and Hansen J overidentification
+  test.
+- [x] **FE degrees-of-freedom corrected** — ``df_resid`` now accounts for absorbed
+  entity/time dummies. Two-way FE uses iterative alternating-projections demeaning
+  (Correia 2017) for correct estimates on unbalanced panels. ``rsd``, R², adjusted
+  R² all use the corrected df.
+- [x] **Immutability claim corrected** — ``__setattr__`` / ``__delattr__`` guard normal
+  accidental mutation; ``object.__setattr__`` bypass is documented as
+  **not prevented** (impossible in pure Python without a C extension).
+- [x] **Context.ols defaults unified** — changed from ``HC1`` to ``HC2`` to match
+  the top-level ``ols()`` function.
+- [x] **Condition-number warning** — now excludes the intercept column and
+  column-scales the design matrix before computing the condition number,
+  reducing false positives for routine regressions with a constant.
 
 #### v0.5 — Design-Based Causal Inference
 - [ ] `did()` — two-period and staggered difference-in-differences

@@ -3,7 +3,20 @@ from datetime import datetime
 from typing import Any
 
 import pandas as pd
+
+
 class BaseModel(ABC):
+    """Abstract base for all result models.
+
+    Attributes set during ``__init__`` are *best-effort* immutable after
+    ``_freeze()`` is called.  Normal attribute assignment (``r.x = ...``)
+    and deletion (``del r.x``) are blocked, but ``object.__setattr__`` /
+    ``object.__delattr__`` — which bypass Python-level attribute control —
+    cannot be prevented without a C extension.  Consumers should treat
+    results as read-only and create a fresh estimate if modification is
+    needed.
+    """
+
     formula: str = ""
     data_shape: tuple[int, int] = (0, 0)
     cov_type: str = ""
@@ -30,7 +43,12 @@ class BaseModel(ABC):
         super().__delattr__(name)
 
     def _freeze(self) -> None:
-        object.__setattr__(self, "_frozen", True)
+        self._frozen = True
+        # Note: object.__setattr__(self, ...) still works.
+        # Python cannot prevent this without a C extension.
+
+    def _is_frozen(self) -> bool:
+        return self._frozen
 
     # ── abstract interface ──────────────────────────────────────────
 

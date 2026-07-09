@@ -29,7 +29,7 @@ class Context:
         self,
         formula: str,
         cluster: str | None = None,
-        cov_type: str = "HC1",
+        cov_type: str = "HC2",
     ) -> Any:
         from open_econs.models.linear.ols import ols as _ols
 

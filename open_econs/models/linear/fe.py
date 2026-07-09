@@ -33,7 +33,7 @@ def fe(
     time : str, optional
         Column name for time fixed effects. If *entity* is also provided,
         two-way fixed effects are used (entity and time dummies absorbed
-        via group-demeaning).
+        via iterative demeaning for unbalanced panels).
     cluster : str, optional
         Column name for cluster-robust standard errors.
     cov_type : str, default "HC1"
@@ -42,8 +42,10 @@ def fe(
     Returns
     -------
     OLSResult
-        OLS result from the within-transformed regression. Standard errors
-        are adjusted for the degrees of freedom lost to absorbed FE.
+        OLS result from the within-transformed regression. Degrees of
+        freedom are adjusted for absorbed FE, and for two-way panels
+        the iterative (alternating-projections) demeaning is used so
+        unbalanced panels produce correct estimates.
 
     Examples
     --------
@@ -100,29 +102,23 @@ def fe(
 
     n_absorbed = 0
 
-    if entity is not None:
-        entity_dummies = pd.get_dummies(entity_arr)
-        n_absorbed += entity_dummies.shape[1]
-        y_arr = _demean(y_arr, entity_dummies.values)
-        X_arr = _demean(X_arr, entity_dummies.values)
-
-    if time is not None and entity is not None:
-        time_dummies = pd.get_dummies(time_arr)
-        already_absorbed = set()
-        for col in time_dummies.columns:
-            if col in entity_dummies.columns:
-                already_absorbed.add(col)
-        to_demean = [c for c in time_dummies.columns if c not in already_absorbed]
-        if to_demean:
-            td = time_dummies[to_demean].values
-            n_absorbed += td.shape[1]
-            y_arr = _demean(y_arr, td)
-            X_arr = _demean(X_arr, td)
-    elif time is not None:
-        time_dummies = pd.get_dummies(time_arr)
-        n_absorbed += time_dummies.shape[1]
-        y_arr = _demean(y_arr, time_dummies.values)
-        X_arr = _demean(X_arr, time_dummies.values)
+    if entity is not None and time is not None:
+        unique_entities = np.unique(entity_arr)
+        unique_times = np.unique(time_arr)
+        n_entity = len(unique_entities)
+        n_time = len(unique_times)
+        n_absorbed = n_entity + n_time - 1
+        y_arr, X_arr = _demean_two_way(y_arr, X_arr, entity_arr, time_arr)
+    elif entity is not None:
+        unique_entities = np.unique(entity_arr)
+        n_absorbed = len(unique_entities)
+        y_arr = _demean(y_arr, entity_arr)
+        X_arr = _demean(X_arr, entity_arr)
+    else:
+        unique_times = np.unique(time_arr)
+        n_absorbed = len(unique_times)
+        y_arr = _demean(y_arr, time_arr)
+        X_arr = _demean(X_arr, time_arr)
 
     import statsmodels.api as sm
 
@@ -139,11 +135,10 @@ def fe(
         fitted = sm.OLS(y_arr, X_arr).fit(cov_type=cov_type)
         cov_label = cov_type
 
-    coef_arr = fitted.params
-    se_arr = fitted.bse
-    t_arr = fitted.tvalues
-    p_arr = fitted.pvalues
-    conf_arr = fitted.conf_int()
+    k = X_arr.shape[1]
+    n = int(fitted.nobs)
+    df_resid_adj = n - k - n_absorbed
+    df_model_adj = k
 
     coef_arr = fitted.params
     se_arr = fitted.bse
@@ -152,8 +147,8 @@ def fe(
     conf_arr = fitted.conf_int()
 
     kept_columns = [c for c in XX.columns if c != "Intercept"]
-
     n_real = len(kept_columns)
+
     coef_arr = coef_arr[-n_real:] if len(coef_arr) > n_real else coef_arr
     se_arr = se_arr[-n_real:] if len(se_arr) > n_real else se_arr
     t_arr = t_arr[-n_real:] if len(t_arr) > n_real else t_arr
@@ -166,9 +161,11 @@ def fe(
         index=kept_columns,
     )
 
-    nobs = int(fitted.nobs)
-    df_resid = int(fitted.df_resid)
-    df_model = int(fitted.df_model)
+    r2 = 1.0 - np.sum(fitted.resid ** 2) / (np.sum((y_arr - np.mean(y_arr)) ** 2) + 1e-15)
+    if np.isnan(r2) or r2 < 0 or r2 > 1:
+        r2 = float(fitted.rsquared)
+
+    adj_r2 = 1.0 - (1.0 - r2) * (n - 1) / max(df_resid_adj, 1)
 
     fitted_values = pd.Series(fitted.fittedvalues, index=XX.index, name="fitted")
     residuals = pd.Series(fitted.resid, index=XX.index, name="residuals")
@@ -178,20 +175,20 @@ def fe(
     return OLSResult(
         formula=formula,
         rhs_formula=rhs_formula,
-        nobs=nobs,
-        df_resid=df_resid,
-        df_model=df_model,
+        nobs=n,
+        df_resid=df_resid_adj,
+        df_model=df_model_adj,
         cov_type=cov_label,
         coefficients=pd.Series(coef_arr, index=kept_columns),
         std_errors=pd.Series(se_arr, index=kept_columns),
         t_stats=pd.Series(t_arr, index=kept_columns),
         p_values=pd.Series(p_arr, index=kept_columns),
         conf_int=conf_int,
-        r_squared=float(fitted.rsquared),
-        adj_r_squared=float(fitted.rsquared_adj),
+        r_squared=float(r2),
+        adj_r_squared=float(adj_r2),
         f_statistic=_safe_fvalue(fitted),
         f_p_value=_safe_f_pvalue(fitted),
-        rsd=float(np.sqrt(fitted.mse_resid)),
+        rsd=float(np.sqrt(np.sum(fitted.resid ** 2) / max(df_resid_adj, 1))),
         llf=_safe_llf(fitted),
         aic=_safe_aic(fitted),
         bic=_safe_bic(fitted),
@@ -204,11 +201,75 @@ def fe(
     )
 
 
-def _demean(y: np.ndarray, dummies: np.ndarray) -> np.ndarray:
+def _demean(y: np.ndarray, groups: np.ndarray) -> np.ndarray:
     if y.ndim == 1:
         y = y.reshape(-1, 1)
-    centered = y - dummies @ np.linalg.lstsq(dummies, y, rcond=None)[0]
-    return centered.ravel() if y.shape[1] == 1 else centered
+    dummies = pd.get_dummies(pd.Series(groups)).values
+    resid = y - dummies @ np.linalg.lstsq(dummies, y, rcond=None)[0]
+    return resid.ravel() if y.shape[1] == 1 else resid
+
+
+def _demean_two_way(
+    y: np.ndarray | pd.Series,
+    x: np.ndarray | pd.DataFrame,
+    entities: np.ndarray,
+    times: np.ndarray,
+    max_iter: int = 100,
+    tol: float = 1e-10,
+):
+    """Iterative (alternating-projections) demeaning for two-way FE.
+
+    This computes the within transformation y - y_bar_i - y_bar_t + y_bar
+    without explicitly constructing the dummy matrix, using the algorithm
+    from the Stata reghdfe package (Correia 2017). This is exact for
+    unbalanced panels.
+
+    Returns (y_demeaned, X_demeaned) as numpy arrays.
+    """
+    if isinstance(y, pd.Series):
+        y_arr = y.values.ravel().astype(float)
+    else:
+        y_arr = y.ravel().astype(float) if y.ndim <= 2 else y.astype(float)
+
+    if isinstance(x, pd.DataFrame):
+        X_arr = x.values.astype(float)
+    else:
+        X_arr = x.astype(float)
+
+    if x.ndim == 1:
+        X_arr = X_arr.reshape(-1, 1)
+
+    orig_y = y_arr.copy()
+    orig_X = X_arr.copy()
+
+    for iteration in range(max_iter):
+        prev_y = y_arr.copy()
+        prev_X = X_arr.copy()
+
+        y_arr = _within_transform(y_arr, entities)
+        X_arr = _within_transform(X_arr, entities)
+        y_arr = _within_transform(y_arr, times)
+        X_arr = _within_transform(X_arr, times)
+
+        y_change = np.max(np.abs(y_arr - prev_y))
+        x_change = np.max(np.abs(X_arr - prev_X))
+        if y_change < tol and x_change < tol:
+            break
+
+    return y_arr, X_arr
+
+
+def _within_transform(z: np.ndarray, groups: np.ndarray) -> np.ndarray:
+    """Subtract group means from z."""
+    if z.ndim == 1:
+        z = z.reshape(-1, 1)
+    unique = np.unique(groups)
+    result = z.copy()
+    for g in unique:
+        mask = groups == g
+        if np.sum(mask) > 0:
+            result[mask] = z[mask] - z[mask].mean(axis=0)
+    return result.ravel() if z.shape[1] == 1 else result
 
 
 def _capture_call(**kwargs: Any) -> dict[str, Any]:
