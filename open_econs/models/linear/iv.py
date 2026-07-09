@@ -4,6 +4,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from typing import Any, cast
+
 from open_econs._version import __version__
 from open_econs._internal import errors
 from open_econs.core.base import BaseModel
@@ -334,7 +336,7 @@ def iv(
 
     fs_f_stats = {}
     for en_name in fitted.model.endog.cols:
-        fs = fitted.first_stage  # type: ignore
+        fs = cast(Any, fitted).first_stage
         if fs is not None and en_name in fs.individual:
             ind_res = fs.individual[en_name]
             f_stat = ind_res.f_statistic.stat if hasattr(ind_res, "f_statistic") else float("nan")
@@ -351,7 +353,7 @@ def iv(
         cragg_donald = float("nan")
 
     try:
-        overid = fitted.sargan  # type: ignore
+        overid = cast(Any, fitted).sargan
         hansen_j = float(overid.stat)
         hansen_p = float(overid.pval)
     except (AttributeError, Exception):
