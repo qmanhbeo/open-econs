@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Any
 
@@ -477,14 +479,14 @@ def event_study(
         index=XX.columns,
     )
 
-    event_periods = []
+    event_periods: list[float] = []
     event_coefs = []
     event_lower = []
     event_upper = []
     for c in event_cols:
         raw_name = c.replace(f"C({treatment}_event_cat, Treatment('{omitted_period}'))[T.", "").rstrip("]")
         try:
-            period = int(raw_name)
+            period = float(raw_name)
         except ValueError:
             period = float("nan")
         event_periods.append(period)
@@ -507,7 +509,7 @@ def event_study(
         formula=formula,
         nobs=int(fitted.nobs),
         dep_var=dep_var,
-        event_var_col=event_col,
+        event_time_col=event_col,
         cov_type=display_cov,
         coefficients=pd.Series(coef_arr, index=XX.columns),
         std_errors=pd.Series(se_arr, index=XX.columns),
