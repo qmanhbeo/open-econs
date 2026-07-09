@@ -3,9 +3,34 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from scipy import stats as _stats
+from statsmodels.stats.diagnostic import het_breuschpagan as _het_breuschpagan
+from statsmodels.stats.stattools import durbin_watson as _durbin_watson
 
 from open_econs._version import __version__
 from open_econs.core.base import BaseModel
+
+
+def _ramsey_reset(
+    fitted: np.ndarray, resid: np.ndarray, power: int = 3,
+) -> tuple[float, float]:
+    n = len(resid)
+    y_hat_sq = np.column_stack([fitted ** p for p in range(2, power + 1)])
+    X_aug = np.column_stack([np.ones(n), fitted, y_hat_sq])
+    beta = np.linalg.lstsq(X_aug, fitted + resid, rcond=None)[0]
+    pred_aug = X_aug @ beta
+    resid_aug = (fitted + resid) - pred_aug
+    ssr_r = np.sum(resid ** 2)
+    ssr_u = np.sum(resid_aug ** 2)
+    k = 1
+    m = power - 1
+    df_num = m
+    df_den = n - k - m - 1
+    if df_den <= 0 or ssr_u <= 0:
+        return (float("nan"), float("nan"))
+    f_stat = ((ssr_r - ssr_u) / m) / (ssr_u / df_den)
+    p_val = 1.0 - _stats.f.cdf(f_stat, df_num, df_den)
+    return (float(f_stat), float(p_val))
 
 
 class OLSResult(BaseModel):
@@ -35,6 +60,8 @@ class OLSResult(BaseModel):
         residuals: pd.Series,
         call: dict[str, Any],
         model_spec: Any = None,
+        condition_number: float = 0.0,
+        _X: pd.DataFrame | None = None,
     ) -> None:
         self.formula = formula
         self.rhs_formula = rhs_formula
@@ -63,6 +90,8 @@ class OLSResult(BaseModel):
         self.fitted_values = fitted if fitted is not None else pd.Series(dtype=float)
         self.residuals = residuals
         self._model_spec = model_spec
+        self.condition_number = condition_number
+        self._X = _X
 
         self._freeze()
 
@@ -114,6 +143,37 @@ class OLSResult(BaseModel):
             return "N/A"
         return f"{v:{spec}}"
 
+    def diagnostics(self) -> dict[str, tuple[float, float]]:
+        res = self.residuals.values.ravel()
+        fitted = self.fitted_values.values.ravel()
+        results: dict[str, tuple[float, float]] = {}
+        from scipy.stats import jarque_bera as _jb
+        jb_stat, jb_p = _jb(res)
+        results["jarque_bera"] = (float(jb_stat), float(jb_p))
+        dw = _durbin_watson(res)
+        results["durbin_watson"] = (float(dw), float("nan"))
+        if self._X is not None and len(self._X) == len(res):
+            X_vals = self._X.values.astype(float)
+            bp_stat, bp_p, _, _ = _het_breuschpagan(res, X_vals)
+            results["breusch_pagan"] = (float(bp_stat), float(bp_p))
+        reset_stat, reset_p = _ramsey_reset(fitted, res, power=3)
+        results["ramsey_reset"] = (float(reset_stat), float(reset_p))
+        return results
+
+    def wald_test(self, r_matrix: Any) -> Any:
+        raise NotImplementedError(
+            "wald_test() requires the statsmodels fitted result object, "
+            "which is not currently stored on OLSResult. "
+            "Use statsmodels directly for hypothesis testing in v0.2.0."
+        )
+
+    def f_test(self, r_matrix: Any) -> Any:
+        raise NotImplementedError(
+            "f_test() requires the statsmodels fitted result object, "
+            "which is not currently stored on OLSResult. "
+            "Use statsmodels directly for hypothesis testing in v0.2.0."
+        )
+
     def predict(self, newdata: pd.DataFrame | None = None) -> pd.Series:
         if newdata is None:
             return self.fitted_values
@@ -161,6 +221,7 @@ class OaxacaResult(BaseModel):
         by_groups: tuple[str, str],
         std: pd.Series | None,
         call: dict[str, Any],
+        variable_detail: pd.DataFrame | None = None,
     ) -> None:
         self.formula = formula
         self.data_shape = (nobs, n_params)
@@ -177,10 +238,13 @@ class OaxacaResult(BaseModel):
         self.type = decomposition_type
         self.by_groups = by_groups
         self.std = std
+        self.variable_detail = variable_detail if variable_detail is not None else pd.DataFrame()
 
         self._freeze()
 
-    def tidy(self) -> pd.DataFrame:
+    def tidy(self, detail: bool = False) -> pd.DataFrame:
+        if detail and not self.variable_detail.empty:
+            return self.variable_detail
         if self.type == "two-fold":
             data = {
                 "Component": ["Explained", "Unexplained", "Total Gap"],

@@ -53,16 +53,19 @@ class BaseModel(ABC):
     def export(self, path: str) -> None:
         import json
 
-        if not path.endswith(".json"):
+        if path.endswith(".json"):
+            data = self.to_dict()
+            with open(path, "w") as fh:
+                json.dump(data, fh, indent=2, default=str)
+        elif path.endswith(".csv"):
+            self.tidy().to_csv(path, index=False)
+        else:
             raise NotImplementedError(
                 f"export() to '{path.rsplit('.', 1)[-1]}' is not supported in "
-                "this version. Only .json export is available in v0.1. "
-                "Export with a '.json' extension, or call .tidy() and save "
-                "the DataFrame yourself."
+                "this version. Only .json and .csv export are available. "
+                "Export with a '.json' or '.csv' extension, or call .tidy() "
+                "and save the DataFrame yourself."
             )
-        data = self.to_dict()
-        with open(path, "w") as fh:
-            json.dump(data, fh, indent=2, default=str)
 
     def to_dict(self) -> dict[str, Any]:
         d = self.tidy().to_dict(orient="records")

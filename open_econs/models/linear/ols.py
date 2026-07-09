@@ -14,7 +14,7 @@ def ols(
     formula: str,
     data: pd.DataFrame,
     cluster: str | None = None,
-    cov_type: str = "HC1",
+    cov_type: str = "HC2",
 ) -> OLSResult:
     """Estimate an ordinary least-squares regression.
 
@@ -26,11 +26,11 @@ def ols(
         Data containing all variables referenced in *formula*.
     cluster : str, optional
         Column name for cluster-robust standard errors.
-    cov_type : str, default "HC1"
-        Covariance estimator type. Common choices: ``"HC1"`` (default,
-        matches Stata ``reg, robust``), ``"HC0"``, ``"HC2"``, ``"HC3"``,
-        ``"nonrobust"``. Ignored when *cluster* is provided (cluster-robust
-        is used instead).
+    cov_type : str, default "HC2"
+        Covariance estimator type. Common choices: ``"HC2"`` (default,
+        matches modern Stata ``reg, robust``; changed from HC1 in v0.2.0),
+        ``"HC1"`` (classic White SE), ``"HC0"``, ``"HC3"``, ``"nonrobust"``.
+        Ignored when *cluster* is provided (cluster-robust is used instead).
 
     Returns
     -------
@@ -87,7 +87,7 @@ def ols(
     else:
         stored_spec = None
 
-    _check_collinearity(XX)
+    condition_number = _check_collinearity(XX)
 
     if cluster is not None:
         if cluster not in data.columns:
@@ -143,6 +143,8 @@ def ols(
         residuals=residuals,
         call=call,
         model_spec=stored_spec,
+        condition_number=condition_number,
+        _X=XX,
     )
 
 
@@ -190,22 +192,23 @@ def _safe_bic(fitted: Any) -> float:
         return float("nan")
 
 
-def _check_collinearity(XX: pd.DataFrame) -> None:
+def _check_collinearity(XX: pd.DataFrame) -> float:
     from numpy.linalg import cond, matrix_rank
     X_vals = XX.values
     n_params = X_vals.shape[1]
     rank = matrix_rank(X_vals)
     if rank < n_params:
         raise errors.singular_matrix_error()
-    cn = cond(X_vals)
-    if cn > 1e10:
+    cn = float(cond(X_vals))
+    if cn > 30:
         import warnings as _w
         _w.warn(
             f"Design matrix is near-singular (condition number = {cn:.2e}). "
-            "Coefficients are not uniquely determined. Consider removing "
-            "collinear predictors.",
+            "Belsley, Kuh & Welsch (1980) recommend caution above 30. "
+            "Consider removing collinear predictors.",
             RuntimeWarning,
             stacklevel=3,
         )
+    return cn
 
 

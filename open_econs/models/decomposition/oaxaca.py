@@ -143,6 +143,32 @@ def oaxaca(
             f"Use 'two-fold' or 'three-fold'."
         )
 
+    var_names = [c for c in XX.columns if c != by]
+    f_params = model._f_model.params
+    s_params = model._s_model.params
+    f_mean = model.exog_f_mean
+    s_mean = model.exog_s_mean
+
+    if decomposition_type == "two-fold":
+        ref_params = model.t_params
+        endow_vec = (f_mean - s_mean) * ref_params
+        unexpl_vec = f_mean * (f_params - ref_params) + s_mean * (ref_params - s_params)
+        var_detail = pd.DataFrame({
+            "Variable": var_names,
+            "Explained": endow_vec[:len(var_names)],
+            "Unexplained": unexpl_vec[:len(var_names)],
+        })
+    else:
+        endow_vec = (f_mean - s_mean) * s_params
+        coeff_vec = s_mean * (f_params - s_params)
+        inter_vec = (f_mean - s_mean) * (f_params - s_params)
+        var_detail = pd.DataFrame({
+            "Variable": var_names,
+            "Endowment": endow_vec[:len(var_names)],
+            "Coefficients": coeff_vec[:len(var_names)],
+            "Interaction": inter_vec[:len(var_names)],
+        })
+
     unique_vals_sorted = sorted(data[by].dropna().unique(), key=str)
     idx_map = {float(i): str(v) for i, v in enumerate(unique_vals_sorted)}
     group_labels = (idx_map.get(model.bi[0], str(model.bi[0])),
@@ -169,6 +195,7 @@ def oaxaca(
         by_groups=group_labels,
         std=std_series,
         call=call,
+        variable_detail=var_detail,
     )
 
 

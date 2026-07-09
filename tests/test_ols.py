@@ -185,3 +185,32 @@ class TestOLS:
         from pytest import raises as _raises
         with _raises(ValueError, match="Column.*not found"):
             r.predict(newdata=bad)
+
+    def test_condition_number_stored(self, df_ols):
+        r = oe.ols("income ~ education + age", data=df_ols)
+        assert hasattr(r, "condition_number")
+        assert r.condition_number > 0
+
+    def test_diagnostics_returns_dict(self, df_ols):
+        r = oe.ols("income ~ education + age", data=df_ols)
+        diag = r.diagnostics()
+        assert isinstance(diag, dict)
+        for key in ("jarque_bera", "durbin_watson", "breusch_pagan", "ramsey_reset"):
+            assert key in diag
+            stat, pval = diag[key]
+            assert isinstance(stat, float)
+            assert pval >= 0 or np.isnan(pval)
+
+    def test_export_csv(self, df_ols, tmp_path):
+        r = oe.ols("income ~ education + age", data=df_ols)
+        path = tmp_path / "test.csv"
+        r.export(str(path))
+        assert path.exists()
+        df_read = pd.read_csv(path)
+        assert "Coef" in df_read.columns
+
+    def test_export_unsupported_ext_raises(self, df_ols, tmp_path):
+        r = oe.ols("income ~ education + age", data=df_ols)
+        from pytest import raises as _raises
+        with _raises(NotImplementedError, match="export"):
+            r.export(str(tmp_path / "test.parquet"))

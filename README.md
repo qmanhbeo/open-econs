@@ -7,6 +7,9 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
+> **Current version (0.2.0):** OLS regression and Oaxaca-Blinder decomposition.
+> Additional models (IV, Logit, Probit, FE, DiD) are planned.
+
 ## Quick Start
 
 ```python
@@ -24,30 +27,31 @@ df = pd.DataFrame({
 # --- OLS with named coefficients and cluster-robust SEs ---
 r = oe.ols("income ~ education + age", data=df, cluster="province")
 r.coefficients          # pd.Series with name index
-# Intercept   -29.26
-# education     4.03
-# age           0.33
+# Intercept   -32.82
+# education     8.97
+# age          -1.03
 
 r.tidy()              # coefficient table as DataFrame
 r.predict(df.head(2))# out-of-sample predictions
-# 0    33.53
-# 1    46.29
+# 0    31.28
+# 1    44.10
 
 print(r.summary())    # printable summary (also __repr__)
 
 # --- Oaxaca-Blinder decomposition ---
-d = oe.oaxaca("income ~ education + age", data=df, by="female")
-d.explained          # -8.20  (covariate-driven gap)
-d.unexplained        # 10.21  (coefficient-driven gap)
-d.total_gap          #  2.01  (female mean - male mean)
+# NOTE: the 'by' column must also appear on the RHS of the formula
+d = oe.oaxaca("income ~ education + age + female", data=df, by="female")
+d.explained          # 16.00  (covariate-driven gap)
+d.unexplained        #  4.00  (coefficient-driven gap)
+d.total_gap          # 20.00  (female mean - male mean)
 
 # --- Categorical variables ---
 r2 = oe.ols("income ~ education + C(province)", data=df)
 r2.coefficients
-# Intercept                 -26.79
-# education                  4.39
-# C(province)[T.B]          3.27
-# C(province)[T.C]          -13.04
+# Intercept          -33.60
+# education            6.37
+# C(province)[T.B]     0.72
+# C(province)[T.C]     3.69
 
 # --- Context remembers the dataset ---
 ctx = oe.Context(df)

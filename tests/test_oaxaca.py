@@ -215,3 +215,58 @@ class TestOaxaca:
         )
         tidy = d.tidy()
         assert "Std Err" not in tidy.columns
+
+    def test_variable_detail_stored(self, df_oaxaca):
+        d = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female")
+        assert hasattr(d, "variable_detail")
+        assert not d.variable_detail.empty
+        assert "Variable" in d.variable_detail.columns
+        assert "Explained" in d.variable_detail.columns
+        assert "Unexplained" in d.variable_detail.columns
+
+    def test_variable_detail_three_fold(self, df_oaxaca):
+        d = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female",
+            decomposition_type="three-fold",
+        )
+        assert "Endowment" in d.variable_detail.columns
+        assert "Coefficients" in d.variable_detail.columns
+        assert "Interaction" in d.variable_detail.columns
+
+    def test_variable_detail_rows_match_variables(self, df_oaxaca):
+        d = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female")
+        expected_vars = {"Intercept", "education", "age"}
+        assert set(d.variable_detail["Variable"]) == expected_vars
+
+    def test_variable_detail_sums_match_aggregate_two_fold(self, df_oaxaca):
+        d = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female")
+        explained_sum = d.variable_detail["Explained"].sum()
+        unexplained_sum = d.variable_detail["Unexplained"].sum()
+        assert abs(explained_sum - d.explained) < 1e-10
+        assert abs(unexplained_sum - d.unexplained) < 1e-10
+
+    def test_variable_detail_sums_match_aggregate_three_fold(self, df_oaxaca):
+        d = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female",
+            decomposition_type="three-fold",
+        )
+        endow_sum = d.variable_detail["Endowment"].sum()
+        coeff_sum = d.variable_detail["Coefficients"].sum()
+        inter_sum = d.variable_detail["Interaction"].sum()
+        assert abs(endow_sum - d.explained) < 1e-10
+        assert abs(coeff_sum - d.unexplained) < 1e-10
+        assert abs(inter_sum - d.interaction) < 1e-10
+
+    def test_tidy_detail_returns_var_detail(self, df_oaxaca):
+        d = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female")
+        detail_tidy = d.tidy(detail=True)
+        assert "Variable" in detail_tidy.columns
+        assert len(detail_tidy) == len(d.variable_detail)
+
+    def test_tidy_detail_false_returns_aggregate(self, df_oaxaca):
+        d = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female")
+        agg = d.tidy(detail=False)
+        assert "Component" in agg.columns
+        assert "Variable" not in agg.columns
