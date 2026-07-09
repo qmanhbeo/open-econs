@@ -10,11 +10,10 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (0.4.3):** Legacy IV syntax `y ~ x | z` now includes RHS
-> variables in the instrument matrix to match textbook 2SLS (previously omitted
-> them, causing wrong coefficients with exogenous controls). Also includes all
-> v0.4.2 fixes: IV with new syntax `y ~ exog | endog ~ instr`, FE df correction
-> and iterative two-way demeaning, condition-number fix, cov_type unification.
+> **Current version (v0.5.0):** `did()`, `event_study()`, and `balance()` —
+> two-period difference-in-differences, event-study with pre-trend plots,
+> and covariate balance tables. Built on the v0.4 foundation: robust FE/IV,
+> condition-number fix, cov_type unification.
 
 ## Quick Start
 
@@ -212,23 +211,31 @@ might fit.
 > ⚠️ v0.4.2 legacy IV syntax omitted exogenous controls from the instrument
 > matrix — a classic 2SLS error producing wrong coefficients. v0.4.3 fixes this.
 
-#### v0.4.3 — Instrument-Matrix Correction *(current)*
+#### v0.4.3 — Instrument-Matrix Correction *(superseded by v0.5)*
 - [x] **Legacy IV syntax fixed** — ``y ~ x1 + x2 | z1`` now constructs the
   instrument matrix as ``[x1, x2, z1]`` (not just ``[z1]``), matching the
   textbook 2SLS requirement that included exogenous regressors must also
-  appear as instruments. Previously, all RHS variables were treated as
-  endogenous and instrumented only by the post-``|`` variables — a classic
-  error producing plausible-looking wrong coefficients.
+  appear as instruments.
 - [x] **FutureWarning added** — legacy syntax now warns users to adopt
   ``y ~ exog | endog ~ instruments`` for clarity.
 - [x] **New syntax unchanged** — ``y ~ w | x ~ z`` correctly passes
   ``w`` as exogenous, ``x`` as endogenous, ``z`` as instrument.
 
-#### v0.5 — Design-Based Causal Inference
-- [ ] `did()` — two-period and staggered difference-in-differences
-- [ ] Callaway–Sant'Anna and Sun–Abraham estimators for staggered treatment timing (the "bad comparisons" problem in TWFE)
-- [ ] Event-study specification with pre-trend coefficient plots
-- [ ] `ctx.balance()` — covariate balance tables for treatment/control splits
+#### v0.5 — Design-Based Causal Inference *(current)*
+- [x] `did()` — two-period difference-in-differences via ``y ~ treated * post``
+  with automatic DiD coefficient extraction. Supports clustering, covariates,
+  and heterogeneous cov_type (HC0-HC3, nonrobust). Returns ``DiDResult``
+  with ``.did_coefficient``, ``.did_std_error``, ``.did_t_stat``, ``.did_p_value``.
+- [x] `event_study()` — event-study specification with ``event_time`` column.
+  Omits user-specified reference period (default -1). Returns ``EventStudyResult``
+  with ``.event_coefficients`` DataFrame and ``.plot()`` for pre-trend visuals.
+- [x] `balance()` — covariate balance table comparing treatment/control means
+  with Welch t-tests. Accessible as ``ctx.balance(treatment="treated")``
+  or standalone ``oe.balance(df, treatment="treated")``.
+- [x] **All v0.4 features preserved** — no breaking changes to OLS, FE, IV, logit, probit.
+
+#### v0.6 — Panel Data Engine
+- [ ] First-class ``PanelContext(df, entity=, time=)`` — panel structure remembered, not re-specified per call
 
 #### v0.6 — Panel Data Engine
 - [ ] First-class `PanelContext(df, entity=, time=)` — panel structure remembered, not re-specified per call

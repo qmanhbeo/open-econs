@@ -81,5 +81,58 @@ class Context:
         result.index.name = "Variable"
         return result
 
+    def did(
+        self,
+        formula: str,
+        treatment: str,
+        post: str,
+        cluster: str | None = None,
+        cov_type: str = "HC2",
+    ) -> Any:
+        from open_econs.models.causal.did import did as _did
+
+        return _did(
+            formula=formula,
+            data=self._data,
+            treatment=treatment,
+            post=post,
+            cluster=cluster,
+            cov_type=cov_type,
+        )
+
+    def event_study(
+        self,
+        formula: str,
+        treatment: str,
+        post: str,
+        cluster: str | None = None,
+        cov_type: str = "HC2",
+        omitted_period: int = -1,
+    ) -> Any:
+        from open_econs.models.causal.did import event_study as _event_study
+
+        return _event_study(
+            formula=formula,
+            data=self._data,
+            treatment=treatment,
+            post=post,
+            cluster=cluster,
+            cov_type=cov_type,
+            omitted_period=omitted_period,
+        )
+
+    def balance(
+        self,
+        treatment: str,
+        covariates: list[str] | None = None,
+    ) -> pd.DataFrame:
+        from open_econs.models.causal.balance import balance as _balance
+
+        return _balance(
+            self._data,
+            treatment=treatment,
+            covariates=covariates,
+        )
+
     def __repr__(self) -> str:
-        return f"Context(data: {self._data.shape[0]} rows, {self._data.shape[1]} cols)"
+        return f"Context ({self._data.shape[0]} rows, {self._data.shape[1]} cols)"
