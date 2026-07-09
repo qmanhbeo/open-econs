@@ -4,35 +4,58 @@
 
 A Python library that bridges the gap between traditional Stata/R econometrics
 workflows and modern, production-grade Python systems.  Every estimator follows
-the same interface — `fit`, `summary`, `tidy`, `export` — so researchers and
+the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
 ## Quick Start
 
 ```python
 import open_econs as oe
+import pandas as pd
 
-# Ordinary least squares – coefficients are named (pd.Series)
-result = oe.ols("income ~ education + age", data=df, cluster="province")
-print(result)
-print(result.coefficients["education"])   # named access, not positions
-result.tidy()                              # coefficient table (DataFrame)
-result.predict(newdata=df_test)            # out-of-sample predictions
+df = pd.DataFrame({
+    "income":    [30, 45, 55, 70, 85, 40, 60, 95],
+    "education": [10, 12, 14, 16, 18, 11, 15, 20],
+    "age":       [25, 30, 35, 40, 45, 28, 38, 50],
+    "female":    [0,  0,  0,  0,  1,  1,  1,  1],
+    "province":  ["A","A","B","B","C","C","A","B"],
+})
 
-# reg() is an alias for ols()
-result2 = oe.reg("income ~ education + age", data=df)
+# --- OLS with named coefficients and cluster-robust SEs ---
+r = oe.ols("income ~ education + age", data=df, cluster="province")
+r.coefficients          # pd.Series with name index
+# Intercept   -29.26
+# education     4.03
+# age           0.33
 
-# Oaxaca-Blinder decomposition
-decomp = oe.oaxaca(
-    "income ~ education + age + female",
-    data=df, by="female",
-)
-decomp.tidy()
+r.tidy()              # coefficient table as DataFrame
+r.predict(df.head(2))# out-of-sample predictions
+# 0    33.53
+# 1    46.29
 
-# Context-based (dataset remembered)
+print(r.summary())    # printable summary (also __repr__)
+
+# --- Oaxaca-Blinder decomposition ---
+d = oe.oaxaca("income ~ education + age", data=df, by="female")
+d.explained          # -8.20  (covariate-driven gap)
+d.unexplained        # 10.21  (coefficient-driven gap)
+d.total_gap          #  2.01  (female mean - male mean)
+
+# --- Categorical variables ---
+r2 = oe.ols("income ~ education + C(province)", data=df)
+r2.coefficients
+# Intercept                 -26.79
+# education                  4.39
+# C(province)[T.B]          3.27
+# C(province)[T.C]          -13.04
+
+# --- Context remembers the dataset ---
 ctx = oe.Context(df)
-r1 = ctx.ols("income ~ education + age")
-r2 = ctx.oaxaca("income ~ education + age + female", by="female")
+ctx.ols("income ~ education + age")            # same as oe.ols(..., data=df)
+ctx.oaxaca("income ~ education + age", by="female")
+
+# --- Immutability ---
+r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
 ```
 
 ## Installation
