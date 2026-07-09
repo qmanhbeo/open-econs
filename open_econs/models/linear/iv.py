@@ -334,7 +334,7 @@ def iv(
 
     fs_f_stats = {}
     for en_name in fitted.model.endog.cols:
-        fs = fitted.first_stage  # type: ignore[attr-defined]
+        fs = fitted.first_stage  # type: ignore
         if fs is not None and en_name in fs.individual:
             ind_res = fs.individual[en_name]
             f_stat = ind_res.f_statistic.stat if hasattr(ind_res, "f_statistic") else float("nan")
@@ -351,7 +351,7 @@ def iv(
         cragg_donald = float("nan")
 
     try:
-        overid = fitted.sargan  # type: ignore[attr-defined]
+        overid = fitted.sargan  # type: ignore
         hansen_j = float(overid.stat)
         hansen_p = float(overid.pval)
     except (AttributeError, Exception):
