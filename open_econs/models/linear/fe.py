@@ -97,12 +97,12 @@ def fe(
 
     y_arr = yy.values.ravel().astype(float)
     X_arr = XX.values.astype(float)
-    entity_arr = data.loc[XX.index, entity].values if entity else None
-    time_arr = data.loc[XX.index, time].values if time else None
 
     n_absorbed = 0
 
     if entity is not None and time is not None:
+        entity_arr = data.loc[XX.index, entity].values
+        time_arr = data.loc[XX.index, time].values
         unique_entities = np.unique(entity_arr)
         unique_times = np.unique(time_arr)
         n_entity = len(unique_entities)
@@ -110,11 +110,13 @@ def fe(
         n_absorbed = n_entity + n_time - 1
         y_arr, X_arr = _demean_two_way(y_arr, X_arr, entity_arr, time_arr)
     elif entity is not None:
+        entity_arr = data.loc[XX.index, entity].values
         unique_entities = np.unique(entity_arr)
         n_absorbed = len(unique_entities)
         y_arr = _demean(y_arr, entity_arr)
         X_arr = _demean(X_arr, entity_arr)
     else:
+        time_arr = data.loc[XX.index, time].values
         unique_times = np.unique(time_arr)
         n_absorbed = len(unique_times)
         y_arr = _demean(y_arr, time_arr)
@@ -216,7 +218,7 @@ def _demean_two_way(
     times: np.ndarray,
     max_iter: int = 100,
     tol: float = 1e-10,
-):
+) -> tuple[np.ndarray, np.ndarray]:
     """Iterative (alternating-projections) demeaning for two-way FE.
 
     This computes the within transformation y - y_bar_i - y_bar_t + y_bar
