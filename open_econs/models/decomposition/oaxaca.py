@@ -49,9 +49,13 @@ def oaxaca(
     seed : int, optional
         Random seed for reproducible bootstrap standard errors.
     swap : bool, default True
-        If True, the decomposition is computed as group 1 minus group 0
-        (group 1 is the higher value of the binary ``by`` column). Setting
-        ``swap=False`` reverses this.
+        If ``True`` (default), ensures ``total_gap >= 0`` by swapping the
+        internal group ordering when the gap would otherwise be negative.
+        If ``False``, uses the natural statsmodels ordering (group 1 minus
+        group 0, where group 0 is the smaller value of the binary ``by``
+        column). When the gap is already positive, ``swap=True`` and
+        ``swap=False`` produce identical results. ``swap`` only affects sign
+        — it does not reverse the decomposition direction.
 
     Returns
     -------

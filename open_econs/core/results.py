@@ -125,8 +125,8 @@ class OLSResult(BaseModel):
             f"R-squared:                   {self.r_squared:.6f}\n"
             f"Adj. R-squared:           {self.adj_r_squared:.6f}\n"
             f"Condition No.:               {self._fmt(self.condition_number, '.2e')}\n"
-            f"F-statistic:                 {self._fmt(self.f_statistic, '.4f')}\n"
-            f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
+f"F-statistic ({self.cov_type}):     {self._fmt(self.f_statistic, '.4f')}\n"
+f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
             f"Log-Likelihood:              {llf_str}\n"
             f"AIC:                         {aic_str}\n"
             f"BIC:                         {bic_str}\n"
@@ -190,6 +190,18 @@ class OLSResult(BaseModel):
         reset_stat, reset_p = _ramsey_reset(fitted, res, power=3)
         results["ramsey_reset"] = (float(reset_stat), float(reset_p))
         return results
+
+    def vcov(self) -> pd.DataFrame:
+        if self._sm_fit is None:
+            raise RuntimeError(
+                "vcov() requires a fitted statsmodels result. "
+                "This should not happen with the standard API."
+            )
+        return pd.DataFrame(
+            self._sm_fit.cov_params(),
+            index=self.coefficients.index,
+            columns=self.coefficients.index,
+        )
 
     def wald_test(self, r_matrix: Any) -> Any:
         if self._sm_fit is None:
@@ -377,6 +389,17 @@ class BinaryResult(BaseModel):
         })
         df.index.name = None
         return df
+
+    def vcov(self) -> pd.DataFrame:
+        if self._sm_fit is None:
+            raise RuntimeError(
+                "vcov() requires a fitted statsmodels result."
+            )
+        return pd.DataFrame(
+            self._sm_fit.cov_params(),
+            index=self.coefficients.index,
+            columns=self.coefficients.index,
+        )
 
     def predict(self, newdata: pd.DataFrame | None = None, proba: bool = True) -> pd.Series:
         if newdata is None:

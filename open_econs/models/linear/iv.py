@@ -84,6 +84,13 @@ class IVResult(BaseModel):
             "\n======================================================================\n"
         )
 
+    def vcov(self) -> pd.DataFrame:
+        raise NotImplementedError(
+            "vcov() is not available for IVResult in this version. "
+            "The variance-covariance matrix is stored on the internal "
+            "statsmodels result. This will be added in a future release."
+        )
+
     def first_stage(self) -> pd.DataFrame:
         base_columns = [c for c in self.coefficients.index]
         return pd.DataFrame({

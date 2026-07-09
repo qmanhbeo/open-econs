@@ -10,9 +10,10 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (0.4.0):** OLS with WLS, diagnostics, hypothesis tests,
+> **Current version (0.4.1):** OLS with WLS, diagnostics, hypothesis tests,
 > Oaxaca-Blinder decomposition, fixed effects (one-way & two-way), 2SLS/IV,
-> logit & probit with marginal effects, and VIF diagnostics.
+> logit & probit with marginal effects, and VIF diagnostics. Also: `.vcov()`,
+> `.to_latex()`, `.to_html()`, immutability hardened against `object.__setattr__` bypass.
 
 ## Quick Start
 
@@ -116,13 +117,16 @@ Requires Python ≥ 3.10.
 Every estimator returns an object with:
 
 | Method | Returns |
-|---|---|
+|---|---|---|
 | `.summary()` | Printable string (also `__repr__`) |
 | `.tidy()` | `pd.DataFrame` — coefficient or effect table |
+| `.vcov()` | `pd.DataFrame` — variance-covariance matrix |
 | `.predict(newdata)` | `pd.Series` — only on regression models |
 | `.export(path)` | JSON / CSV serialization |
 | `.plot()` | Residual diagnostics plot (requires `pip install open-econs[plot]`) |
 | `.to_dict()` | `dict` — full result metadata |
+| `.to_latex()` | LaTeX table string (via `pandas.Styler`) |
+| `.to_html()` | HTML table string (via `pandas.Styler`) |
 
 ## Development
 
@@ -175,6 +179,14 @@ might fit.
 - [x] `iv()` — instrumental variables / 2SLS, with first-stage F-stat
 - [x] `logit()` / `probit()` — binary choice, with marginal effects (`.margins()`)
 - [x] `ctx.vif()` — variance inflation factor / collinearity diagnostics
+
+#### v0.4.1 — Audit Response *(shipped)*
+- [x] Immutability hardened: `__delattr__` blocks deletion, `__setattr__` bypass via `object.__setattr__` blocked (user-facing API only; internal `_freeze()` still uses the escape hatch)
+- [x] Oaxaca `swap` parameter documented honestly: only affects sign guarantee, does not reverse decomposition direction
+- [x] `.vcov()` on `OLSResult`, `BinaryResult` — returns named `pd.DataFrame` variance-covariance matrix
+- [x] `.to_latex()` and `.to_html()` on all result types
+- [x] Summary shows `F-statistic ({cov_type}):` so users know which VCV the F-test used
+- [x] All existing tests pass
 
 #### v0.5 — Design-Based Causal Inference
 - [ ] `did()` — two-period and staggered difference-in-differences

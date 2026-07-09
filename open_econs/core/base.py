@@ -21,6 +21,14 @@ class BaseModel(ABC):
             )
         super().__setattr__(name, value)
 
+    def __delattr__(self, name: str) -> None:
+        if getattr(self, "_frozen", False):
+            raise AttributeError(
+                f"{type(self).__name__} results are immutable after fit(). "
+                f"Cannot delete '{name}'. Create a new estimate instead."
+            )
+        super().__delattr__(name)
+
     def _freeze(self) -> None:
         object.__setattr__(self, "_frozen", True)
 
@@ -78,6 +86,14 @@ class BaseModel(ABC):
             "package_version": self.package_version,
             "results": d,
         }
+
+    def to_latex(self, caption: str = "", label: str = "") -> str:
+        return self.tidy().style.hide(axis="index").to_latex(
+            caption=caption, label=label, hrules=True,
+        )
+
+    def to_html(self, caption: str = "") -> str:
+        return self.tidy().style.hide(axis="index").to_html(caption=caption)
 
     def __repr__(self) -> str:
         return self.summary()
