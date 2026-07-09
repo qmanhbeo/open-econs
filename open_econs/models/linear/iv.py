@@ -164,7 +164,7 @@ class IVResult(BaseModel):
 def iv(
     formula: str,
     data: pd.DataFrame,
-    cov_type: str = "nonrobust",
+    cov_type: str = "robust",
 ) -> IVResult:
     """Estimate an IV-2SLS regression.
 
@@ -184,7 +184,7 @@ def iv(
         ``z1, z2`` are instruments.
     data : pd.DataFrame
         Data containing all variables referenced in *formula*.
-    cov_type : str, default "nonrobust"
+    cov_type : str, default "robust"
         Covariance estimator type. Mapped to linearmodels convention:
         ``"nonrobust"`` -> ``"unadjusted"``, ``"HC1"`` -> ``"robust"``
         with debiased=True, ``"HC0"/"HC2"/"HC3"`` -> ``"robust"``.
