@@ -1,10 +1,8 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
-
-from typing import Any, cast
 
 from open_econs._version import __version__
 from open_econs._internal import errors
