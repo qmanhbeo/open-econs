@@ -239,9 +239,6 @@ def _demean_two_way(
     if x.ndim == 1:
         X_arr = X_arr.reshape(-1, 1)
 
-    orig_y = y_arr.copy()
-    orig_X = X_arr.copy()
-
     for iteration in range(max_iter):
         prev_y = y_arr.copy()
         prev_X = X_arr.copy()

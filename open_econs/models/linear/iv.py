@@ -101,7 +101,6 @@ class IVResult(BaseModel):
     def summary(self) -> str:
         endog_name = self.formula.split("~")[0].strip()
         parts = self.formula.split("|", 1)
-        rhs_raw = parts[0].split("~", 1)[1].strip() if "~" in parts[0] else parts[0]
         instr_raw = parts[1].strip()
         fs_rows = []
         for var, fval in self.first_stage_f.items():
@@ -346,7 +345,6 @@ def iv(
     fs_f_series = pd.Series(fs_f_stats, name="F")
 
     try:
-        fs_all = fitted.first_stage
         min_f = min(fs_f_stats.values()) if fs_f_stats else float("nan")
         cragg_donald = float(min_f)
     except Exception:
