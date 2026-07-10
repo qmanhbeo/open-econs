@@ -9,6 +9,37 @@ from scipy.stats import norm as _norm
 from open_econs.core.call_capture import capture_call as _capture_call
 
 
+def _build_noncollapsed_gmm_block(
+    var: np.ndarray, depth: int, T: int, lag_offset: int
+) -> np.ndarray:
+    """T × (T - depth - lag_offset) staircase block, zero-inactive columns omitted.
+
+    Column k (0 … n_active-1) has a single non-zero at row
+    ``j = k + depth + lag_offset`` with value ``var[k]``.
+    All structurally zero columns (where j would be ≥ T) are dropped.
+
+    Parameters
+    ----------
+    var : ndarray, shape (T,)
+    depth : int
+    T : int
+    lag_offset : int
+        ``lags`` for L.y, ``0`` for predetermined regressors.
+
+    Returns
+    -------
+    block : ndarray, shape (T, max(0, T - depth - lag_offset))
+    """
+    n_active = T - depth - lag_offset
+    if n_active <= 0:
+        return np.zeros((T, 0))
+    block = np.zeros((T, n_active))
+    for k in range(n_active):
+        j = k + depth + lag_offset
+        block[j, k] = var[k]
+    return block
+
+
 def _tridiag_h_inv_block(n: int) -> tuple[np.ndarray, np.ndarray]:
     """Return (diag, off_diag) of H^{-1} for an n×n tridiagonal H.
 
@@ -492,40 +523,52 @@ def abond(
                 Y_list.append(dep)
                 eq_entity_list.append(e_val)
     else:
-        # Uncollapsed (full) instruments: one column per (depth x time period)
-        # for GMM instruments, plus one column per time period for standard
-        # instruments.  This matches Stata xtabond2's default behavior.
-        n_instr = len(depths) * n_endog + len(iv_cols)
+        # Uncollapsed (full) instruments: one column per (depth × usable
+        # time period) for each GMM base variable, matching Stata's
+        # _MakeGMMinsts / _Explode block-diagonal construction.
+        #   n_gmm_cols = n_endog × Σ depth (T_i - depth)  (varies per entity)
+        # For simplicity, precompute per-entity GMM column count, then append
+        # per-entity Z blocks.  IV columns remain non-expanding.
         for e_val in entities:
             y = y_by_e[e_val]
             xs = x_by_e[e_val]
-            T = len(y)
-            for j in range(min_j, T):
+            T_i = len(y)
+            n_gmm_i = n_endog * sum(T_i - d for d in depths if T_i > d)
+            n_iv_i = len(iv_cols)
+            n_instr_i = n_gmm_i + n_iv_i
+
+            Z_i = np.zeros((T_i, n_instr_i))
+            col = 0
+            for d in depths:
+                # L.y block — lag_offset = lags
+                blk = _build_noncollapsed_gmm_block(y, d, T_i, lag_offset=lags)
+                nc = blk.shape[1]
+                if nc:
+                    Z_i[:, col:col + nc] = blk
+                    col += nc
+                # Predetermined-regressor blocks — lag_offset = 0
+                for gmm_c in gmm_cols:
+                    blk = _build_noncollapsed_gmm_block(
+                        xs[gmm_c], d, T_i, lag_offset=0,
+                    )
+                    nc = blk.shape[1]
+                    if nc:
+                        Z_i[:, col:col + nc] = blk
+                        col += nc
+            # IV columns (exogenous, current Δ)
+            for iv_c in iv_cols:
+                for j in range(1, T_i):
+                    Z_i[j, col] = xs[iv_c][j] - xs[iv_c][j - 1]
+                col += 1
+
+            # Extract usable equations (j ≥ min_j)
+            for j in range(min_j, T_i):
                 dep = y[j] - y[j - 1]
                 dyn_regs = [y[j - lag] - y[j - lag - 1]
                             for lag in range(1, lags + 1)]
                 x_regs = [xs[c][j] - xs[c][j - 1] for c in x_cols]
                 X_list.append(dyn_regs + x_regs)
-
-                zrow = np.zeros(n_instr)
-                col = 0
-                # GMM instruments for L.y: y_{t-lag}
-                for lag in depths:
-                    if j - lag >= 0:
-                        zrow[col] = y[j - lag]
-                    col += 1
-                # GMM instruments for predetermined regressors
-                for gmm_c in gmm_cols:
-                    for lag in depths:
-                        if j - lag >= 0:
-                            zrow[col] = xs[gmm_c][j - lag]
-                        col += 1
-                # Standard instruments for exogenous regressors (current Δ)
-                for iv_c in iv_cols:
-                    zrow[col] = xs[iv_c][j] - xs[iv_c][j - 1]
-                    col += 1
-
-                Z_list.append(zrow)
+                Z_list.append(Z_i[j, :])
                 Y_list.append(dep)
                 eq_entity_list.append(e_val)
 
@@ -597,22 +640,49 @@ def abond(
                 col += 1
             Y_i[j] = y_e[j] - y_e[j - 1]
 
-        # Full T × L Z matrix (same collapsed instrument layout as estimation).
-        Z_i = np.zeros((T_i, L_ar))
-        for j in range(1, T_i):
-            col = 0
-            for lag in depths:
-                idx = j - lags - lag
-                if idx >= 0:
-                    Z_i[j, col] = y_e[idx]
-                col += 1
-            for gmm_c in gmm_cols:
+        # Full T × L Z matrix — dispatch construction to match estimation layout.
+        if collapse:
+            # Collapsed: one column per depth (same as estimation path).
+            Z_i = np.zeros((T_i, L_ar))
+            for j in range(1, T_i):
+                col = 0
                 for lag in depths:
-                    if j - lag >= 0:
-                        Z_i[j, col] = xs[gmm_c][j - lag]
+                    idx = j - lags - lag
+                    if idx >= 0:
+                        Z_i[j, col] = y_e[idx]
                     col += 1
+                for gmm_c in gmm_cols:
+                    for lag in depths:
+                        if j - lag >= 0:
+                            Z_i[j, col] = xs[gmm_c][j - lag]
+                        col += 1
+                for iv_c in iv_cols:
+                    Z_i[j, col] = xs[iv_c][j] - xs[iv_c][j - 1]
+                    col += 1
+        else:
+            # Non-collapsed: reuse the same block-diagonal staircase
+            # construction that the estimator used.
+            n_gmm_i = n_endog * sum(T_i - d for d in depths if T_i > d)
+            n_iv_i = len(iv_cols)
+            Z_i = np.zeros((T_i, n_gmm_i + n_iv_i))
+            col = 0
+            for d in depths:
+                blk = _build_noncollapsed_gmm_block(y_e, d, T_i, lag_offset=lags)
+                nc = blk.shape[1]
+                if nc:
+                    Z_i[:, col:col + nc] = blk
+                    col += nc
+                for gmm_c in gmm_cols:
+                    blk = _build_noncollapsed_gmm_block(
+                        xs[gmm_c], d, T_i, lag_offset=0,
+                    )
+                    nc = blk.shape[1]
+                    if nc:
+                        Z_i[:, col:col + nc] = blk
+                        col += nc
             for iv_c in iv_cols:
-                Z_i[j, col] = xs[iv_c][j] - xs[iv_c][j - 1]
+                for j in range(1, T_i):
+                    Z_i[j, col] = xs[iv_c][j] - xs[iv_c][j - 1]
                 col += 1
 
         # Full residual: (Y - X·b) with position 0 hard-zeroed.
