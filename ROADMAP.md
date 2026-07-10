@@ -200,9 +200,29 @@ might fit.
   `H` matrices via `svmat` for element-by-element validation.
 - [x] Parity test `tests/stata/test_stata_abond.py::TestAbondCollapsedOneStep`
   (coefficients, standard errors, dimensions) added.
-- [ ] Non-collapsed (uncollapsed) `abond()` path still carries the pre-fix GMM
-  lag construction — left as a known follow-up this pass (no Stata ground truth
-  validated against it yet). Two-step / robust / Windmeijer paths untouched.
+
+#### v0.6.6 — Non-collapsed / full GMM instruments (Arellano-Bond)
+- [x] **Non-collapsed (uncollapsed) `abond()`** — full GMM-style instrument
+  expansion (block-diagonal staircase, one column per (depth × usable period)),
+  matching Stata's `_MakeGMMinsts` / `_Explode` from `xtabond2` 3.7.2.
+- [x] **Block builder isolated** as `_build_noncollapsed_gmm_block(var, depth, T,
+  lag_offset)` — handles both L.y (`lag_offset=lags`) and predetermined regressor
+  (`lag_offset=0`) conventions, structurally zero columns omitted.
+- [x] **`n_gmm_i` formula corrected** — accounts for `lag_offset` per variable type:
+  L.y columns = `max(0, T-d-lags)`, gmm_c columns = `max(0, T-d)`.
+- [x] **AR-test Z dispatch** — non-collapsed branch reuses the same block-builder
+  construction as the estimation path (eliminating the stale collapsed-formula
+  path that produced wrong Z matrices for AR tests).
+- [x] **All four flavors validated against Stata `xtabond2` at machine precision**
+  (~1e-8):
+  - One-step non-robust: `b = [-0.08671378, 1.14723439, -0.30353782]`
+  - Two-step non-robust: `b = [-0.09296598, 1.12778676, -0.29591272]`
+  - One-step robust: coefficients identical, `se = [0.21161410, 0.15665591, 0.09549873]`
+  - Two-step robust: `se = [0.23358608, 0.17061935, 0.10576369]`
+- [x] **40 Stata-parity tests** — 20 collapsed (no regression) + 20 new non-collapsed.
+- [x] Ground-truth `.do`/`.dta` fixture (`abond_noncollapsed.do`) captures all four
+  flavors at full double precision.
+- [x] **Collapsed path untouched** — no regressions.
 
 #### v0.7 — Regression Discontinuity refinements
 - [x] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)

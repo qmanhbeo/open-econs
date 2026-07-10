@@ -10,16 +10,12 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (v0.6.5):** Stata-parity test suite — 27 hand-written
+> **Current version (v0.6.6):** Stata-parity test suite — 28 hand-written
 > `.do` files with committed `.dta` fixtures, dual-mode execution (live Stata
-> or CI fallback), **Hausman test fixed** (df-corrected VCV, one-way FE
-> alignment, `e(chi2)` ghost variable discovered and bypassed), FE df
-> correction, within R² fix, plus all v0.6.3 features.
->
-> **Arellano-Bond `abond()` now matches Stata's `xtabond2` to ~1e-7** on the
-> collapsed one-step non-robust difference-GMM case (coefficients *and* the full
-> variance-covariance matrix) — the first dynamic-panel estimator in open-econs
-> with verified numerical parity against `xtabond2`.
+> or CI fallback). **Non-collapsed (uncollapsed) `abond()` now matches Stata's
+> `xtabond2` to ~1e-7** across all four flavors (one-step, two-step, robust,
+> two-step-robust) — 40 Stata-parity tests, all passing. Collapsed path
+> unchanged and still passing.
 
 ## Why open-econs?
 

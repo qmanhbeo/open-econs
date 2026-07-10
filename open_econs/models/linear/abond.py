@@ -533,7 +533,9 @@ def abond(
             y = y_by_e[e_val]
             xs = x_by_e[e_val]
             T_i = len(y)
-            n_gmm_i = n_endog * sum(T_i - d for d in depths if T_i > d)
+            n_gmm_ly = sum(max(0, T_i - d - lags) for d in depths)
+            n_gmm_pred = len(gmm_cols) * sum(max(0, T_i - d) for d in depths)
+            n_gmm_i = n_gmm_ly + n_gmm_pred
             n_iv_i = len(iv_cols)
             n_instr_i = n_gmm_i + n_iv_i
 
@@ -560,6 +562,23 @@ def abond(
                 for j in range(1, T_i):
                     Z_i[j, col] = xs[iv_c][j] - xs[iv_c][j - 1]
                 col += 1
+
+            # Structural check: every pre-allocated column was filled
+            assert col == n_instr_i, (
+                f"Entity {e_val}: filled {col}/{n_instr_i} columns — mismatch"
+            )
+            # Row-level non-zero count: row j should have
+            # n_nonzero = sum_{d} [j >= d + lags] + len(gmm_cols)*sum_{d}[j >= d] + len(iv_cols)*[j >= 1]
+            for j in range(T_i):
+                expected_ly = sum(1 for d in depths if j >= d + lags)
+                expected_pred = len(gmm_cols) * sum(1 for d in depths if j >= d)
+                expected_iv = len(iv_cols) * (1 if j >= 1 else 0)
+                expected_nz = expected_ly + expected_pred + expected_iv
+                actual_nz = np.count_nonzero(Z_i[j, :])
+                assert actual_nz == expected_nz, (
+                    f"Entity {e_val}, row {j}: expected {expected_nz} non-zero "
+                    f"GMM columns, got {actual_nz}"
+                )
 
             # Extract usable equations (j ≥ min_j)
             for j in range(min_j, T_i):
@@ -662,9 +681,9 @@ def abond(
         else:
             # Non-collapsed: reuse the same block-diagonal staircase
             # construction that the estimator used.
-            n_gmm_i = n_endog * sum(T_i - d for d in depths if T_i > d)
-            n_iv_i = len(iv_cols)
-            Z_i = np.zeros((T_i, n_gmm_i + n_iv_i))
+            n_gmm_ly = sum(max(0, T_i - d - lags) for d in depths)
+            n_gmm_pred = len(gmm_cols) * sum(max(0, T_i - d) for d in depths)
+            Z_i = np.zeros((T_i, n_gmm_ly + n_gmm_pred + len(iv_cols)))
             col = 0
             for d in depths:
                 blk = _build_noncollapsed_gmm_block(y_e, d, T_i, lag_offset=lags)
