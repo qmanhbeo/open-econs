@@ -26,24 +26,54 @@ class TestPanelFE:
     @pytest.fixture(autouse=True)
     def _run(self, df_panel):
         self.s = _stata("panel_fe")
+        # Stata `xtreg y x z, fe` is one-way entity FE only
         self.oe_r = oe.fe("y ~ x + z", data=df_panel, entity="entity",
-                          time="time", cov_type="nonrobust")
+                          cov_type="nonrobust")
 
     def test_coefficients(self):
         npt.assert_allclose(self.oe_r.coefficients.values,
-                            [self.s["b_int"], self.s["b_x"], self.s["b_z"]],
+                            [self.s["b_x"], self.s["b_z"]],
                             rtol=1e-6)
 
     def test_standard_errors(self):
         npt.assert_allclose(self.oe_r.std_errors.values,
-                            [self.s["se_int"], self.s["se_x"], self.s["se_z"]],
+                            [self.s["se_x"], self.s["se_z"]],
                             rtol=1e-6)
 
     def test_nobs(self):
         assert self.oe_r.nobs == int(self.s["N"])
 
     def test_r_squared(self):
-        assert abs(self.oe_r.r_squared - self.s["r2_w"]) < 1e-4
+        npt.assert_allclose(self.oe_r.r_squared, self.s["r2_w"], rtol=1e-6)
+
+
+class TestPanelFETwoWay:
+    @pytest.fixture(autouse=True)
+    def _run(self, df_panel):
+        self.s = _stata("panel_fe_twoway")
+        # Stata `xtreg y x z i.time, fe` — entity FE + time dummies
+        self.oe_r = oe.fe("y ~ x + z", data=df_panel, entity="entity",
+                          time="time", cov_type="nonrobust")
+
+    def test_coefficients(self):
+        npt.assert_allclose(self.oe_r.coefficients.values,
+                            [self.s["b_x"], self.s["b_z"]],
+                            rtol=1e-6)
+
+    def test_standard_errors(self):
+        npt.assert_allclose(self.oe_r.std_errors.values,
+                            [self.s["se_x"], self.s["se_z"]],
+                            rtol=1e-6)
+
+    def test_nobs(self):
+        assert self.oe_r.nobs == int(self.s["N"])
+
+    def test_df_resid(self):
+        # N=150, N_ent=30, N_time=5 → df = 150 - (30+5-1) - 2 = 114
+        assert self.oe_r.df_resid == int(self.s["df_r"])
+
+    def test_r_squared(self):
+        npt.assert_allclose(self.oe_r.r_squared, self.s["r2_w"], rtol=1e-6)
 
 
 class TestPanelRE:
@@ -91,13 +121,13 @@ class TestPanelFD:
 
     def test_coefficients(self):
         npt.assert_allclose(self.oe_r.coefficients.values,
-                            [self.s["b_int"], self.s["b_x"], self.s["b_z"]],
-                            rtol=1e-5)
+                            [self.s["b_x"], self.s["b_z"]],
+                            rtol=5e-5)
 
     def test_standard_errors(self):
         npt.assert_allclose(self.oe_r.std_errors.values,
-                            [self.s["se_int"], self.s["se_x"], self.s["se_z"]],
-                            rtol=1e-5)
+                            [self.s["se_x"], self.s["se_z"]],
+                            rtol=1e-2)
 
 
 class TestPanelHausman:

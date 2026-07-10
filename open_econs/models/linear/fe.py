@@ -97,6 +97,12 @@ def fe(
     y_arr = yy.values.ravel().astype(float)
     X_arr = XX.values.astype(float)
 
+    # Identify intercept column (all zeros after demeaning) and non-intercept
+    # columns.  We drop the intercept before fitting so that statsmodels gets
+    # the correct rank and df, then apply the panel df correction ourselves.
+    keep_mask = np.array([c != "Intercept" for c in XX.columns])
+    kept_columns = [c for c in XX.columns if c != "Intercept"]
+
     if entity is not None and time is not None:
         entity_arr = data.loc[XX.index, entity].values
         time_arr = data.loc[XX.index, time].values
@@ -109,6 +115,18 @@ def fe(
         time_arr = data.loc[XX.index, time].values
         y_arr = _demean(y_arr, time_arr)
         X_arr = _demean(X_arr, time_arr)
+
+    # Drop the (now all-zero) intercept column before fitting
+    X_arr = X_arr[:, keep_mask]
+
+    # Count absorbed FE groups for panel df correction.
+    n_absorbed = 0
+    if entity is not None:
+        n_absorbed += len(np.unique(entity_arr))
+    if time is not None:
+        n_absorbed += len(np.unique(time_arr))
+    if entity is not None and time is not None:
+        n_absorbed -= 1  # avoid double-counting the grand mean
 
     import statsmodels.api as sm
 
@@ -126,36 +144,51 @@ def fe(
         cov_label = cov_type
 
     n = int(fitted.nobs)
-    # Use the degrees of freedom from the actual statsmodels fit. The within
-    # (demeaned) design matrix contains a degenerate Intercept column (all
-    # zeros after demeaning), so statsmodels reports df_resid = n - rank, which
-    # already accounts for it. Reporting this same df keeps df_resid, rsd and
-    # adj_r2 consistent with the standard errors / t-stats below and with a
-    # manual group-demeaned OLS reference.
-    df_resid_adj = int(fitted.df_resid)
+    k = X_arr.shape[1]  # number of regressors
+    df_resid_adj = max(n - n_absorbed - k, 1)
     df_model_adj = int(fitted.df_model)
 
-    coef_arr = fitted.params
-    se_arr = fitted.bse
-    t_arr = fitted.tvalues
-    p_arr = fitted.pvalues
+    coef_arr = np.asarray(fitted.params)
+    se_arr = np.asarray(fitted.bse)
+    t_arr = np.asarray(fitted.tvalues)
+    p_arr = np.asarray(fitted.pvalues)
     conf_arr = np.asarray(fitted.conf_int())
 
-    keep_mask = np.array([c != "Intercept" for c in XX.columns])
-    coef_arr = np.asarray(coef_arr)[keep_mask]
-    se_arr = np.asarray(se_arr)[keep_mask]
-    t_arr = np.asarray(t_arr)[keep_mask]
-    p_arr = np.asarray(p_arr)[keep_mask]
-    conf_arr = conf_arr[keep_mask]
-
-    kept_columns = [c for c in XX.columns if c != "Intercept"]
+    # Rescale SEs, t-stats, p-values for the corrected df.  For non-robust
+    # (and HC1) covariances the SE is proportional to sqrt(SSR / df), so
+    # scaling by sqrt(df_old / df_new) is exact.  For cluster-robust SEs
+    # the same approximation is standard practice (Stata's xtreg, fe does
+    # the same).
+    df_old = max(int(fitted.df_resid), 1)
+    if df_resid_adj != df_old and df_old > 0:
+        scale = np.sqrt(df_old / df_resid_adj)
+        se_arr = se_arr * scale
+        from scipy import stats as _stats
+        t_arr = coef_arr / se_arr
+        p_arr = 2.0 * _stats.t.sf(np.abs(t_arr), df_resid_adj)
+        crit = _stats.t.ppf(0.975, df_resid_adj)
+        conf_arr = np.column_stack([coef_arr - crit * se_arr, coef_arr + crit * se_arr])
 
     conf_int = pd.DataFrame(
         {"lower": conf_arr[:, 0], "upper": conf_arr[:, 1]},
         index=kept_columns,
     )
 
-    r2 = 1.0 - np.sum(fitted.resid ** 2) / (np.sum((y_arr - np.mean(y_arr)) ** 2) + 1e-15)
+    ssr = float(np.sum(fitted.resid ** 2))
+
+    # Within R-squared: denominator is the SST of the within-transformed y
+    # using only the *entity* (or time) demeaning — matching Stata's e(r2_w).
+    # For one-way FE this is just sum(y_dm^2).  For two-way FE we use the
+    # entity-only demeaned y so that R² measures the share of within-entity
+    # variation explained (Stata's convention).
+    if entity is not None:
+        y_for_r2 = _demean(yy.values.ravel().astype(float), entity_arr)
+    elif time is not None:
+        y_for_r2 = _demean(yy.values.ravel().astype(float), time_arr)
+    else:
+        y_for_r2 = yy.values.ravel().astype(float)
+    sst = float(np.sum((y_for_r2 - np.mean(y_for_r2)) ** 2))
+    r2 = 1.0 - ssr / (sst + 1e-15)
     if np.isnan(r2) or r2 < 0 or r2 > 1:
         r2 = float(fitted.rsquared)
 
@@ -182,7 +215,7 @@ def fe(
         adj_r_squared=float(adj_r2),
         f_statistic=_safe_fvalue(fitted),
         f_p_value=_safe_f_pvalue(fitted),
-        rsd=float(np.sqrt(np.sum(fitted.resid ** 2) / max(df_resid_adj, 1))),
+        rsd=float(np.sqrt(ssr / max(df_resid_adj, 1))),
         llf=_safe_llf(fitted),
         aic=_safe_aic(fitted),
         bic=_safe_bic(fitted),
