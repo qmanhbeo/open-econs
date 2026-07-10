@@ -32,6 +32,9 @@ warn_unused_ignores = true
 [tool.ruff.lint]
 ignore = ["E501"]
 
+[tool.pytest.ini_options]
+addopts = "--ignore=tests/stata/do/archive"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

@@ -24,7 +24,7 @@ from open_econs.core.base import BaseModel
 from open_econs.core.call_capture import capture_call as _capture_call
 
 try:
-    from rdrobust import rdrobust as _rdrobust, rdbwselect as _rdbwselect
+    from rdrobust import rdrobust as _rdrobust
 
     _RDROBUST = True
 except ImportError:

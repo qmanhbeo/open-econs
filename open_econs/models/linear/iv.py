@@ -296,7 +296,7 @@ def iv(
             "See the iv() docstring for details.",
             FutureWarning, stacklevel=3,
         )
-        Z_arr = np.column_stack([X_full, Z_raw]) if Z_raw is not None else X_full
+        Z_arr = Z_raw
     else:
         Z_arr = Z_raw
 

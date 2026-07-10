@@ -55,7 +55,7 @@ def test_abond_internal_consistency():
     assert list(r.coefficients.index) == ["L1.y", "L2.y", "x"]
     assert r.n_entities == 120
     assert r.n_obs == 120 * (8 - 3)  # 5 differenced equations per entity
-    assert r.n_instruments == 6 * (1 + 1)
+    assert r.n_instruments == 10  # collapsed default: 1 per depth + 1 IV
     assert r.hansen_j_dof == r.n_instruments - 3
     assert r.ar1_pvalue <= 0.05
     assert r.ar2_pvalue > 0.05

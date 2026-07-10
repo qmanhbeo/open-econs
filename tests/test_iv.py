@@ -31,19 +31,19 @@ class TestIV:
     def test_basic_iv_legacy(self, df_iv):
         r = oe.iv("y ~ x | z1 + z2", data=df_iv)
         assert isinstance(r.coefficients, pd.Series)
-        assert len(r.coefficients) == 1
+        assert len(r.coefficients) == 2  # Intercept (exog) + x (endog)
 
     def test_basic_iv_exog_controls(self, df_iv_exog):
         r = oe.iv("y ~ w | x ~ z", data=df_iv_exog)
         assert isinstance(r.coefficients, pd.Series)
-        assert len(r.coefficients) == 2  # exog(w) + endog(x)
+        assert len(r.coefficients) == 3  # Intercept (exog) + w (exog) + x (endog)
 
     def test_tidy_shape(self, df_iv):
         r = oe.iv("y ~ x | z1 + z2", data=df_iv)
         tidy = r.tidy()
         expected = {"Variable", "Coef", "Std Err", "z", "P>|z|", "0.025", "0.975"}
         assert set(tidy.columns) == expected
-        assert len(tidy) == 1
+        assert len(tidy) == 2  # Intercept + x
 
     def test_summary_returns_string(self, df_iv):
         r = oe.iv("y ~ x | z1 + z2", data=df_iv)
@@ -86,7 +86,7 @@ class TestIV:
         r = oe.iv("y ~ x | z1 + z2", data=df_iv)
         v = r.vcov()
         assert isinstance(v, pd.DataFrame)
-        assert v.shape == (1, 1)
+        assert v.shape == (2, 2)  # Intercept + x
 
     def test_missing_column_raises(self, df_iv):
         with pytest.raises(ValueError, match="Column.*not found"):

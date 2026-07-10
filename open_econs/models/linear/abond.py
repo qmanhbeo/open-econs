@@ -145,9 +145,15 @@ def _estimate_gmm(
     ZH_off = Z[:-1] * H_off[:, None]
     ZtHZ += ZH_off.T @ Z[1:]
     ZtHZ += Z[1:].T @ ZH_off
-    A1_raw = np.linalg.inv(ZtHZ)
+    try:
+        A1_raw = np.linalg.inv(ZtHZ)
+    except np.linalg.LinAlgError:
+        A1_raw = np.linalg.pinv(ZtHZ)
     G1 = ZtX.T @ A1_raw @ ZtX
-    V1_raw = np.linalg.inv(G1)
+    try:
+        V1_raw = np.linalg.inv(G1)
+    except np.linalg.LinAlgError:
+        V1_raw = np.linalg.pinv(G1)
     b1 = V1_raw @ (ZtX.T @ A1_raw @ ZtY)
     e1 = Y - X @ b1
 
@@ -178,9 +184,15 @@ def _estimate_gmm(
         if robust:
             VXZA1 = V1 @ ZtX.T @ A1             # V1 * (ZX' A1)
             V1robust = VXZA1 @ S @ VXZA1.T
-        A2 = np.linalg.inv(S)
+        try:
+            A2 = np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            A2 = np.linalg.pinv(S)
         G2 = ZtX.T @ A2 @ ZtX
-        V2 = np.linalg.inv(G2)
+        try:
+            V2 = np.linalg.inv(G2)
+        except np.linalg.LinAlgError:
+            V2 = np.linalg.pinv(G2)
         b2 = V2 @ (ZtX.T @ A2 @ ZtY)
         e2 = Y - X @ b2
         if step == "two-step":

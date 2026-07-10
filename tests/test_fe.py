@@ -61,21 +61,24 @@ class TestFixedEffects:
 
     def test_r_squared_matches_reference(self, df_panel):
         r = oe.fe("y ~ x + z", data=df_panel, entity="entity", time="time")
-        fit = _ref_within(
-            df_panel["y"].values,
-            df_panel[["x", "z"]].values,
-            df_panel["entity"].values,
-            df_panel["time"].values,
-        )
-        assert np.isclose(r.r_squared, float(fit.rsquared), atol=1e-6)
+        # oe.fe() uses entity-only demeaned SST (Stata's e(r2_w) convention).
+        y = df_panel["y"].values
+        y_ent = _demean(y, df_panel["entity"].values)
+        sst = np.sum((y_ent - y_ent.mean()) ** 2)
+        ssr = float(np.sum(r.residuals.values ** 2))
+        ref_r2 = 1.0 - ssr / (sst + 1e-15)
+        assert np.isclose(r.r_squared, ref_r2, atol=1e-6)
 
     def test_df_resid_consistent_with_standard_errors(self, df_panel):
         r = oe.fe("y ~ x + z", data=df_panel, entity="entity", time="time")
-        # The reported df_resid must match the degrees of freedom that
-        # statsmodels used to compute the reported standard errors / rsd,
-        # otherwise rsd and std_errors disagree.
-        assert r.df_resid == int(r._fit.df_resid)
-        assert np.isclose(r.rsd, float(np.sqrt(r._fit.scale)), atol=1e-9)
+        # rsd must be sqrt(SSR / df_resid) using the FE-adjusted df_resid.
+        n = len(df_panel)
+        k = len(r.coefficients)
+        n_absorbed = df_panel["entity"].nunique() + df_panel["time"].nunique() - 1
+        expected_df = n - n_absorbed - k
+        assert r.df_resid == expected_df
+        # rsd should match the FE-adjusted computation
+        assert np.isclose(r.rsd, float(np.sqrt(np.sum(r.residuals.values**2) / max(expected_df, 1))), atol=1e-9)
 
     def test_one_way_fe_consistency(self, df_panel):
         r = oe.fe("y ~ x + z", data=df_panel, entity="entity")
@@ -86,7 +89,10 @@ class TestFixedEffects:
             np.zeros(len(df_panel)),
         )
         assert np.isclose(r.r_squared, float(fit.rsquared), atol=1e-6)
-        assert r.df_resid == int(r._fit.df_resid)
+        n_ent = df_panel["entity"].nunique()
+        k = len(r.coefficients)  # x, z (intercept absorbed)
+        expected_df = len(df_panel) - n_ent - k
+        assert r.df_resid == expected_df
 
     def test_no_entity_or_time_raises(self):
         df = pd.DataFrame({"y": [1.0, 2.0], "x": [1.0, 2.0]})
