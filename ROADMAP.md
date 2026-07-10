@@ -252,8 +252,23 @@ might fit.
   DiD intercept to event study intercept (different parameterizations). Rely on
   comprehensive unit tests in `test_event_study.py`.
 
+#### v0.6.8.1 — Logit/Probit AME correction & Stata parity
+- [x] **`logit().margins()` / `probit().margins()` now compute AME** — changed
+  `get_margeff(at="mean")` to `get_margeff(at="overall")`, matching Stata's
+  default `margins, dydx(*)` (average marginal effects instead of marginal
+  effects at the mean).
+- [x] **Fixed logit margins Stata fixture** — `logit_margins.do` was using
+  `_b[x1]` which retrieves the raw logit coefficient, not the marginal effect.
+  Changed to `r(b)[1,1]` (same pattern as `probit_margins.do`). Regenerated
+  `.dta` via StataMP.
+- [x] **Tightened test tolerance** — `rtol=0.8` → `rtol=1e-6` for both logit
+  and probit margins tests. Both now match Stata at machine precision.
+- [x] **Removed faulty Stata event study test** — was comparing DiD intercept
+  to event study intercept (different parameterizations by construction).
+  Rely on unit tests in `test_event_study.py`.
+
 #### v0.7 — Regression Discontinuity refinements
-- [x] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
+- [ ] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
 - [ ] McCrary density test for manipulation at the cutoff
 - [ ] Built-in RD plot (binned scatter + fitted lines either side of cutoff)
 

@@ -10,12 +10,16 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (v0.6.8):** Stata-parity test suite — 30 hand-written
+> **Current version (v0.6.8.1):** Stata-parity test suite — 30 hand-written
 > `.do` files with committed `.dta` fixtures, dual-mode execution (live Stata
 > or CI fallback). **RDD now uses rdrobust backend** with CCT bandwidth and
 > cluster-robust SEs; built-in fallback (IK bandwidth, NN/HC variance) available
-> without extra dependencies. **event_study()** now gracefully falls back to the
-> first available period when the specified `omitted_period` is not in the data.
+> without extra dependencies. **`logit().margins()` / `probit().margins()`**
+> now compute **average marginal effects (AME)** instead of marginal effects at
+> the mean (MEM), matching Stata's `margins, dydx(*)` default. **Fixed Stata
+> logit margins fixture** (was storing raw coefficients, not marginal effects).
+> Tests now pass at machine precision (`rtol=1e-6`) instead of a loose 80%
+> tolerance.
 
 ## Why open-econs?
 

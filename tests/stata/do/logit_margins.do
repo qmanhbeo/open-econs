@@ -10,9 +10,9 @@ logit y x1 x2
 * Compute marginal effects (AME - average over all observations)
 margins, dydx(x1 x2)
 
-* Extract marginal effect coefficients using _b[]
-scalar s_me1 = _b[x1]
-scalar s_me2 = _b[x2]
+* Extract marginal effect coefficients using r(b)
+scalar s_me1 = r(b)[1,1]
+scalar s_me2 = r(b)[1,2]
 
 clear
 set obs 2

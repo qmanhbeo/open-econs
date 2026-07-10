@@ -409,7 +409,7 @@ class BinaryResult(BaseModel):
                 "margins() requires a fitted statsmodels result. "
                 "This should not happen with the standard logit()/probit() API."
             )
-        margeff = self._fit.get_margeff(at="mean")
+        margeff = self._fit.get_margeff(at="overall")
         non_const_vars = [c for c in self.coefficients.index if c != "Intercept"]
         df = pd.DataFrame({
             "Variable": non_const_vars,

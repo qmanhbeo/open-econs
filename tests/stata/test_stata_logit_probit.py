@@ -40,9 +40,8 @@ class TestLogitMargins:
 
     def test_margins(self):
         oe_me = self.oe_r.margins()
-        # MEM (oe) vs AME (Stata) — different by definition, relaxed tolerance
         npt.assert_allclose(oe_me["dy/dx"].values,
-                            [self.s["me_x1"], self.s["me_x2"]], rtol=0.8)
+                            [self.s["me_x1"], self.s["me_x2"]], rtol=1e-6)
 
 
 class TestProbitBasic:
@@ -70,6 +69,5 @@ class TestProbitMargins:
 
     def test_margins(self):
         oe_me = self.oe_r.margins()
-        # MEM (oe) vs AME (Stata) — different by definition, relaxed tolerance
         npt.assert_allclose(oe_me["dy/dx"].values,
-                            [self.s["me_x1"], self.s["me_x2"]], rtol=0.8)
+                            [self.s["me_x1"], self.s["me_x2"]], rtol=1e-6)
