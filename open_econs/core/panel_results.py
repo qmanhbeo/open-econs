@@ -263,6 +263,7 @@ class ArellanoBondResult(BaseModel):
         hansen_j: float,
         hansen_j_pvalue: float,
         hansen_j_dof: int,
+        sig2: float,
         ar1_stat: float,
         ar1_pvalue: float,
         ar2_stat: float,
@@ -289,6 +290,7 @@ class ArellanoBondResult(BaseModel):
         self.hansen_j = hansen_j
         self.hansen_j_pvalue = hansen_j_pvalue
         self.hansen_j_dof = hansen_j_dof
+        self.sig2 = sig2
         self.ar1_stat = ar1_stat
         self.ar1_pvalue = ar1_pvalue
         self.ar2_stat = ar2_stat
