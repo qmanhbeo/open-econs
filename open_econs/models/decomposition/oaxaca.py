@@ -96,6 +96,26 @@ def oaxaca(
         ``swap=False`` produce identical results. ``swap`` only affects sign
         — it does not reverse the decomposition direction.
 
+    Terminology (Stata ``oaxaca`` ↔ open-econs ``OaxacaResult``)
+    ---------------------------------------------------------
+    Stata's ``e(b)`` uses different names for the same decomposition
+    components depending on the decomposition type:
+
+    ================== ==================== ==========================
+    Stata ``e(b)``     OE attribute         Applies to
+    ================== ==================== ==========================
+    ``gap``            ``.total_gap``       all variants
+    ``explained``      ``.explained``       two-fold
+    ``unexplained``    ``.unexplained``     two-fold
+    ``endowment``      ``.explained``       three-fold
+    ``coefficients``   ``.unexplained``     three-fold
+    ``interaction``    ``.interaction``     three-fold
+    ================== ==================== ==========================
+
+    For three-fold decompositions, ``.explained`` corresponds to the
+    endowment effect and ``.unexplained`` to the coefficient effect,
+    *not* the two-fold meanings of those terms.
+
     Returns
     -------
     OaxacaResult

@@ -10,16 +10,16 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (v0.6.8.1):** Stata-parity test suite — 30 hand-written
+> **Current version (v0.6.8.2):** Stata-parity test suite — 35 hand-written
 > `.do` files with committed `.dta` fixtures, dual-mode execution (live Stata
-> or CI fallback). **RDD now uses rdrobust backend** with CCT bandwidth and
-> cluster-robust SEs; built-in fallback (IK bandwidth, NN/HC variance) available
-> without extra dependencies. **`logit().margins()` / `probit().margins()`**
-> now compute **average marginal effects (AME)** instead of marginal effects at
-> the mean (MEM), matching Stata's `margins, dydx(*)` default. **Fixed Stata
-> logit margins fixture** (was storing raw coefficients, not marginal effects).
-> Tests now pass at machine precision (`rtol=1e-6`) instead of a loose 80%
-> tolerance.
+> or CI fallback). **`staggered_did()` now implements the full Callaway &
+> Sant'Anna (2021) doubly‑robust estimator** with `covariates`, `method="dripw"`
+> or `method="reg"`, cell‑by‑cell Stata parity at rtol=1e‑6, and
+> unbalanced‑cohort fixtures. **RDD uses rdrobust backend** with CCT bandwidth;
+> built-in fallback (IK bandwidth, NN/HC variance) available without extra
+> dependencies. **`logit().margins()` / `probit().margins()`** compute
+> **average marginal effects (AME)** matching Stata's `margins, dydx(*)`.
+> All staggered‑DID, Oaxaca, and ABOND tests pass at machine precision.
 
 ## Why open-econs?
 
@@ -157,7 +157,7 @@ r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
 | `oaxaca()` | Oaxaca-Blinder decomposition (two-fold, three-fold; reference types: pooled, omega, group1, group2, custom weight; reverse three-fold) |
 | `ctx.vif()` | Variance inflation factor / collinearity diagnostics |
 | `abond()` | Arellano-Bond dynamic panel (difference GMM), one/two-step Windmeijer SEs, Hansen J + AR(1)/AR(2). Collapsed one-step non-robust now matches Stata `xtabond2` to ~1e-7 |
-| `staggered_did()` | Callaway-Sant'Anna (2021) staggered / heterogeneous-timing DiD |
+| `staggered_did()` | Callaway-Sant'Anna (2021) staggered / heterogeneous-timing DiD; doubly‑robust `dripw` or outcome‑regression `reg`; `covariates`, cell‑by‑cell Stata parity |
 | `rdd()` | Sharp / fuzzy regression discontinuity (local linear, triangular kernel) |
 | `did()` / `event_study()` / `balance()` | Two-period DiD, event-study, balance tables |
 | `oe.PanelContext(...)` | `pooled/fitted/fe/re/diff/driscoll_kraay/hausman/abond` with remembered entity/time |

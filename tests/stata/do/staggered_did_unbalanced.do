@@ -1,12 +1,15 @@
-*! staggered_did.do — Staggered DiD (SSC: csdid) — balanced cohorts
+*! staggered_did_unbalanced.do — Staggered DiD with unbalanced cohorts (SSC: csdid)
 clear all
 set more off
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_panel.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_panel_unbalanced.csv", clear
 
 * gvar: 0 = never treated, 3 = treated at time 3, 5 = treated at time 5
+* entity 0-14: never treated (15)
+* entity 15-22: treated at t=3 (8)
+* entity 23-29: treated at t=5 (7)
 gen gvar = 0
-replace gvar = 3 if entity >= 10 & entity < 20
-replace gvar = 5 if entity >= 20
+replace gvar = 3 if entity >= 15 & entity < 23
+replace gvar = 5 if entity >= 23
 
 * Run csdid with covariates (dripw, default)
 csdid y x z, ivar(entity) time(time) gvar(gvar)
@@ -75,4 +78,4 @@ foreach var in b_g3_t0_1 b_g3_t1_2 b_g3_t2_3 b_g3_t2_4 b_g5_t0_1 b_g5_t1_2 b_g5_
     local ++i
 }
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\staggered_did.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\staggered_did_unbalanced.dta", replace

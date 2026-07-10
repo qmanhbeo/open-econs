@@ -468,6 +468,23 @@ class OaxacaResult(BaseModel):
     outcome gap between two groups into an ``explained`` part (endowments) and
     an ``unexplained`` part (coefficients / treatment), with the overall total
     and gap stored as scalars.
+
+    **Stata** ``oaxaca`` **→ open-econs naming**:
+
+    ================== ==================== ==========================
+    Stata ``e(b)``     OE attribute         Applies to
+    ================== ==================== ==========================
+    ``gap``            ``.total_gap``       all variants
+    ``explained``      ``.explained``       two-fold
+    ``unexplained``    ``.unexplained``     two-fold
+    ``endowment``      ``.explained``       three-fold
+    ``coefficients``   ``.unexplained``     three-fold
+    ``interaction``    ``.interaction``     three-fold
+    ================== ==================== ==========================
+
+    In three-fold mode, ``.explained`` is the endowment effect and
+    ``.unexplained`` is the coefficient effect — *not* the two-fold
+    meaning of those terms.  ``.interaction`` is zero in two-fold mode.
     """
     def __init__(
         self,

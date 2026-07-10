@@ -164,6 +164,8 @@ might fit.
   bandwidth replaces Silverman's density rule; Silverman kept as fallback.
 - [x] **Honest staggered-DiD labeling** — renamed to "simplified OLS
   approximation", added `bootstrap` parameter, docstring caveats.
+  ▶ *Superseded by v0.6.8.2 — the estimator now implements the full
+  CS2021 doubly‑robust estimator (not a simplified approximation).*
 - [x] **Vectorized `_within_transform()`** — pandas groupby replaces Python
   loop for speed on large panels.
 - [x] **Oaxaca `get_dummies` fix** — uses `formulaic` `ensure_full_rank`
@@ -266,6 +268,52 @@ might fit.
 - [x] **Removed faulty Stata event study test** — was comparing DiD intercept
   to event study intercept (different parameterizations by construction).
   Rely on unit tests in `test_event_study.py`.
+
+#### v0.6.8.2 — CS2021 Doubly‑Robust Staggered DiD & cell‑by‑cell Stata parity
+- [x] **`staggered_did()` now implements the full Callaway & Sant'Anna (2021)
+  doubly‑robust group‑time estimator.** Previously a simplified OLS
+  approximation; now uses the canonical `dripw` formulation: per‑cell logit
+  propensity score + OLS outcome regression (controls at base period) +
+  inverse‑probability‑weighted RIF, with centered‑IF cluster‑robust SEs.
+- [x] **`covariates` and `method` parameters** — `method="dripw"` (DR, default
+  when covariates given) or `method="reg"` (outcome regression / OLS within
+  each cell). Without covariates, DR collapses to the simple mean‑difference
+  (backward compatible; default `method="reg"`).
+- [x] **Cell‑by‑cell Stata parity** — 18 Stata‑parity tests (13 cell‑by‑cell
+  with covariates + 5 no‑covariates sanity checks). Individual ATT(g,t)
+  coefficients match at rtol=1e‑6; SEs compared at rtol=0.2 (balanced) /
+  rtol=0.6 (unbalanced), acknowledging csdid's full‑sample IF rescaling.
+  Balanced and unbalanced‑cohort fixtures both verified. All 21 staggered‑DID
+  tests pass.
+- [x] **Unbalanced‑cohort fixture added** — `df_panel_unbalanced.csv` with
+  three cohort groups (never‑treated, g=3, g=5) and corresponding
+  `staggered_did_unbalanced.do` for reference extraction.
+- [x] **Weight‑formula audit** — confirmed csdid uses cohort‑proportional
+  weights (not uniform): `weight(g,t) = P(G=g) / Σ_i P(G=i) × n_times(i)`.
+  Verified against Stata's `makerif2` source.
+- [x] Removed "simplified OLS approximation" framing from all docstrings.
+  The `staggered_did()` docstring now states "Implements the Callaway &
+  Sant'Anna (2021) group‑time estimator with doubly‑robust inference."
+
+#### v0.6.8.3 — Full Oaxaca Stata parity (all decomposition variants)
+- [x] **Expanded `oaxaca_two_fold.do`** — extracts gap, explained, and
+  unexplained for all four two‑fold reference variants: ``pooled``,
+  ``omega``, ``weight(1)`` (group‑1 coefficients), ``weight(0)`` (group‑2
+  coefficients). Prior fixture only stored ``pooled`` gap + explained.
+- [x] **Expanded `oaxaca_three_fold.do`** — extracts gap, endowment,
+  coefficients, and interaction for both default and ``threefold(reverse)``.
+  Prior fixture only stored the gap.
+- [x] **20 new Stata‑parity tests** (6 test classes) — every decomposition
+  component vs Stata ``oaxaca`` v4.1.1 (``e(b)[1,3–6]``, verified against
+  source).  Tolerances: gap/explained/unexplained rtol=1e‑6; interaction
+  atol=1e‑6 (near‑zero floor).
+- [x] **Stata↔OE terminology documented** — both ``oaxaca()`` and
+  ``OaxacaResult`` docstrings now carry a cross‑reference table mapping
+  Stata's ``e(b)`` names (``gap``, ``explained``, ``unexplained``,
+  ``endowment``, ``coefficients``, ``interaction``) to OE attributes.
+  Includes explicit note that three‑fold ``.explained``/``.unexplained``
+  *are* endowment/coefficients, not the two‑fold meaning of those terms.
+- [x] All Oaxaca unit tests continue to pass unchanged.
 
 #### v0.7 — Regression Discontinuity refinements
 - [ ] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
