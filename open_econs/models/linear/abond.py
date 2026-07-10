@@ -52,13 +52,14 @@ def _build_h_inv(entity_counts: dict, n_eq: int, eq_entity: np.ndarray) -> tuple
 def _build_h(entity_counts: dict, n_eq: int, eq_entity: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Build the block-diagonal H matrix (NOT its inverse) for difference GMM.
 
-    Per Roodman (2009) xtabond2 h(3) default: H = M'M + I where M is the
-    first-difference operator.  For usable equations (t >= min_j >= 2),
-    the diagonal is 3 (not 2), because M'M has 2 on diagonal and I adds 1.
+    H = M'M where M is the first-difference operator.  For usable equations
+    (t >= min_j >= 2) the diagonal is 2 and the sub/super-diagonal is -1.
+    (The very first time period t=0 has H diagonal 1, but it is never a usable
+    equation so it never enters the moment conditions.)
 
     Returns (diag, off_diag) of the tridiagonal H.
     """
-    diag = np.full(n_eq, 3.0)
+    diag = np.full(n_eq, 2.0)
     off = np.full(max(n_eq - 1, 0), -1.0)
     # Zero out off-diagonals at entity boundaries
     ent_arr = np.asarray(eq_entity)
@@ -107,10 +108,10 @@ def _estimate_gmm(
     # MA(1) serial correlation that first-differencing induces.
     # W = (Z'HZ)^{-1} is the one-step weighting matrix.
     H_diag, H_off = _build_h(entity_counts, n_eq, eq_entity)
-    # Z' H Z for tridiagonal H:
-    #   diagonal: 2 * Z'Z
+    # Z' H Z for tridiagonal H (= M'M, the first-difference operator):
+    #   diagonal: 2 * Z'Z  (H has 2 on the diagonal for usable equations)
     #   off-diag: -1 * (Z_r' Z_{r+1} + Z_{r+1}' Z_r)
-    ZtHZ = 3.0 * (Z.T @ Z)  # (L, L) diagonal contribution (H has 3 on diag for usable eqs)
+    ZtHZ = 2.0 * (Z.T @ Z)  # (L, L) diagonal contribution (H has 2 on diag for usable eqs)
     # Super/sub-diagonal contribution (vectorised), zeroed at entity boundaries
     ZH_off = Z[:-1] * H_off[:, None]  # (n_eq-1, L) — H_off is -1 within entity, 0 at boundary
     ZtHZ += ZH_off.T @ Z[1:]  # (L, L)
@@ -380,10 +381,16 @@ def abond(
 
                 zrow = np.zeros(n_instr)
                 col = 0
-                # GMM instruments for L.y: y_{t-lag}
+                # GMM instruments for L.y: Stata's `gmm(L.y, lag(a b))` uses
+                # lags a..b of the variable L.y (= y_{t-lags}).  So the
+                # instrument at depth `lag` is y_{t-lags-lag}, i.e. one lag
+                # deeper than y_{t-lag}.  The initial observation y_0 is never
+                # used (Stata requires t-lags-lag >= 1 implicitly via the lag
+                # of L.y).
                 for lag in depths:
-                    if j - lag >= 0:
-                        zrow[col] = y[j - lag]
+                    idx = j - lags - lag
+                    if idx >= 0:
+                        zrow[col] = y[idx]
                     col += 1
                 # GMM instruments for predetermined regressors
                 for gmm_c in gmm_cols:

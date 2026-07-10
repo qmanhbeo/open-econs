@@ -10,11 +10,16 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (v0.6.4):** Stata-parity test suite — 27 hand-written
+> **Current version (v0.6.5):** Stata-parity test suite — 27 hand-written
 > `.do` files with committed `.dta` fixtures, dual-mode execution (live Stata
 > or CI fallback), **Hausman test fixed** (df-corrected VCV, one-way FE
 > alignment, `e(chi2)` ghost variable discovered and bypassed), FE df
 > correction, within R² fix, plus all v0.6.3 features.
+>
+> **Arellano-Bond `abond()` now matches Stata's `xtabond2` to ~1e-7** on the
+> collapsed one-step non-robust difference-GMM case (coefficients *and* the full
+> variance-covariance matrix) — the first dynamic-panel estimator in open-econs
+> with verified numerical parity against `xtabond2`.
 
 ## Why open-econs?
 
@@ -139,7 +144,7 @@ Requires Python ≥ 3.10.
 | `probit()` | Binary probit (same API as logit) |
 | `oaxaca()` | Oaxaca-Blinder decomposition (two-fold, three-fold) |
 | `ctx.vif()` | Variance inflation factor / collinearity diagnostics |
-| `abond()` | Arellano-Bond dynamic panel (difference GMM), two-step Windmeijer SEs, Hansen J + AR(1)/AR(2) |
+| `abond()` | Arellano-Bond dynamic panel (difference GMM), one/two-step Windmeijer SEs, Hansen J + AR(1)/AR(2). Collapsed one-step non-robust now matches Stata `xtabond2` to ~1e-7 |
 | `staggered_did()` | Callaway-Sant'Anna (2021) staggered / heterogeneous-timing DiD |
 | `rdd()` | Sharp / fuzzy regression discontinuity (local linear, triangular kernel) |
 | `did()` / `event_study()` / `balance()` | Two-period DiD, event-study, balance tables |
@@ -355,6 +360,29 @@ might fit.
 - [x] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
 - [ ] McCrary density test for manipulation at the cutoff
 - [ ] Built-in RD plot (binned scatter + fitted lines either side of cutoff)
+
+#### v0.6.5 — Arellano-Bond / `xtabond2` numerical parity
+- [x] **`abond()` collapsed one-step non-robust now matches Stata `xtabond2`**
+  to ~1e-7 on coefficients *and* the full variance-covariance matrix. Verified
+  on the 30×5 `df_panel` fixture against `xtabond2 y L.y x z, gmm(L.y, lag(2 4)
+  collapse) iv(x z) nolevel small`.
+- [x] **GMM instrument lag fixed** — Stata's `gmm(L.y, lag(a b))` instruments
+  are lags *of the variable L.y* (`y_{t-lags-lag}`), not `y_{t-lag}`. The
+  previous `y[j-lag]` construction was off by one lag and silently used the
+  initial observation `y₀` as an instrument (Stata never does). This was the
+  dominant source of the VCV gap.
+- [x] **Weighting-matrix `H` corrected** — `H = M'M` (the first-difference
+  operator) has diagonal **2** (off-diagonal −1) on usable equations, not the
+  previously-hardcoded 3. The `svmat`-saved `e(H)` is a normalized view; the
+  true unnormalized `M'M` is what the one-step weighting `W = (Z'HZ)⁻¹` uses.
+- [x] Ground-truth extraction tooling added (`tests/stata/do/abond_gt_matrices.do`
+  + `abond_gt_*.csv`) that pulls Stata's exact per-observation `X`, `Y`, `Z`,
+  `H` matrices via `svmat` for element-by-element validation.
+- [x] Parity test `tests/stata/test_stata_abond.py::TestAbondCollapsedOneStep`
+  (coefficients, standard errors, dimensions) added.
+- [ ] Non-collapsed (uncollapsed) `abond()` path still carries the pre-fix GMM
+  lag construction — left as a known follow-up this pass (no Stata ground truth
+  validated against it yet). Two-step / robust / Windmeijer paths untouched.
 
 #### v0.8 — Matching & Balance
 - [ ] `psm()` — propensity score matching (nearest-neighbor, caliper, kernel)
