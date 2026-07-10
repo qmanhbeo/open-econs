@@ -356,11 +356,6 @@ might fit.
   displayed statistic is 0.29) — the `.do` file now computes the
   displayed quadratic form directly.
 
-#### v0.7 — Regression Discontinuity refinements
-- [x] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
-- [ ] McCrary density test for manipulation at the cutoff
-- [ ] Built-in RD plot (binned scatter + fitted lines either side of cutoff)
-
 #### v0.6.5 — Arellano-Bond / `xtabond2` numerical parity
 - [x] **`abond()` collapsed one-step non-robust now matches Stata `xtabond2`**
   to ~1e-7 on coefficients *and* the full variance-covariance matrix. Verified
@@ -384,11 +379,10 @@ might fit.
   lag construction — left as a known follow-up this pass (no Stata ground truth
   validated against it yet). Two-step / robust / Windmeijer paths untouched.
 
-#### v0.8 — Matching & Balance
-- [ ] `psm()` — propensity score matching (nearest-neighbor, caliper, kernel)
-- [ ] Coarsened exact matching
-- [ ] Post-matching balance diagnostics reusing `ctx.balance()` from v0.5
-- [ ] Sensitivity analysis (Rosenbaum bounds)
+#### v0.7 — Regression Discontinuity refinements
+- [x] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
+- [ ] McCrary density test for manipulation at the cutoff
+- [ ] Built-in RD plot (binned scatter + fitted lines either side of cutoff)
 
 #### v0.8 — Matching & Balance
 - [ ] `psm()` — propensity score matching (nearest-neighbor, caliper, kernel)
