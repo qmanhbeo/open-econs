@@ -50,9 +50,10 @@ class TestFEvsLinearmodels:
             npt.assert_allclose(r.coefficients[name], val, rtol=1e-6, err_msg=name)
 
     def test_fe_grunfeld_se_matches_within_ols(self, df_grunfeld):
-        # oe.fe's within SE uses statsmodels df_resid, so the canonical
-        # reference is OLS on the group-demeaned (within) data — not
-        # linearmodels' debiased PanelOLS SE.
+        # oe.fe's within SE uses FE-adjusted df_resid (Stata e(r2_w) convention):
+        # df_resid = n - N_entity - N_time + 1 - k, which differs from naive
+        # OLS-on-demeaned-data (df = n - k).  The reference must apply the
+        # same absorbed-DF correction to match.
         r = oe.fe(
             "invest ~ value + capital",
             data=df_grunfeld, entity="firm", time="year", cov_type="nonrobust",
@@ -70,8 +71,21 @@ class TestFEvsLinearmodels:
         Xd = np.column_stack([_demean(_demean(d[c].values, ent), tm) for c in cols])
         # Within transform absorbs the intercept: fit demeaned slopes, no constant.
         ref = sm.OLS(yd, Xd).fit()
+        # Apply FE df adjustment: ref uses df = n - k; oe.fe uses
+        # df = n - N_ent - N_time + 1 - k.  Scale SE accordingly.
+        import math
+        n_ent = d["firm"].nunique()
+        n_time = d["year"].nunique()
+        n = len(d)
+        k = len(cols)
+        df_old = ref.df_resid
+        df_adj = n - n_ent - n_time + 1 - k
+        scale = math.sqrt(df_old / df_adj)
         for i, name in enumerate(cols):
-            npt.assert_allclose(r.std_errors[name], ref.bse.iloc[i], rtol=1e-9, err_msg=name)
+            npt.assert_allclose(
+                r.std_errors[name], ref.bse.iloc[i] * scale,
+                rtol=1e-9, err_msg=name,
+            )
 
     def test_fe_synthetic_matches_panelols(self, df_panel):
         pdf = _panel_index(df_panel, "entity", "time")
