@@ -26,6 +26,10 @@ def balance(
         Covariates to compare.  If omitted, all numeric columns other than
         ``treatment`` are used.
 
+    The difference is always computed as **Treated Mean − Control Mean**.
+    A positive difference means the treated group has a larger sample mean
+    for that covariate; a negative difference means the control group does.
+
     Returns
     -------
     pd.DataFrame
