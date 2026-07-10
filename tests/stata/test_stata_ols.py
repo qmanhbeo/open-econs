@@ -74,9 +74,26 @@ class TestOLSHAC:
         df["time"] = range(len(df))
         oe_r = oe.ols("y ~ x1 + x2", data=df, cov_type="HAC", lags=2, time="time")
         s = read_stata("ols_hac")
-        # HAC implementations differ slightly between packages
+        # Stata's newey applies N/(N-K) df correction (factor sqrt(200/197)=1.0076);
+        # OE matches original Newey-West (1987) formula without it.
+        # Use hac_adjust=True for machine-precision Stata parity.
         npt.assert_allclose(oe_r.std_errors.values,
                             [s["se_int"], s["se_x1"], s["se_x2"]], rtol=1e-2)
+
+
+class TestOLSHACAdjust:
+    """hac_adjust=True should match Stata's N/(N-K)-corrected SEs at machine precision."""
+
+    def test_se(self, df_ols):
+        df = df_ols.copy()
+        df["time"] = range(len(df))
+        oe_r = oe.ols(
+            "y ~ x1 + x2", data=df, cov_type="HAC", lags=2, time="time",
+            hac_adjust=True,
+        )
+        s = read_stata("ols_hac")
+        npt.assert_allclose(oe_r.std_errors.values,
+                            [s["se_int"], s["se_x1"], s["se_x2"]], rtol=1e-7)
 
 
 class TestOLSPredict:

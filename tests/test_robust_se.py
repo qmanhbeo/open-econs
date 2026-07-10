@@ -131,3 +131,30 @@ def test_newey_west_panel_cluster_finite():
     r = oe.ols("y ~ x + z", data=df, cov_type="HAC", lags=1, time="time", cluster="firm")
     assert np.all(np.isfinite(r.std_errors.values))
     assert "HAC(1)" in r.cov_type
+
+
+def test_hac_adjust_lags0_matches_hc1():
+    rng = np.random.default_rng(42)
+    n = 100
+    x = rng.normal(size=n)
+    y = 0.5 * x + rng.normal(size=n)
+    df = pd.DataFrame({"y": y, "x": x, "time": np.arange(n)})
+    r_hac = oe.ols("y ~ x", data=df, cov_type="HAC", lags=0, time="time", hac_adjust=True)
+    r_hc1 = oe.ols("y ~ x", data=df, cov_type="HC1")
+    np.testing.assert_allclose(r_hac.std_errors.values, r_hc1.std_errors.values, rtol=1e-10)
+
+
+def test_hac_adjust_panel_cluster():
+    df = _make_panel(n=10, T=12, seed=7)
+    r0 = oe.ols(
+        "y ~ x + z", data=df, cov_type="HAC", lags=1, time="time",
+        cluster="firm", hac_adjust=False,
+    )
+    r1 = oe.ols(
+        "y ~ x + z", data=df, cov_type="HAC", lags=1, time="time",
+        cluster="firm", hac_adjust=True,
+    )
+    n_obs = len(df)
+    k = 3  # intercept, x, z
+    factor = np.sqrt(n_obs / (n_obs - k))
+    np.testing.assert_allclose(r1.std_errors.values / r0.std_errors.values, factor, rtol=1e-10)

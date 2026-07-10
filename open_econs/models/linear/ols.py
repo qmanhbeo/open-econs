@@ -17,6 +17,7 @@ def ols(
     weights: str | np.ndarray | pd.Series | None = None,
     lags: int | None = None,
     time: str | None = None,
+    hac_adjust: bool = False,
 ) -> OLSResult:
     """Estimate an ordinary least-squares or weighted least-squares regression.
 
@@ -47,6 +48,41 @@ def ols(
     time : str, optional
         Column with the time index used to order observations for Newey-West
         HAC (or the panel time id when combined with *cluster*).
+    hac_adjust : bool, default False
+        Degrees-of-freedom correction for Newey-West HAC standard errors.
+
+        When ``True``, the HAC variance is multiplied by ``N / (N - K)``
+        (where N = observations, K = number of parameters including
+        intercept).  This is the N/(N-K) adjustment borrowed from White's
+        HC1 (MacKinnon & White, 1985) and applied unconditionally by
+        Stata's ``newey`` command.  The original Newey & West (1987) paper
+        does **not** include this correction — it is a finite-sample ad-hoc
+        adjustment with no theoretical HAC-specific justification.
+
+        **Implementation comparison:**
+        ================================ =================== ==============
+        Implementation                    Applies N/(N-K)?    Default
+        ================================ =================== ==============
+        Newey & West (1987)               No                  —
+        **Open-econs** (current)          **No**              **``False``**
+        Statsmodels ``fit(cov_type=...)`` No                  Default
+        R ``sandwich::NeweyWest()``       No                  ``adjust=FALSE``
+        Stata ``newey``                   Yes                 Always (no opt-out)
+        MATLAB ``hac``                    Yes                 Default
+        ================================ =================== ==============
+
+        Set ``hac_adjust=True`` for SEs that match Stata.  Leave ``False``
+        (default) for the original NW1987 formula, matching statsmodels and
+        R's sandwich defaults.
+
+        References
+        ----------
+        - Newey, W. K. & West, K. D. (1987). "A Simple, Positive Semi-Definite,
+          Heteroskedasticity and Autocorrelation Consistent Covariance Matrix."
+          *Econometrica*, 55(3), 703–708.
+        - MacKinnon, J. G. & White, H. (1985). "Some Heteroskedasticity-Consistent
+          Covariance Matrix Estimators with Improved Finite Sample Properties."
+          *Journal of Econometrics*, 29(3), 305–325.
     weights : str or array-like, optional
         Frequency/analytic weights for weighted least squares. If a string,
         interpreted as a column name in *data*. If an array, must match the
@@ -66,7 +102,7 @@ def ols(
     """
     call = _capture_call(
         formula=formula, cluster=cluster, cov_type=cov_type, weights=weights,
-        lags=lags, time=time,
+        lags=lags, time=time, hac_adjust=hac_adjust,
     )
     rhs_formula = formula.split("~", 1)[1].strip()
 
@@ -176,6 +212,7 @@ def ols(
             V = newey_west_cov(
                 XX.values, fitted.resid, max_lags=lags,
                 time_index=time_arr, cluster=cl,
+                adjust=hac_adjust,
             )
             se_arr = np.sqrt(np.maximum(np.diag(V), 0.0))
             cov_label = f"HAC({lags})" + (f" cluster({cluster})" if isinstance(cluster, str) else "")

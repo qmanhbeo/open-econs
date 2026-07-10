@@ -62,16 +62,31 @@ def newey_west_cov(
     max_lags: int,
     time_index: np.ndarray | None = None,
     cluster: np.ndarray | None = None,
+    adjust: bool = False,
 ) -> np.ndarray:
     """Newey-West (1987) HAC variance with a Bartlett kernel.
 
     Computes the heteroskedasticity- and autocorrelation-robust variance for a
-    time-ordered sample.  If ``cluster`` is given (e.g. entity ids), the
-    long-run covariance is first aggregated within clusters and only the
-    between-cluster part is used (panel HAC), matching Stata's ``newey`` with
-    ``force`` for repeated time ids.
+    time-ordered sample using a Bartlett kernel.  If ``cluster`` is given
+    (e.g. entity ids), the long-run covariance is first aggregated within
+    clusters and only the between-cluster part is used (panel HAC), matching
+    Stata's ``newey`` with ``force`` for repeated time ids.
 
-    Returns the (k, k) variance-covariance matrix of the OLS coefficients.
+    When ``adjust=True`` the standard Newey-West (1987) variance is multiplied
+    by ``N / (N - K)``, the same finite-sample correction Stata applies
+    unconditionally.  This matches R's ``sandwich::NeweyWest(..., adjust=TRUE)``
+    but has no theoretical justification in the original NW1987 paper — it is
+    borrowed from White's HC1 (MacKinnon & White, 1985).
+
+    Parameters
+    ----------
+    adjust : bool, default False
+        Apply the N/(N-K) degrees-of-freedom correction.
+
+    Returns
+    -------
+    np.ndarray
+        The (k, k) variance-covariance matrix of the OLS coefficients.
     """
     n, k = X.shape
     scores = X * resid[:, None]  # (n, k)
@@ -106,6 +121,8 @@ def newey_west_cov(
         Sl += w * (Gamma + Gamma.T)
     S = S0 + Sl
     V = XtX_inv @ S @ XtX_inv
+    if adjust:
+        V *= n / (n - k)
     return V
 
 
