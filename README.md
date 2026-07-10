@@ -10,18 +10,18 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (v0.6.8.4):** Stata-parity test suite — 35 hand-written
-> `.do` files with committed `.dta` fixtures, dual-mode execution (live Stata
-> or CI fallback). **`staggered_did()` now implements the full Callaway &
-> Sant'Anna (2021) doubly‑robust estimator** with `covariates`, `method="dripw"`
-> or `method="reg"`, cell‑by‑cell Stata parity at rtol=1e‑6, and
-> unbalanced‑cohort fixtures. **RDD uses rdrobust backend** with CCT bandwidth;
-> built-in fallback (IK bandwidth, NN/HC variance) available without extra
-> dependencies. **`logit().margins()` / `probit().margins()`** compute
-> **average marginal effects (AME)** matching Stata's `margins, dydx(*)`.
-> **`ols(hac_adjust=True)`** applies Stata‑style `N/(N−K)` df correction for
-> HAC standard errors. All staggered‑DID, Oaxaca, ABOND, and FD tests pass
-> at machine precision.
+> **Current version (v0.6.9):** 142 Stata‑parity tests across all estimators
+> — 22 `.do` files with cached `.dta` fixtures, dual‑mode execution (live
+> Stata or CI fallback). **All 8 ABOND flavors** (collapsed/non‑collapsed ×
+> one/two‑step × robust/non‑robust) verified against `xtabond2` 3.7.2 at
+> rtol=1e‑6. **Event‑study** now uses t‑distribution inference
+> (`cov_kwds={"use_t": True}`), matching Stata's default. **Logit/probit
+> margins** match Stata at machine precision. **Test‑suite caching**
+> (`read_stata()` at module level) cuts full‑suite runtime from 235s → 94s
+> (2.5× speedup). All staggered‑DID, Oaxaca, RDD, IV, panel (FE/RE/FD/DK),
+> and HAC tests pass — Oaxaca at rtol=1e‑6, panel coefficients at
+> rtol=1e‑6, staggered‑DID ATT at rtol=1e‑6 (SE gap deferred to CS2021
+> doubly‑robust rewrite in v0.7).
 
 ## Why open-econs?
 

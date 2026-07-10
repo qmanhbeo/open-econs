@@ -11,11 +11,16 @@ import open_econs as oe
 
 from .stata_runner import read_stata
 
+S_LOGIT_BASIC = read_stata("logit_basic")
+S_LOGIT_MARGINS = read_stata("logit_margins")
+S_PROBIT_BASIC = read_stata("probit_basic")
+S_PROBIT_MARGINS = read_stata("probit_margins")
+
 
 class TestLogitBasic:
     @pytest.fixture(autouse=True)
     def _run(self, df_logit):
-        self.s = read_stata("logit_basic")
+        self.s = S_LOGIT_BASIC
         self.oe_r = oe.logit("y ~ x1 + x2", data=df_logit)
 
     def test_coefficients(self):
@@ -35,7 +40,7 @@ class TestLogitBasic:
 class TestLogitMargins:
     @pytest.fixture(autouse=True)
     def _run(self, df_logit):
-        self.s = read_stata("logit_margins")
+        self.s = S_LOGIT_MARGINS
         self.oe_r = oe.logit("y ~ x1 + x2", data=df_logit)
 
     def test_margins(self):
@@ -47,7 +52,7 @@ class TestLogitMargins:
 class TestProbitBasic:
     @pytest.fixture(autouse=True)
     def _run(self, df_logit):
-        self.s = read_stata("probit_basic")
+        self.s = S_PROBIT_BASIC
         self.oe_r = oe.probit("y ~ x1 + x2", data=df_logit)
 
     def test_coefficients(self):
@@ -64,7 +69,7 @@ class TestProbitBasic:
 class TestProbitMargins:
     @pytest.fixture(autouse=True)
     def _run(self, df_logit):
-        self.s = read_stata("probit_margins")
+        self.s = S_PROBIT_MARGINS
         self.oe_r = oe.probit("y ~ x1 + x2", data=df_logit)
 
     def test_margins(self):

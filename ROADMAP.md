@@ -103,7 +103,7 @@ might fit.
   numeric `Treatment` reference period (the covariance RHS is now parsed by
   splitting on top-level `+` terms rather than fragile string surgery).
 
-#### v0.6 — Panel Data Engine *(current)*
+#### v0.6 — Panel Data Engine *(shipped)*
 - [x] First-class `PanelContext(df, entity=, time=)` — panel structure remembered,
   not re-specified per call. Exposes `pooled()`, `fe()`, `re()`, `diff()`,
   `driscoll_kraay()`, `hausman()`, plus cross-sectional delegates (`ols`, `logit`,
@@ -330,7 +330,45 @@ might fit.
   regenerated `panel_fd.dta` via StataMP. Test tolerances tightened from
   `rtol=1e‑2` to `rtol=1e‑6`, matching FE/Pooled/RE parity.
 
-#### v0.7 — Regression Discontinuity refinements
+#### v0.6.9 — Full Stata‑parity coverage & test‑suite caching
+- [x] **Event‑study Stata parity** — new synthetic fixture (seed 11, 600 obs),
+  rewritten `.do` file matching `reg y post if treated==1, vce(hc2)`. Fixed
+  t‑distribution inference (`cov_kwds={"use_t": True}`) to match Stata's
+  default. 4 tests at rtol=1e‑6 (p‑values at rtol=1e‑4).
+- [x] **All 8 ABOND flavors live‑verified** — replaced hardcoded constants with
+  `read_stata("abond")` lookup. 40 tests (8 flavors × coefficients/SEs/AR1/AR2)
+  all at rtol=1e‑6. Non‑collapsed matched at ~1e‑16; collapsed at ~3e‑9
+  (truncation only, no transcription errors). Unifies and supersedes
+  v0.6.5–v0.6.6 manual‑extraction regime.
+- [x] **Module‑level `read_stata()` caching** — every test file now loads Stata
+  results once at module level rather than per‑test‑method. 22 unique Stata
+  invocations instead of ~50+. Suite runtime: 235s → 94s (2.5× speedup).
+- [x] **Logit/probit cached** — final test file converted (4 module‑level labels,
+  7 → 4 Stata calls).
+- [x] **All 149 Stata‑parity tests pass.**
+- [x] **Deferred: staggered‑DID live‑`read_stata()` conversion** — held back
+  until the CS2021 doubly‑robust rewrite (v0.7) lands, because:
+  - The DR rewrite changes every coefficient/SE under test; wiring up
+    `read_stata()` now produces ground truth that goes stale within the
+    same sprint.
+  - SE tolerances (rtol=0.2 / 0.6) mask a known SE‑methodology gap (OLS
+    without influence‑function correction) that the DR fix is designed to
+    close. Wrapping the gap in `read_stata()` would relabel an open bug
+    as infrastructure maturity.
+  - `.do`‑file sample‑alignment fix should happen once alongside the DR
+    build, not as a separate pass.
+  - *See session handoff for action‑item details.*
+
+#### v0.7 — Causal Inference: DR Estimator, RDD Refinements *(current)*
+- [ ] **CS2021 doubly‑robust (DR) estimator rewrite** — full influence‑function‑based
+  implementation of Callaway & Sant'Anna (2021) for `staggered_did()`:
+  - Per‑cell logit PS + OLS outcome regression + centered‑IF cluster‑robust SEs
+  - Proper influence‑function SE methodology (closes the rtol=0.2/0.6 SE gap in
+    the current test — confirm whether the old gap was SE methodology or
+    sample‑alignment by comparing both fixes together)
+  - New `.do` files filtered to exact Python‑side entity subsets (apples‑to‑apples)
+  - `test_stata_staggered_did.py` converted to live `read_stata()` comparison
+    (see v0.6.9 deferred‑item action details in session handoff)
 - [ ] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
 - [ ] McCrary density test for manipulation at the cutoff
 - [ ] Built-in RD plot (binned scatter + fitted lines either side of cutoff)
