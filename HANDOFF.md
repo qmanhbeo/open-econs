@@ -1,6 +1,6 @@
 # Handoff: Stata Parity Tests for open-econs
 
-## Current Status: 43 passed, 10 failed, 1 skipped, 2 errors (56 total)
+## Current Status: 45 passed, 8 failed, 1 skipped, 2 errors (56 total)
 
 ```
 Module            Pass   Fail  Error  Notes
@@ -14,7 +14,7 @@ Panel FE           4/4    0     0    ✓
 Panel FE TwoWay    5/5    0     0    ✓
 Panel FD           2/2    0     0    ✓
 Panel RE           2/2    0     0    ✓
-Panel Pooled       0/2    2     0    fundamentally different estimators
+Panel Pooled       2/2    0     0    ✓ (uses Stata regress, matches OLS)
 Panel Hausman      0/0    0     2    KeyError on RE formula columns
 IV                 3/3    0     0    ✓ (ROOT CAUSE FIXED)
 Abond              0/2    2     0    different GMM implementations
@@ -22,7 +22,7 @@ Oaxaca             0/3    3     0    completely different decomposition
 Balance            2/2    0     0    ✓
 EventStudy         0/0    0     1    formulaic contrast encoding bug
 ──────────────────────────────────────────────────────────
-TOTAL             43     10    2err   (1 skip = EventStudy)
+TOTAL             45      8    2err   (1 skip = EventStudy)
 ```
 
 ## Bugs Fixed in oe Source
@@ -43,33 +43,30 @@ The `and c != "Intercept"` stripped the intercept from `X_exog`, so `linearmodel
 - **Panel FE two-way**: pass at rtol=1e-6 (coefs, SEs, nobs, df, r²)
 - **Panel FD**: pass at rtol=1e-6 (uses linearmodels FirstDifferenceOLS)
 - **Panel RE**: pass at rtol=1e-6 (cov_type="unadjusted")
+- **Panel Pooled**: pass at rtol=1e-6 (Stata `regress` = plain OLS)
 - **IV**: pass at rtol=1e-6 (after source fix)
 - **Balance**: pass at rtol=1e-6
 
 ## Remaining Failures by Root Cause
 
-### 1. Panel Pooled — fundamentally different estimators (2 fails)
-- oe uses OLS, Stata `xtreg, pa` uses GEE (Generalized Estimating Equations)
-- **Fix**: Mark as `xfail(reason="oe.pooled is OLS; Stata xtreg,pa is GEE")`
-
-### 2. Panel Hausman — KeyError on RE formula columns (2 errors)
+### 1. Panel Hausman — KeyError on RE formula columns (2 errors)
 - `ctx.hausman(fe_r, re_r)` fails with `KeyError: "None of [Index(['x', 'z'], dtype='str')] are in the [columns]"`
 - **Investigation needed**: Check what `ctx.re()` returns and what `ctx.hausman()` expects.
 
-### 3. Abond — different GMM implementations (2 fails)
+### 2. Abond — different GMM implementations (2 fails)
 - oe uses linearmodels `ABond`; Stata uses `xtabond2` (SSC)
 - **Fix**: Mark as `xfail(reason="Different GMM implementations: oe linearmodels vs Stata xtabond2")`
 
-### 4. Oaxaca — completely different decomposition (3 fails)
+### 3. Oaxaca — completely different decomposition (3 fails)
 - oe `total_gap` = 9.86; Stata `total_gap` = 34.61
 - Different reference group coding or decomposition algorithm
 - **Investigation needed**: Check if oe uses `group1` or `group2` as reference.
 
-### 5. RDD — different bandwidth algorithms (3 fails)
+### 4. RDD — different bandwidth algorithms (3 fails)
 - oe uses Imbens-Kalyanaraman (IK) bandwidth; Stata `rdrobust` uses CCT
 - **Fix**: Mark as `xfail(reason="oe uses IK bandwidth; Stata rdrobust uses CCT")`
 
-### 6. EventStudy — formulaic contrast encoding bug (1 skip)
+### 5. EventStudy — formulaic contrast encoding bug (1 skip)
 - `oe.event_study()` raises `ValueError: -1 is not in list` in TreatmentContrasts
 - **Fix**: Fix the formula parser in oe source code
 
@@ -81,7 +78,7 @@ The `and c != "Intercept"` stripped the intercept from `X_exog`, so `linearmodel
 - **Tolerance floor**: 1e-6 minimum across all tests
 
 ## Suggested Next Steps (priority order)
-1. **Mark Pooled/Abond/RDD as xfail** — known design differences, easy wins
+1. **Mark Abond/RDD as xfail** — known design differences, easy wins
 2. **Fix Panel Hausman** — investigate `ctx.hausman()` vs `ctx.re()` column structure
 3. **Investigate Oaxaca** — check reference group coding
 4. **Fix EventStudy** — fix formulaic contrast encoding bug in oe source

@@ -336,6 +336,10 @@ might fit.
 - [ ] Newey-West HAC standard errors as a `cov_type` option across estimators
 - [ ] API freeze candidate — no more breaking signature changes without a deprecation cycle
 - [ ] Full docstring coverage + type-checked public API
+- [ ] **Population-averaged GEE** (`ctx.pooled(..., method="gee")`) — equivalent to
+  Stata's `xtreg, pa`. Requires its own working-correlation-structure and sandwich-SE
+  implementation; distinct from pooled OLS (`ctx.pooled()` default). Open question
+  whether this is needed for current user base — candidate for v1.0+ if demand materialises.
 
 #### v1.0 — Stable Release
 - [ ] Semver-committed public API — breaking changes require a major version bump

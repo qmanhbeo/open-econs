@@ -1,9 +1,8 @@
-*! panel_pooled.do — Pooled OLS (xtreg, pa)
+*! panel_pooled.do — Pooled OLS (regress)
 clear all
 set more off
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_panel.csv", clear
-xtset entity time
-xtreg y x z, pa
+regress y x z
 
 scalar s_N   = e(N)
 scalar s_b0  = _b[_cons]
