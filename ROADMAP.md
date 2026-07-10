@@ -355,18 +355,42 @@ might fit.
     without influence‑function correction) that the DR fix is designed to
     close. Wrapping the gap in `read_stata()` would relabel an open bug
     as infrastructure maturity.
-  - `.do`‑file sample‑alignment fix should happen once alongside the DR
-    build, not as a separate pass.
+  - `.do`‑file sample‑alignment fix — **done as a separate isolated pass
+    (2026‑07‑10)**, ahead of the DR build, because it's a clean negative
+    result that root‑causes half the SE‑gap ambiguity (see v0.7.0). The DR
+    rewrite still lands separately; the alignment did not touch estimator
+    code or tolerances.
   - *See session handoff for action‑item details.*
 
 #### v0.7 — Causal Inference: DR Estimator, RDD Refinements *(current)*
+- [x] **v0.7.0 — staggered_did sample‑alignment & SE‑gap root cause** *(done)*
+  - **`.do` sample‑alignment** — `staggered_did.do` and `staggered_did_unbalanced.do`
+    now drop the gvar=5 entities (which never turn on: max time=4 < treatment
+    time=5) to match the Python‑side `entity < 20` / `entity < 23` filters exactly.
+    Regenerated both `.dta` fixtures via StataMP (csdid, dripw). `e(N)` drops
+    150→100 (balanced) and 150→115 (unbalanced), confirming the entities were
+    actually excluded.
+  - **SE‑gap root cause resolved (half of the v0.6.9 ambiguity)** — after
+    alignment, the g=3 ATT(g,t) and SEs are unchanged beyond floating‑point
+    noise; only the csdid weights move (0.125→0.25 balanced, 0.133→0.25
+    unbalanced) because fewer cells share the mass. This **positively attributes
+    the rtol=0.2/0.6 SE gap to `makerif2` full‑sample IF rescaling vs OE's
+    per‑cell IF — NOT to sample mismatch.** The DR‑adjacent SE‑methodology work
+    remains to close the gap; the sample‑alignment half is closed.
+  - **Test constants synced** — `_CELL_B`/`_CELL_SE`/`_CELL_W` and the
+    unbalanced `_B`/`_SE`/`_W` updated to the new sample‑aligned Stata values.
+    All 18 staggered‑DiD Stata‑parity tests pass at the **unchanged** tolerances
+    (no loosening). `TestStaggeredDiDNoCovariates` untouched; the
+    `read_stata()` live‑conversion remains deferred to the DR rewrite.
 - [ ] **CS2021 doubly‑robust (DR) estimator rewrite** — full influence‑function‑based
   implementation of Callaway & Sant'Anna (2021) for `staggered_did()`:
   - Per‑cell logit PS + OLS outcome regression + centered‑IF cluster‑robust SEs
   - Proper influence‑function SE methodology (closes the rtol=0.2/0.6 SE gap in
-    the current test — confirm whether the old gap was SE methodology or
-    sample‑alignment by comparing both fixes together)
-  - New `.do` files filtered to exact Python‑side entity subsets (apples‑to‑apples)
+    the current test — **root‑caused 2026‑07‑10**: .do sample‑alignment changed
+    ATT/SE only at float‑noise level, so the gap is the `makerif2` full‑sample IF
+    rescaling vs OE's per‑cell IF, *not* sample mismatch; only csdid weights moved)
+  - `.do` files filtered to exact Python‑side entity subsets (apples‑to‑apples)
+    — **done** (entity<20 balanced, entity<23 unbalanced; see v0.7.0)
   - `test_stata_staggered_did.py` converted to live `read_stata()` comparison
     (see v0.6.9 deferred‑item action details in session handoff)
 - [ ] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
