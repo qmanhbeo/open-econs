@@ -162,6 +162,7 @@ def fe(
     # the same approximation is standard practice (Stata's xtreg, fe does
     # the same).
     df_old = max(int(fitted.df_resid), 1)
+    _cov = None
     if df_resid_adj != df_old and df_old > 0:
         scale = np.sqrt(df_old / df_resid_adj)
         se_arr = se_arr * scale
@@ -170,6 +171,15 @@ def fe(
         p_arr = 2.0 * _stats.t.sf(np.abs(t_arr), df_resid_adj)
         crit = _stats.t.ppf(0.975, df_resid_adj)
         conf_arr = np.column_stack([coef_arr - crit * se_arr, coef_arr + crit * se_arr])
+        # Store the df-scaled covariance so vcov() is consistent with
+        # the reported standard errors.  The raw statsmodels covariance
+        # uses sigma2 = SSR/(N-k); Stata uses SSR/(N-g-k).  The ratio
+        # is df_old/df_resid_adj, applied element-wise.
+        _cov = pd.DataFrame(
+            np.asarray(fitted.cov_params()) * (df_old / df_resid_adj),
+            index=kept_columns,
+            columns=kept_columns,
+        )
 
     conf_int = pd.DataFrame(
         {"lower": conf_arr[:, 0], "upper": conf_arr[:, 1]},
@@ -201,7 +211,7 @@ def fe(
 
     rhs_formula = formula.split("~", 1)[1].strip()
 
-    return OLSResult(
+    result = OLSResult(
         formula=formula,
         rhs_formula=rhs_formula,
         nobs=n,
@@ -228,6 +238,11 @@ def fe(
         _X=XX,
         _fit=fitted,
     )
+    # Attach the df-scaled covariance matrix so vcov() returns values
+    # consistent with the panel-adjusted standard errors.
+    if _cov is not None:
+        object.__setattr__(result, "_cov", _cov)
+    return result
 
 
 def _demean(y: np.ndarray, groups: np.ndarray) -> np.ndarray:

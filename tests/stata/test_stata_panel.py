@@ -128,7 +128,8 @@ class TestPanelHausman:
     def _run(self, df_panel):
         self.s = read_stata("panel_hausman")
         ctx = oe.PanelContext(df_panel, entity="entity", time="time")
-        fe_r = ctx.fe("y ~ x + z", cov_type="nonrobust")
+        # One-way entity FE to match Stata's xtreg y x z, fe
+        fe_r = ctx.fe("y ~ x + z", cov_type="nonrobust", entity="entity", time=None)
         # linearmodels uses "unadjusted" not "nonrobust"
         re_r = ctx.re("y ~ x + z", cov_type="unadjusted")
         self.oe_h = ctx.hausman(fe_r, re_r)

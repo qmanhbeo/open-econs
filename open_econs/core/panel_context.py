@@ -15,6 +15,9 @@ from open_econs.core.panel_results import (
 from open_econs.core.results import OLSResult
 
 
+_UNSET = object()  # sentinel to distinguish "not passed" from explicit None
+
+
 class PanelContext:
     """A context that remembers panel structure (entity and time) for repeated estimation.
 
@@ -146,14 +149,14 @@ class PanelContext:
         formula: str,
         cov_type: str = "HC1",
         cluster: str | None = None,
-        entity: str | None = None,
-        time: str | None = None,
+        entity: str | _UNSET.__class__ = _UNSET,
+        time: str | _UNSET.__class__ | None = _UNSET,
     ) -> Any:
         """Fixed-effects (within) estimator using absorbed entity/time dummies."""
         from open_econs.models.linear.fe import fe as _fe
 
-        ent = entity if entity is not None else self._entity
-        tm = time if time is not None else self._time
+        ent = self._entity if entity is _UNSET else entity
+        tm = self._time if time is _UNSET else time
         if ent is None and tm is None:
             raise ValueError(
                 "fe() requires entity/time either in PanelContext or as arguments."

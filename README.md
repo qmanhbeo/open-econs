@@ -12,7 +12,9 @@ AI agents never have to learn a new API.
 
 > **Current version (v0.6.4):** Stata-parity test suite — 27 hand-written
 > `.do` files with committed `.dta` fixtures, dual-mode execution (live Stata
-> or CI fallback), FE df correction, within R² fix, plus all v0.6.3 features.
+> or CI fallback), **Hausman test fixed** (df-corrected VCV, one-way FE
+> alignment, `e(chi2)` ghost variable discovered and bypassed), FE df
+> correction, within R² fix, plus all v0.6.3 features.
 
 ## Why open-econs?
 
@@ -336,6 +338,18 @@ might fit.
   loop for speed on large panels.
 - [x] **Oaxaca `get_dummies` fix** — uses `formulaic` `ensure_full_rank`
   instead of fragile column-name pattern matching.
+- [x] **FE `vcov()` consistency** — `fe()` now stores a df-scaled covariance
+  matrix (`_cov`) so `vcov()` returns values consistent with the panel-adjusted
+  standard errors. Previously `se² ≠ diag(vcov())` by a factor of
+  `(N−k)/(N−g−k)`.
+- [x] **Hausman test fixed** — three bugs resolved:
+  (1) `PanelContext.fe()` now supports `time=None` override via sentinel
+  pattern to force one-way FE (matching Stata's `xtreg, fe`);
+  (2) `vcov()` returns the df-corrected covariance so `V_fe − V_re` is
+  positive definite (was negative definite, causing `H = 0.0` clamping);
+  (3) Stata's `e(chi2)` is a ghost variable (stores 667.36 while the
+  displayed statistic is 0.29) — the `.do` file now computes the
+  displayed quadratic form directly.
 
 #### v0.7 — Regression Discontinuity refinements
 - [x] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
