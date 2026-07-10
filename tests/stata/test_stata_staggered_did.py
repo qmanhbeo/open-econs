@@ -19,17 +19,23 @@ from .stata_runner import FIXTURES_DIR, read_stata
 # Cell-level ground truth from Stata csdid with covariates (method dripw)
 # Post-treatment cells only (t >= g) on the balanced fixture.
 # Extracted at full double precision from the .dta fixture.
+#
+# The .do file now filters to `entity < 20` (matching the Python test), which
+# drops the gvar=5 entities 20-29. They never turn on in the data (max time=4),
+# so dropping them leaves the g=3 ATT(g,t) and SEs unchanged (verified: only
+# floating-point noise). The csdid weights move from 0.125 to 0.25 because the
+# g=5 cells no longer share the weight mass (only the 4 g=3 cells remain).
 _CELL_B = {
-    (3, 3): 0.301235297229075,
-    (3, 4): -0.5875691446021462,
+    (3, 3): 0.30123529722907494,
+    (3, 4): -0.5875691446021463,
 }
 _CELL_SE = {
-    (3, 3): 0.46522653007833853,
+    (3, 3): 0.4652265300783386,
     (3, 4): 0.49419991367141947,
 }
 _CELL_W = {
-    (3, 3): 0.125,
-    (3, 4): 0.125,
+    (3, 3): 0.25,
+    (3, 4): 0.25,
 }
 
 _POST_KEYS = list(_CELL_B.keys())
@@ -112,12 +118,13 @@ class TestStaggeredDiDWithCovariatesUnbalanced:
 
     The unbalanced fixture has 15 never-treated + 8 g=3 (treated at t=3) + 7
     g=5 (treated at t=5).  Entities 23-29 (g=5) never have treat=1 in the data
-    (max time=4, treatment at t=5), so they behave as never-treated and are
-    excluded from this comparison (csdid handles them via explicit gvar).
+    (max time=4, treatment at t=5).
 
-    Stata reference values from staggered_did_unbalanced.dta (all 30 entities,
-    but g=5 cohort has no post-treatment cells so it doesn't affect the g=3
-    ATT(g,t) when using never-treated controls).
+    Stata reference values from staggered_did_unbalanced.dta.  The .do file now
+    filters to `entity < 23`, matching the Python test and dropping the gvar=5
+    entities 23-29.  Dropping them leaves the g=3 ATT(g,t) and SEs unchanged
+    (verified: only floating-point noise); the csdid weights move from
+    0.133333 to 0.25 because the g=5 cells no longer share the weight mass.
 
     SEs differ from csdid by a larger margin than the balanced case because
     csdid's makerif2 full-sample IF rescaling is more impactful when cohorts
@@ -128,9 +135,9 @@ class TestStaggeredDiDWithCovariatesUnbalanced:
         (3, 3),  # g=3, t=3  (Stata label: b_g3_t2_3)
         (3, 4),  # g=3, t=4  (Stata label: b_g3_t2_4)
     ]
-    _B = np.array([1.815691, 2.399327])
-    _SE = np.array([0.705407, 0.609847])
-    _W = np.array([0.133333, 0.133333])
+    _B = np.array([1.8156907408740837, 2.3993270357682666])
+    _SE = np.array([0.7054067384885818, 0.609847150360171])
+    _W = np.array([0.25, 0.25])
 
     @pytest.fixture(autouse=True)
     def _run(self):
@@ -147,19 +154,19 @@ class TestStaggeredDiDWithCovariatesUnbalanced:
 
     def test_unbalanced_cell_att_g3_t3(self):
         gt = _oe_att_gt(self.oe_r)
-        npt.assert_allclose(gt[(3, 3)], 1.815691, rtol=1e-6)
+        npt.assert_allclose(gt[(3, 3)], 1.8156907408740837, rtol=1e-6)
 
     def test_unbalanced_cell_att_g3_t4(self):
         gt = _oe_att_gt(self.oe_r)
-        npt.assert_allclose(gt[(3, 4)], 2.399327, rtol=1e-6)
+        npt.assert_allclose(gt[(3, 4)], 2.3993270357682666, rtol=1e-6)
 
     def test_unbalanced_cell_se_g3_t3(self):
         gt = _oe_se_gt(self.oe_r)
-        npt.assert_allclose(gt[(3, 3)], 0.705407, rtol=0.6)
+        npt.assert_allclose(gt[(3, 3)], 0.7054067384885818, rtol=0.6)
 
     def test_unbalanced_cell_se_g3_t4(self):
         gt = _oe_se_gt(self.oe_r)
-        npt.assert_allclose(gt[(3, 4)], 0.609847, rtol=0.6)
+        npt.assert_allclose(gt[(3, 4)], 0.609847150360171, rtol=0.6)
 
     def test_unbalanced_aggregated_att(self):
         w = self._W[:2]  # post-treatment weights only
