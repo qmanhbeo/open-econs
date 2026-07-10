@@ -422,6 +422,7 @@ def rdd(
         d = xs - cutoff
 
         if fuzzy:
+            assert tr_vals is not None
             trs = tr_vals[mask]
             effect, se, z_stat, p_value, n_left, n_right = _fuzzy_ratio_estimates(
                 xs, ys, trs, d, w, vce=vce,

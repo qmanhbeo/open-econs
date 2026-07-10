@@ -340,7 +340,7 @@ def _ar_test(
         stat = sum_wwli_total / denom if denom > 0 else float("nan")
         pval = float(2.0 * (1.0 - _norm.cdf(abs(stat))))
         out.append((float(stat), pval))
-    return tuple(out[0]), tuple(out[1])
+    return (float(out[0][0]), float(out[0][1])), (float(out[1][0]), float(out[1][1]))
 
 
 def abond(

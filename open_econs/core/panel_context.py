@@ -149,14 +149,15 @@ class PanelContext:
         formula: str,
         cov_type: str = "HC1",
         cluster: str | None = None,
-        entity: str | _UNSET.__class__ = _UNSET,
-        time: str | _UNSET.__class__ | None = _UNSET,
+        entity: str | object = _UNSET,
+        time: str | object | None = _UNSET,
     ) -> Any:
         """Fixed-effects (within) estimator using absorbed entity/time dummies."""
         from open_econs.models.linear.fe import fe as _fe
+        from typing import cast
 
-        ent = self._entity if entity is _UNSET else entity
-        tm = self._time if time is _UNSET else time
+        ent = cast("str | None", self._entity if entity is _UNSET else entity)
+        tm = cast("str | None", self._time if time is _UNSET else time)
         if ent is None and tm is None:
             raise ValueError(
                 "fe() requires entity/time either in PanelContext or as arguments."
