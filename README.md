@@ -3,7 +3,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/open-econs?color=blue)](https://pypi.org/project/open-econs/)
 [![Python versions](https://img.shields.io/pypi/pyversions/open-econs)](https://pypi.org/project/open-econs/)
 
-**The scikit-learn of open economics.**
+**The scikit-learn of empirical economics (or social sciences in general).**
 
 A Python library that bridges the gap between traditional Stata/R econometrics
 workflows and modern, production-grade Python systems.  Every estimator follows
@@ -13,6 +13,33 @@ AI agents never have to learn a new API.
 > **Current version (v0.6.4):** Stata-parity test suite — 27 hand-written
 > `.do` files with committed `.dta` fixtures, dual-mode execution (live Stata
 > or CI fallback), FE df correction, within R² fix, plus all v0.6.3 features.
+
+## Why open-econs?
+
+> Stop painfully switching back and forth between Python and Stata/R for analysis, or wrestling with multiple fragmented libraries for a single econ paper. 
+
+```python
+import open_econs as oe
+import pandas as pd
+
+df = pd.DataFrame({
+    "income":    [30, 45, 55, 70, 85, 40, 60, 95],
+    "education": [10, 12, 14, 16, 18, 11, 15, 20],
+    "age":       [25, 30, 35, 40, 45, 28, 38, 50],
+    "female":    [0,  0,  0,  0,  1,  1,  1,  1],
+    "province":  ["A","A","B","B","C","C","A","B"],
+})
+
+# --- OLS with named coefficients and cluster-robust SEs ---
+r = oe.ols("income ~ education + age", data=df, cluster="province")
+print(r.coefficients)  # Clean pd.Series with named index 
+
+# --- Two-fold Oaxaca-Blinder Decomposition ---
+d = oe.oaxaca("income ~ education + age + female", data=df, by="female")
+print(d.explained)     # 16.00  (covariate-driven gap)
+print(d.unexplained)   #  4.00  (coefficient-driven gap)
+print(d.total_gap)     # 20.00  (female mean - male mean)
+```
 
 ## Quick Start
 
