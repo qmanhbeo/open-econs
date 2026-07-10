@@ -1,13 +1,18 @@
-*! probit_margins.do — Probit marginal effects
+*! probit_margins.do — Probit marginal effects (AME)
+* Computes Average Marginal Effects (AME) to match Stata's default margins
 clear all
 set more off
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_logit.csv", clear
+
+* Estimate probit
 probit y x1 x2
+
+* Compute marginal effects (AME - average over all observations)
 margins, dydx(x1 x2)
 
-matrix m = e(b)'
-scalar s_me1 = m[1,1]
-scalar s_me2 = m[2,1]
+* Extract marginal effect coefficients using r(b)
+scalar s_me1 = r(b)[1,1]
+scalar s_me2 = r(b)[1,2]
 
 clear
 set obs 2
