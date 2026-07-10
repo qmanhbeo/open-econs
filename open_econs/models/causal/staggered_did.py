@@ -249,6 +249,13 @@ def staggered_did(
     Returns
     -------
     StaggeredDiDResult
+
+    Notes
+    -----
+    Stata reference implementation: ``csdid`` and ``drdid`` packages by
+    Fernando Rios-Avila — see the `stpackages repository
+    <https://github.com/friosavila/stpackages/tree/main/csdid>`_ and
+    `drdid <https://github.com/friosavila/stpackages/tree/main/drdid>`_.
     """
     if method is None:
         method = "dripw" if (covariates is not None and len(covariates) > 0) else "reg"

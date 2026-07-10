@@ -116,6 +116,11 @@ def oaxaca(
     endowment effect and ``.unexplained`` to the coefficient effect,
     *not* the two-fold meanings of those terms.
 
+    Notes
+    -----
+    Stata reference implementation: ``oaxaca`` package by Ben Jann — see
+    the `repository <https://github.com/benjann/oaxaca>`_.
+
     Returns
     -------
     OaxacaResult

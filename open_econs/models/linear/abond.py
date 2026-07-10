@@ -395,6 +395,12 @@ def abond(
     Returns
     -------
     ArellanoBondResult
+
+    Notes
+    -----
+    Stata reference implementation: ``xtabond2`` package by David Roodman —
+    see the `repository
+    <https://github.com/droodman/xtabond2/blob/master/xtabond2.ado>`_.
     """
     if step not in ("one-step", "two-step"):
         raise ValueError("step must be 'one-step' or 'two-step'.")

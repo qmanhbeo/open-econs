@@ -185,3 +185,11 @@ pip install -e ".[dev]"
 python -m pytest tests/
 ```
 
+## References
+
+Stata reference implementations used for parity testing:
+
+- ``xtabond2`` — David Roodman's Arellano-Bond dynamic panel GMM (`source <https://github.com/droodman/xtabond2/blob/master/xtabond2.ado>`_).
+- ``csdid`` / ``drdid`` — Fernando Rios-Avila's Callaway-Sant'Anna staggered DiD (`csdid <https://github.com/friosavila/stpackages/tree/main/csdid>`_, `drdid <https://github.com/friosavila/stpackages/tree/main/drdid>`_).
+- ``oaxaca`` — Ben Jann's Oaxaca-Blinder decomposition (`source <https://github.com/benjann/oaxaca>`_).
+
