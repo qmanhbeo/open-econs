@@ -134,13 +134,15 @@ def fe(
         if cluster not in data.columns:
             raise errors.cluster_column_error(cluster, data.columns.tolist())
         aligned_groups = data.loc[XX.index, cluster]
-        fitted = sm.OLS(y_arr, X_arr).fit(
+        X_df = pd.DataFrame(X_arr, columns=kept_columns)
+        fitted = sm.OLS(y_arr, X_df).fit(
             cov_type="cluster",
             cov_kwds={"groups": aligned_groups},
         )
         cov_label = f"cluster({cluster})"
     else:
-        fitted = sm.OLS(y_arr, X_arr).fit(cov_type=cov_type)
+        X_df = pd.DataFrame(X_arr, columns=kept_columns)
+        fitted = sm.OLS(y_arr, X_df).fit(cov_type=cov_type)
         cov_label = cov_type
 
     n = int(fitted.nobs)

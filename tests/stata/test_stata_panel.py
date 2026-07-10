@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import numpy.testing as npt
 import pandas as pd
@@ -136,3 +138,40 @@ class TestPanelHausman:
 
     def test_p_value(self):
         npt.assert_allclose(self.oe_h.p_value, self.s["p"], rtol=1e-6)
+
+
+class TestFEVcovIndexConsistency:
+    """Regression: fe().coefficients.index must equal fe().vcov().index.
+
+    Prevents recurrence of the bug where sm.OLS on a bare numpy array
+    auto-generated ['x1','x2'] names that desynced vcov() from
+    coefficients, breaking ctx.hausman().
+    """
+
+    @pytest.fixture(autouse=True)
+    def _data(self):
+        self.df = pd.read_csv(
+            str(Path(__file__).parent / "fixtures" / "df_panel.csv")
+        )
+
+    def test_entity_only(self):
+        r = oe.fe("y ~ x + z", data=self.df, entity="entity", cov_type="nonrobust")
+        pd.testing.assert_index_equal(r.coefficients.index, r.vcov().index)
+
+    def test_time_only(self):
+        r = oe.fe("y ~ x + z", data=self.df, time="time", cov_type="HC2")
+        pd.testing.assert_index_equal(r.coefficients.index, r.vcov().index)
+
+    def test_two_way(self):
+        r = oe.fe(
+            "y ~ x + z", data=self.df, entity="entity", time="time",
+            cov_type="nonrobust",
+        )
+        pd.testing.assert_index_equal(r.coefficients.index, r.vcov().index)
+
+    def test_clustered(self):
+        r = oe.fe(
+            "y ~ x + z", data=self.df, entity="entity",
+            cluster="entity", cov_type="HC2",
+        )
+        pd.testing.assert_index_equal(r.coefficients.index, r.vcov().index)
