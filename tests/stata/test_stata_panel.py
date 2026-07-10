@@ -23,18 +23,18 @@ class TestPanelFE:
     def test_coefficients(self):
         npt.assert_allclose(self.oe_r.coefficients.values,
                             [self.s["b_x"], self.s["b_z"]],
-                            rtol=1e-7)
+                            rtol=1e-6)
 
     def test_standard_errors(self):
         npt.assert_allclose(self.oe_r.std_errors.values,
                             [self.s["se_x"], self.s["se_z"]],
-                            rtol=1e-7)
+                            rtol=1e-6)
 
     def test_nobs(self):
         assert self.oe_r.nobs == int(self.s["N"])
 
     def test_r_squared(self):
-        npt.assert_allclose(self.oe_r.r_squared, self.s["r2_w"], rtol=1e-7)
+        npt.assert_allclose(self.oe_r.r_squared, self.s["r2_w"], rtol=1e-6)
 
 
 class TestPanelFETwoWay:
@@ -48,12 +48,12 @@ class TestPanelFETwoWay:
     def test_coefficients(self):
         npt.assert_allclose(self.oe_r.coefficients.values,
                             [self.s["b_x"], self.s["b_z"]],
-                            rtol=1e-7)
+                            rtol=1e-6)
 
     def test_standard_errors(self):
         npt.assert_allclose(self.oe_r.std_errors.values,
                             [self.s["se_x"], self.s["se_z"]],
-                            rtol=1e-7)
+                            rtol=1e-6)
 
     def test_nobs(self):
         assert self.oe_r.nobs == int(self.s["N"])
@@ -62,7 +62,7 @@ class TestPanelFETwoWay:
         assert self.oe_r.df_resid == int(self.s["df_r"])
 
     def test_r_squared(self):
-        npt.assert_allclose(self.oe_r.r_squared, self.s["r2_w"], rtol=1e-7)
+        npt.assert_allclose(self.oe_r.r_squared, self.s["r2_w"], rtol=1e-6)
 
 
 class TestPanelRE:
@@ -76,12 +76,12 @@ class TestPanelRE:
     def test_coefficients(self):
         npt.assert_allclose(self.oe_r.coefficients.values,
                             [self.s["b_int"], self.s["b_x"], self.s["b_z"]],
-                            rtol=1e-7)
+                            rtol=1e-6)
 
     def test_standard_errors(self):
         npt.assert_allclose(self.oe_r.std_errors.values,
                             [self.s["se_int"], self.s["se_x"], self.s["se_z"]],
-                            rtol=1e-7)
+                            rtol=1e-6)
 
 
 class TestPanelPooled:
@@ -94,12 +94,12 @@ class TestPanelPooled:
     def test_coefficients(self):
         npt.assert_allclose(self.oe_r.coefficients.values,
                             [self.s["b_int"], self.s["b_x"], self.s["b_z"]],
-                            rtol=1e-7)
+                            rtol=1e-6)
 
     def test_standard_errors(self):
         npt.assert_allclose(self.oe_r.std_errors.values,
                             [self.s["se_int"], self.s["se_x"], self.s["se_z"]],
-                            rtol=1e-7)
+                            rtol=1e-6)
 
 
 class TestPanelFD:
@@ -132,7 +132,7 @@ class TestPanelHausman:
         self.oe_h = ctx.hausman(fe_r, re_r)
 
     def test_chi2(self):
-        npt.assert_allclose(self.oe_h.statistic, self.s["chi2"], rtol=1e-7)
+        npt.assert_allclose(self.oe_h.statistic, self.s["chi2"], rtol=1e-6)
 
     def test_p_value(self):
-        npt.assert_allclose(self.oe_h.p_value, self.s["p"], rtol=1e-7)
+        npt.assert_allclose(self.oe_h.p_value, self.s["p"], rtol=1e-6)

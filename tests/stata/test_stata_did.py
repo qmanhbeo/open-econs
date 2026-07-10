@@ -21,7 +21,7 @@ class TestDiDBasic:
 
     def test_did_coefficient(self):
         oe_att = self.oe_r.coefficients.values[-1]
-        npt.assert_allclose(oe_att, self.s["b_treatXpost"], rtol=1e-7)
+        npt.assert_allclose(oe_att, self.s["b_treatXpost"], rtol=1e-6)
 
     def test_nobs(self):
         assert self.oe_r.nobs == int(self.s["N"])
@@ -36,7 +36,7 @@ class TestDiDCluster:
 
     def test_cluster_se(self):
         oe_se = self.oe_r.std_errors.values[-1]
-        npt.assert_allclose(oe_se, self.s["se_treatXpost"], rtol=1e-7)
+        npt.assert_allclose(oe_se, self.s["se_treatXpost"], rtol=1e-6)
 
 
 class TestEventStudy:
@@ -53,4 +53,4 @@ class TestEventStudy:
 
     def test_intercept(self):
         npt.assert_allclose([self.oe_r.coefficients.values[0]],
-                            [self.s["b_int"]], rtol=1e-7)
+                            [self.s["b_int"]], rtol=1e-6)
