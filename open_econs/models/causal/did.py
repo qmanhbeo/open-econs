@@ -529,11 +529,12 @@ def event_study(
     import statsmodels.api as sm
 
     kwargs: dict[str, Any] = {}
+    cov_kwds: dict[str, Any] = {"use_t": True}
     if cluster is not None:
         if cluster not in data.columns:
             raise errors.missing_column_error(cluster, data.columns.tolist())
         kwargs["cov_type"] = "cluster"
-        kwargs["cov_kwds"] = {"groups": data.loc[XX.index, cluster].values}
+        cov_kwds["groups"] = data.loc[XX.index, cluster].values
     else:
         cov_map = {
             "nonrobust": "nonrobust",
@@ -544,6 +545,7 @@ def event_study(
             "robust": "HC2",
         }
         kwargs["cov_type"] = cov_map.get(cov_type, "HC2")
+    kwargs["cov_kwds"] = cov_kwds
 
     fitted = sm.OLS(y_arr, X_arr).fit(**kwargs)
 
