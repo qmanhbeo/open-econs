@@ -11,7 +11,8 @@ import open_econs as oe
 
 from .stata_runner import read_stata
 
-FIXTURE_CSV = oe.__file__.__class__.__module__  # placeholder
+S_ES = read_stata("event_study")
+
 FIXTURE_CSV = "tests/stata/fixtures/df_event_study.csv"
 
 
@@ -31,7 +32,7 @@ class TestEventStudyParity:
 
     @pytest.fixture(autouse=True)
     def _run(self, df_es):
-        self.s = read_stata("event_study")
+        self.s = S_ES
         self.df = df_es
 
     # ------------------------------------------------------------------

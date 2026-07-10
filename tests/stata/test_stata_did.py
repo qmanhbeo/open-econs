@@ -11,11 +11,14 @@ import open_econs as oe
 
 from .stata_runner import read_stata
 
+S_DID_BASIC = read_stata("did_basic")
+S_DID_CLUSTER = read_stata("did_cluster")
+
 
 class TestDiDBasic:
     @pytest.fixture(autouse=True)
     def _run(self, df_did):
-        self.s = read_stata("did_basic")
+        self.s = S_DID_BASIC
         self.oe_r = oe.did("y ~ treat * post", data=df_did,
                            treatment="treat", post="post")
 
@@ -30,7 +33,7 @@ class TestDiDBasic:
 class TestDiDCluster:
     @pytest.fixture(autouse=True)
     def _run(self, df_did):
-        self.s = read_stata("did_cluster")
+        self.s = S_DID_CLUSTER
         self.oe_r = oe.did("y ~ treat * post", data=df_did,
                            treatment="treat", post="post", cluster="unit")
 

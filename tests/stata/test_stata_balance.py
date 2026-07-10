@@ -14,6 +14,8 @@ from scipy import stats as _stats
 
 from .stata_runner import read_stata
 
+S_BALANCE = read_stata("balance_basic")
+
 
 def _welch_df(a: np.ndarray, b: np.ndarray) -> float:
     """Satterthwaite degrees of freedom for Welch's t-test."""
@@ -29,7 +31,7 @@ class TestBalanceBasic:
 
     @pytest.fixture(autouse=True)
     def _run(self, df_ols):
-        self.s = read_stata("balance_basic")
+        self.s = S_BALANCE
         df = df_ols.copy()
         df["treat"] = (df["province"] == "north").astype(float)
 

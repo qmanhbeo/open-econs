@@ -13,11 +13,18 @@ import open_econs as oe
 
 from .stata_runner import read_stata
 
+S_PANEL_FE = read_stata("panel_fe")
+S_PANEL_FE_TWOWAY = read_stata("panel_fe_twoway")
+S_PANEL_RE = read_stata("panel_re")
+S_PANEL_POOLED = read_stata("panel_pooled")
+S_PANEL_FD = read_stata("panel_fd")
+S_PANEL_HAUSMAN = read_stata("panel_hausman")
+
 
 class TestPanelFE:
     @pytest.fixture(autouse=True)
     def _run(self, df_panel):
-        self.s = read_stata("panel_fe")
+        self.s = S_PANEL_FE
         # Stata `xtreg y x z, fe` is one-way entity FE only
         self.oe_r = oe.fe("y ~ x + z", data=df_panel, entity="entity",
                           cov_type="nonrobust")
@@ -42,7 +49,7 @@ class TestPanelFE:
 class TestPanelFETwoWay:
     @pytest.fixture(autouse=True)
     def _run(self, df_panel):
-        self.s = read_stata("panel_fe_twoway")
+        self.s = S_PANEL_FE_TWOWAY
         # Stata `xtreg y x z i.time, fe` — entity FE + time dummies
         self.oe_r = oe.fe("y ~ x + z", data=df_panel, entity="entity",
                           time="time", cov_type="nonrobust")
@@ -70,7 +77,7 @@ class TestPanelFETwoWay:
 class TestPanelRE:
     @pytest.fixture(autouse=True)
     def _run(self, df_panel):
-        self.s = read_stata("panel_re")
+        self.s = S_PANEL_RE
         ctx = oe.PanelContext(df_panel, entity="entity", time="time")
         # linearmodels uses "unadjusted" not "nonrobust"
         self.oe_r = ctx.re("y ~ x + z", cov_type="unadjusted")
@@ -89,7 +96,7 @@ class TestPanelRE:
 class TestPanelPooled:
     @pytest.fixture(autouse=True)
     def _run(self, df_panel):
-        self.s = read_stata("panel_pooled")
+        self.s = S_PANEL_POOLED
         ctx = oe.PanelContext(df_panel, entity="entity", time="time")
         self.oe_r = ctx.pooled("y ~ x + z", cov_type="nonrobust")
 
@@ -107,7 +114,7 @@ class TestPanelPooled:
 class TestPanelFD:
     @pytest.fixture(autouse=True)
     def _run(self, df_panel):
-        self.s = read_stata("panel_fd")
+        self.s = S_PANEL_FD
         ctx = oe.PanelContext(df_panel, entity="entity", time="time")
         self.oe_r = ctx.diff("y ~ x + z")
 
@@ -127,7 +134,7 @@ class TestPanelFD:
 class TestPanelHausman:
     @pytest.fixture(autouse=True)
     def _run(self, df_panel):
-        self.s = read_stata("panel_hausman")
+        self.s = S_PANEL_HAUSMAN
         ctx = oe.PanelContext(df_panel, entity="entity", time="time")
         # One-way entity FE to match Stata's xtreg y x z, fe
         fe_r = ctx.fe("y ~ x + z", cov_type="nonrobust", entity="entity", time=None)

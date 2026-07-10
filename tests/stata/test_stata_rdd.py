@@ -16,11 +16,14 @@ import open_econs as oe
 
 from .stata_runner import read_stata
 
+S_RDD_SHARP = read_stata("rdd_sharp")
+S_RDD_FUZZY = read_stata("rdd_fuzzy")
+
 
 class TestRDDSharp:
     @pytest.fixture(autouse=True)
     def _run(self, df_rdd):
-        self.s = read_stata("rdd_sharp")
+        self.s = S_RDD_SHARP
         self.oe_r = oe.rdd(df_rdd, y="y_sharp", running="x", cutoff=0.0,
                            bandwidth=self.s["bw"])
 
@@ -37,7 +40,7 @@ class TestRDDSharp:
 class TestRDDFuzzy:
     @pytest.fixture(autouse=True)
     def _run(self, df_rdd):
-        self.s = read_stata("rdd_fuzzy")
+        self.s = S_RDD_FUZZY
         self.oe_r = oe.rdd(df_rdd, y="y_fuzzy", running="x", cutoff=0.0,
                            treatment="treat", fuzzy=True,
                            bandwidth=self.s["bw"])

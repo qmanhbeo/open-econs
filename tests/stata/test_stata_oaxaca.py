@@ -19,6 +19,9 @@ import open_econs as oe
 
 from .stata_runner import read_stata
 
+# Module-level Stata caches.
+S_TWO_FOLD = read_stata("oaxaca_two_fold")
+S_THREE_FOLD = read_stata("oaxaca_three_fold")
 
 # Relative tolerances per component type.
 # Gap and explained/endowment are large (~10, ~2); 1e-6 rtol is feasible.
@@ -50,7 +53,7 @@ class TestOaxacaTwoFoldPooled:
     """Two-fold decomposition with pooled reference (including group dummy)."""
     @pytest.fixture(autouse=True)
     def _run(self, df_oaxaca):
-        self.s = read_stata("oaxaca_two_fold")
+        self.s = S_TWO_FOLD
         self.oe_r = oe.oaxaca("y ~ edu + age + female", data=df_oaxaca,
                                by="female", decomposition_type="two-fold",
                                reference="pooled")
@@ -71,7 +74,7 @@ class TestOaxacaTwoFoldOmega:
     """Two-fold decomposition with omega reference (Neumark, no group dummy)."""
     @pytest.fixture(autouse=True)
     def _run(self, df_oaxaca):
-        self.s = read_stata("oaxaca_two_fold")
+        self.s = S_TWO_FOLD
         self.oe_r = oe.oaxaca("y ~ edu + age + female", data=df_oaxaca,
                                by="female", decomposition_type="two-fold",
                                reference="omega")
@@ -92,7 +95,7 @@ class TestOaxacaTwoFoldRefGroup1:
     """Two-fold decomposition using group 1 coefficients as the non‑discriminatory reference (Stata ``weight(1)``)."""
     @pytest.fixture(autouse=True)
     def _run(self, df_oaxaca):
-        self.s = read_stata("oaxaca_two_fold")
+        self.s = S_TWO_FOLD
         self.oe_r = oe.oaxaca("y ~ edu + age + female", data=df_oaxaca,
                                by="female", decomposition_type="two-fold",
                                reference="group1")
@@ -113,7 +116,7 @@ class TestOaxacaTwoFoldRefGroup2:
     """Two-fold decomposition using group 2 coefficients as the non‑discriminatory reference (Stata ``weight(0)``)."""
     @pytest.fixture(autouse=True)
     def _run(self, df_oaxaca):
-        self.s = read_stata("oaxaca_two_fold")
+        self.s = S_TWO_FOLD
         self.oe_r = oe.oaxaca("y ~ edu + age + female", data=df_oaxaca,
                                by="female", decomposition_type="two-fold",
                                reference="group2")
@@ -136,7 +139,7 @@ class TestOaxacaThreeFoldDefault:
     """Three-fold decomposition (default; group 2 coefficients as reference)."""
     @pytest.fixture(autouse=True)
     def _run(self, df_oaxaca):
-        self.s = read_stata("oaxaca_three_fold")
+        self.s = S_THREE_FOLD
         self.oe_r = oe.oaxaca("y ~ edu + age + female", data=df_oaxaca,
                                by="female", decomposition_type="three-fold")
 
@@ -163,7 +166,7 @@ class TestOaxacaThreeFoldReverse:
     """Three-fold decomposition with group 1 coefficients as reference (Stata ``threefold(reverse)``)."""
     @pytest.fixture(autouse=True)
     def _run(self, df_oaxaca):
-        self.s = read_stata("oaxaca_three_fold")
+        self.s = S_THREE_FOLD
         self.oe_r = oe.oaxaca("y ~ edu + age + female", data=df_oaxaca,
                                by="female", decomposition_type="three-fold",
                                reverse=True)

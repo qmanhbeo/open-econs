@@ -11,11 +11,13 @@ import open_econs as oe
 
 from .stata_runner import read_stata
 
+S_IV = read_stata("iv_basic")
+
 
 class TestIVBasic:
     @pytest.fixture(autouse=True)
     def _run(self, df_iv):
-        self.s = read_stata("iv_basic")
+        self.s = S_IV
         self.oe_r = oe.iv("y ~ x2 | x ~ z", data=df_iv, cov_type="nonrobust")
 
     def test_coefficients(self):
