@@ -209,11 +209,14 @@ def _estimate_gmm(
     # --- Windmeijer/AR prep: m2VZXA from PRE-small V/A (Mata 549) ---
     m2VZXA = -2.0 * pV_pre @ (ZtX.T @ pA_pre)
 
+    # pV_ar is the pre-small V passed to _ARTests (Stata line 614).
+    # The reporting V and sig2 get the small multiplier; m2VZXA and pV_ar
+    # use the base (uncorrected) values.
     return {
         "b": b, "se": se, "e": pe, "Z": Z, "X": X, "Y": Y,
         "sig2": sig2, "V": V,
         "J": J, "dof_j": dof_j, "p_j": p_j,
-        "m2VZXA": m2VZXA, "pV": V,
+        "m2VZXA": m2VZXA, "pV": V, "pV_ar": pV,
         "eq_entity": eq_entity, "n_eq": n_eq, "N": N, "p": p, "L": L,
         "step": step, "robust": robust,
     }
@@ -226,7 +229,7 @@ def _build_H_ar(T: int, h: int = 3) -> np.ndarray:
     ``M[0,0]=0``, so ``H[0,0]=0`` and ``H`` is tridiagonal with diagonal 2
     (except the last usable position) and off-diagonal -1.
     """
-    M = np.eye(T) - np.eye(T, k=-1)
+    M = np.eye(T) - np.eye(T, k=1)
     M[0, 0] = 0.0
     return M.T @ M
 
@@ -255,11 +258,15 @@ def _ar_test(
     * one-step non-robust: same numerator, but wHw and ZHw use the H-weighted
         lagged residual (Mata 1144-1154).
 
-    Operand timing (per plan, Mata 549 vs 614): ``m2VZXA`` is built from the
-    *pre*-small-sample V/A; ``pV`` and ``sig2`` here are the *post*-correction
-    values.
+    Operand timing (Mata 549 vs 614): ``m2VZXA`` is built from the
+    *pre*-small-sample V/A; ``pV`` here is the *base* (pre-small) V;
+    ``sig2`` is the *post*-correction value (Stata multiplies H by the
+    post-small ``sig2`` in the one-step non-robust branch).
+
+    All input vectors (``e_by_entity``, ``Z_by_entity``, ``X_by_entity``) are
+    expected to be *full T-length* per entity (T rows, first position
+    hard-zeroed) — consistent with Stata's ``*pe`` and ``_ARTests`` conventions.
     """
-    min_j = 2  # usable equations start at time index min_j
     onestepnonrobust = (step == "one-step") and (not robust)
     L = next(iter(Z_by_entity.values())).shape[1]
     p = next(iter(X_by_entity.values())).shape[1]
@@ -272,23 +279,19 @@ def _ar_test(
         tmp = np.zeros(p)
         for ent in e_by_entity:
             T_i = T_by_entity[ent]
-            m_i = e_by_entity[ent].shape[0]
-            # Residual vector placed at usable time positions (min_j .. T_i-1)
-            r_full = np.zeros(T_i)
-            r_full[min_j:min_j + m_i] = e_by_entity[ent]
+            e_ent = e_by_entity[ent]           # full T-length, position 0 hard-zeroed
             wli = np.zeros(T_i)
-            wli[lag:] = r_full[:T_i - lag]          # lag the residual (shift down)
-            sum_wwli = float(r_full @ wli)
+            wli[lag:] = e_ent[:T_i - lag]       # lag (shift down, zero-fill at top)
+            sum_wwli = float(e_ent @ wli)       # Σₜ rₜ · rₜ₋ₗ
             if onestepnonrobust:
                 H = _build_H_ar(T_i, h)
-                # Mata 1110-1112: H and psit used here are _H(...)*sig2
                 wHw += float(wli @ H @ wli) * sig2
                 psiw = H @ wli * sig2
-                ZHw += Z_by_entity[ent].T @ psiw[min_j:min_j + m_i]
+                ZHw += Z_by_entity[ent].T @ psiw
             else:
                 wHw += sum_wwli ** 2
-                ZHw += Z_by_entity[ent].T @ e_by_entity[ent] * sum_wwli
-            tmp += X_by_entity[ent].T @ wli[min_j:min_j + m_i]
+                ZHw += Z_by_entity[ent].T @ e_ent * sum_wwli
+            tmp += X_by_entity[ent].T @ wli
             sum_wwli_total += sum_wwli
         denom = np.sqrt(wHw + tmp @ (m2VZXA @ ZHw + pV @ tmp))
         stat = sum_wwli_total / denom if denom > 0 else float("nan")
@@ -556,24 +559,79 @@ def abond(
         index=coef_names,
     )
 
-    # Per-entity arrays (in time order) for the AR tests.
+    # Per-entity FULL T-length vectors for the AR tests.
+    # Stata's _ARTests receives a T-length residual per entity (first position
+    # hard-zeroed by _Difference / touse).  Our estimation uses only the
+    # "usable" equations (j >= min_j); we reconstruct the full T-length
+    # residual here to match.
+    p_ar = int(est["p"])
+    L_ar = Z.shape[1]
     e_by_entity: dict[Any, np.ndarray] = {}
     Z_by_entity: dict[Any, np.ndarray] = {}
     X_by_entity: dict[Any, np.ndarray] = {}
     T_by_entity: dict[Any, int] = {}
-    pos = 0
     for e_val in entities:
-        T_i = len(y_by_e[e_val])
-        n_eq_e = max(0, T_i - min_j)
-        e_by_entity[e_val] = est["e"][pos:pos + n_eq_e]
-        Z_by_entity[e_val] = est["Z"][pos:pos + n_eq_e]
-        X_by_entity[e_val] = est["X"][pos:pos + n_eq_e]
-        T_by_entity[e_val] = T_i
-        pos += n_eq_e
+        y_e = y_by_e[e_val]
+        xs = x_by_e[e_val]
+        T_i = len(y_e)
+        b = est["b"]  # (p_ar,) coefficient vector
 
+        # Full T-length X (first-differenced) and Y (differenced dep var).
+        X_i = np.zeros((T_i, p_ar))
+        Y_i = np.zeros(T_i)
+        for j in range(1, T_i):
+            col = 0
+            for lag in range(1, lags + 1):
+                # Differenced L{lag}.y at period j.
+                # For j-lag == 0 the pre-sample value is treated as 0 (Stata's
+                # _Difference convention: no observation before period 1).
+                if j - lag >= 1:
+                    X_i[j, col] = y_e[j - lag] - y_e[j - lag - 1]
+                elif j - lag == 0:
+                    X_i[j, col] = y_e[0]
+                else:
+                    X_i[j, col] = 0.0
+                col += 1
+            for c in x_cols:
+                X_i[j, col] = xs[c][j] - xs[c][j - 1]
+                col += 1
+            Y_i[j] = y_e[j] - y_e[j - 1]
+
+        # Full T × L Z matrix (same collapsed instrument layout as estimation).
+        Z_i = np.zeros((T_i, L_ar))
+        for j in range(1, T_i):
+            col = 0
+            for lag in depths:
+                idx = j - lags - lag
+                if idx >= 0:
+                    Z_i[j, col] = y_e[idx]
+                col += 1
+            for gmm_c in gmm_cols:
+                for lag in depths:
+                    if j - lag >= 0:
+                        Z_i[j, col] = xs[gmm_c][j - lag]
+                    col += 1
+            for iv_c in iv_cols:
+                Z_i[j, col] = xs[iv_c][j] - xs[iv_c][j - 1]
+                col += 1
+
+        # Full residual: (Y - X·b) with position 0 hard-zeroed.
+        e_full = Y_i - X_i @ b
+        # Zero out periods t < min_j — these are not usable equations
+        # (no GMM instruments available), matching Stata's _ARTests convention.
+        e_full[:min_j] = 0.0
+        X_i[:min_j] = 0.0
+        Z_i[:min_j] = 0.0
+        e_by_entity[e_val] = e_full
+        Z_by_entity[e_val] = Z_i
+        X_by_entity[e_val] = X_i
+        T_by_entity[e_val] = T_i
+
+    # Pass PRE-small V (pV_ar) and POST-small sig2 to _AR tests,
+    # matching Stata's _ARTests operand timing (Mata 549 vs 614).
     ar1, ar2 = _ar_test(
         e_by_entity, Z_by_entity, X_by_entity, T_by_entity,
-        step, robust, est["m2VZXA"], est["pV"], est["sig2"],
+        step, robust, est["m2VZXA"], est["pV_ar"], est["sig2"],
     )
 
     from open_econs.core.panel_results import ArellanoBondResult
