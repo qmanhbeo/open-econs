@@ -10,11 +10,9 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (v0.6.3):** correctness fixes — Cragg-Donald Wald F-stat
-> for multi-endogenous IV, FE intercept stripping by name, IK bandwidth for
-> RDD, Windmeijer two-step SE correction, collapsed instruments for AB,
-> honest staggered-DiD labeling, vectorized within-transform, plus all v0.6.2
-> features.
+> **Current version (v0.6.4):** Stata-parity test suite — 27 hand-written
+> `.do` files with committed `.dta` fixtures, dual-mode execution (live Stata
+> or CI fallback), FE df correction, within R² fix, plus all v0.6.3 features.
 
 ## Quick Start
 

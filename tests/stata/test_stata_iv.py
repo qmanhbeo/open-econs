@@ -9,34 +9,24 @@ import pytest
 
 import open_econs as oe
 
-from .stata_runner import run_do, stata_available, DO_DIR
-
-pytestmark = pytest.mark.skipif(
-    not stata_available(), reason="StataMP not found"
-)
-
-
-def _stata(label: str) -> dict[str, float]:
-    run_do(label)
-    df = pd.read_stata(DO_DIR / f"{label}.dta")
-    return dict(zip(df["name"], df["value"]))
+from .stata_runner import read_stata
 
 
 class TestIVBasic:
     @pytest.fixture(autouse=True)
     def _run(self, df_iv):
-        self.s = _stata("iv_basic")
+        self.s = read_stata("iv_basic")
         self.oe_r = oe.iv("y ~ x2 | x ~ z", data=df_iv)
 
     def test_coefficients(self):
         npt.assert_allclose(self.oe_r.coefficients.values,
                             [self.s["b_int"], self.s["b_x2"], self.s["b_x"]],
-                            rtol=1e-6)
+                            rtol=1e-7)
 
     def test_standard_errors(self):
         npt.assert_allclose(self.oe_r.std_errors.values,
                             [self.s["se_int"], self.s["se_x2"], self.s["se_x"]],
-                            rtol=1e-6)
+                            rtol=1e-7)
 
     def test_nobs(self):
         assert self.oe_r.nobs == int(self.s["N"])

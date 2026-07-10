@@ -1,7 +1,11 @@
 """Shared fixtures for Stata parity tests.
 
-Every test in this directory is skipped automatically when StataMP
-is not installed on the machine.
+Dual-mode behaviour:
+  - If StataMP is installed locally, .do files are re-run and .dta files
+    regenerated before each test.
+  - If StataMP is absent (e.g. CI), the committed .dta fixtures are used.
+  - A drift check fails the test if a .do file is newer than its .dta,
+    catching stale fixtures when someone edits a .do but forgets to regenerate.
 
 Fixtures are fixed CSV datasets committed to tests/stata/fixtures/.
 Both Python (open-econs) and Stata operate on the exact same data.
@@ -12,13 +16,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from .stata_runner import stata_available, FIXTURES_DIR
-
-# ── skip-all marker ──────────────────────────────────────────────────
-pytestmark = pytest.mark.skipif(
-    not stata_available(),
-    reason="StataMP not found – skipping parity tests",
-)
+from .stata_runner import FIXTURES_DIR
 
 
 def _load_csv(name: str) -> pd.DataFrame:

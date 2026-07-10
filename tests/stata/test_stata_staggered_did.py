@@ -2,28 +2,19 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 
 import open_econs as oe
 
-from .stata_runner import run_do, stata_available, DO_DIR
-
-pytestmark = pytest.mark.skipif(
-    not stata_available(), reason="StataMP not found"
-)
-
-
-def _stata(label: str) -> dict[str, float]:
-    run_do(label)
-    df = pd.read_stata(DO_DIR / f"{label}.dta")
-    return dict(zip(df["name"], df["value"]))
+from .stata_runner import read_stata
 
 
 class TestStaggeredDiD:
     @pytest.fixture(autouse=True)
     def _run(self, df_panel):
-        self.s = _stata("staggered_did")
+        self.s = read_stata("staggered_did")
         df = df_panel.copy()
         # Create binary treatment indicator (on from treatment period onward)
         # Match the Stata .do: entities 10-19 treat at t=3, entities 20+ treat at t=5
@@ -34,5 +25,5 @@ class TestStaggeredDiD:
                                      time="time", treatment="treat")
 
     def test_att(self):
-        # OLS-based approx vs doubly-robust csdid → relaxed tolerance
+        # OLS-based approx vs doubly-robust csdid → fundamentally different
         assert abs(self.oe_r.att - self.s["ATT"]) < 1.0

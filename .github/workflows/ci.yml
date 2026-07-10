@@ -34,5 +34,8 @@ jobs:
       - name: Run tests
         run: python -m pytest tests/ -v --tb=short
 
+      # Stata parity tests (tests/stata/) run in fallback mode on CI:
+      # no StataMP available, so committed .dta fixtures are used directly.
+      # A drift check fails the build if any .do file is newer than its .dta.
       - name: Run tests with coverage
         run: python -m pytest tests/ --cov=open_econs --cov-report=term-missing
