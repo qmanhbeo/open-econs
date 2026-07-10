@@ -10,13 +10,12 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (v0.6.7):** Stata-parity test suite — 30 hand-written
+> **Current version (v0.6.8):** Stata-parity test suite — 30 hand-written
 > `.do` files with committed `.dta` fixtures, dual-mode execution (live Stata
-> or CI fallback). **Oaxaca decomposition now matches Stata's `oaxaca` to
-> machine precision** (two-fold `pooled`, three-fold `threefold`, and all
-> `reference` types: pooled, omega, group1, group2, custom weight). Three
-> Stata-parity tests verify the aggregate components. 96 Oaxaca tests total,
-> all passing.
+> or CI fallback). **RDD now uses rdrobust backend** with CCT bandwidth and
+> cluster-robust SEs; built-in fallback (IK bandwidth, NN/HC variance) available
+> without extra dependencies. **event_study()** now gracefully falls back to the
+> first available period when the specified `omitted_period` is not in the data.
 
 ## Why open-econs?
 

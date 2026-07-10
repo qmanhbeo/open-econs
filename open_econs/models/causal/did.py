@@ -478,6 +478,10 @@ def event_study(
     data = data.copy()
     data[f"{treatment}_event_cat"] = data[event_col].astype("category")
 
+    unique_periods = sorted(data[event_col].dropna().unique())
+    if omitted_period not in unique_periods:
+        omitted_period = unique_periods[0]
+
     cov_rhs = _covariates_excluding(rhs, treatment, post)
     event_fml = f"{dep_var} ~ C({treatment}_event_cat, Treatment({omitted_period}))"
     if cov_rhs:

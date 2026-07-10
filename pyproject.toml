@@ -1,6 +1,6 @@
 [project]
 name = "open-econs"
-version = "0.6.6"
+version = "0.6.8"
 description = "The scikit-learn of empirical economics."
 requires-python = ">=3.10"
 dependencies = [
@@ -17,6 +17,7 @@ dependencies = [
 dev = ["pytest>=8.0", "pytest-cov", "hypothesis>=6.0"]
 lint = ["mypy>=1.8", "ruff>=0.3"]
 plot = ["matplotlib>=3.8"]
+rd = ["rdrobust>=2.0"]
 
 [project.urls]
 Homepage = "https://github.com/qmanhbeo/open-econs"

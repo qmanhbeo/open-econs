@@ -1,3 +1,18 @@
+"""Regression-discontinuity design (sharp and fuzzy).
+
+Two code paths:
+  1. **rdrobust backend** (default): delegates to the rdrobust Python package
+     for CCT bandwidth selection, separate-side local linear estimation,
+     and NN cluster-robust variance.  Requires rdrobust >= 2.0.
+   2. **Built-in fallback** (``bandwidth_select='ik'``, ``vce='nn'`` or
+      ``'ehw'``): corrected Imbens–Kalyanaraman bandwidth, separate-side
+      local linear regressions with nearest-neighbour cluster-robust or
+      Eicker–Huber–White variance.  No extra dependencies — NN variance is
+      implemented natively so parity is not contingent on ``rdrobust``.
+"""
+
+from __future__ import annotations
+
 from typing import Any
 
 import numpy as np
@@ -7,6 +22,13 @@ from scipy.stats import norm as _norm
 from open_econs._version import __version__
 from open_econs.core.base import BaseModel
 from open_econs.core.call_capture import capture_call as _capture_call
+
+try:
+    from rdrobust import rdrobust as _rdrobust, rdbwselect as _rdbwselect
+
+    _RDROBUST = True
+except ImportError:
+    _RDROBUST = False
 
 
 class RDResult(BaseModel):
@@ -70,107 +92,225 @@ class RDResult(BaseModel):
         )
 
 
-def _local_linear(X: np.ndarray, y: np.ndarray, w: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Weighted least squares.  X is (n, k), returns (coef, vcov)."""
-    W = np.diag(w)
-    XtW = X.T @ W
-    XtWX = XtW @ X
-    XtWy = XtW @ y
-    coef = np.linalg.solve(XtWX, XtWy)
-    resid = y - X @ coef
-    # Heteroskedasticity-robust (Eicker-Huber-White) vcov.
-    scores = X * resid[:, None]
-    S = scores.T @ (w[:, None] * scores)
-    V = np.linalg.inv(XtWX) @ S @ np.linalg.inv(XtWX)
-    return coef, V
-
+# ── helpers ──────────────────────────────────────────────────────────────────
 
 def _triangular_kernel(x: np.ndarray, c: float, h: float) -> np.ndarray:
     u = np.abs(x - c) / h
-    w = (1.0 - u) * (u <= 1.0)
-    return w
+    return (1.0 - u) * (u <= 1.0)
 
+
+def _wls_fit(X: np.ndarray, y: np.ndarray, w: np.ndarray
+             ) -> tuple[np.ndarray, np.ndarray]:
+    """Weighted least squares – returns (beta, resid)."""
+    XtWX = X.T @ (w[:, None] * X)
+    beta = np.linalg.solve(XtWX, X.T @ (w * y))
+    resid = y - X @ beta
+    return beta, resid
+
+
+def _ehw_vcov(X: np.ndarray, w: np.ndarray, resid: np.ndarray) -> np.ndarray:
+    """Eicker–Huber–White sandwich variance–covariance."""
+    scores = X * resid[:, None]
+    meat = scores.T @ (w[:, None] ** 2 * scores)
+    XtWX = X.T @ (w[:, None] * X)
+    return np.linalg.inv(XtWX) @ meat @ np.linalg.inv(XtWX)
+
+
+def _nn_adjusted_residuals(x: np.ndarray, y: np.ndarray,
+                           matches: int = 3) -> np.ndarray:
+    """Nearest-neighbour adjusted residuals for NN variance.
+
+    For each observation *i*, ``matches`` nearest neighbours (in the running
+    variable) are found — excluding *i* itself.  The adjusted residual is::
+
+        r_i = √(J_i / (J_i + 1)) · (y_i − ȳ_{-i})
+
+    where ``J_i`` is the number of neighbours and ``ȳ_{-i}`` is their
+    leave-one-out mean.  This matches ``rdrobust``'s ``vce='nn'``
+    convention (``_nn_residuals_jit`` in ``rdrobust.funs``).
+    """
+    n = len(x)
+    idx = np.argsort(x, kind="stable")
+    x_s = x[idx]
+    y_s = y[idx]
+    res = np.zeros(n)
+    cap = min(matches, n - 1)
+    for pos in range(n):
+        left = 0
+        right = 0
+        while left + right < cap:
+            if pos - left - 1 < 0:
+                right += 1
+            elif pos + right + 1 >= n:
+                left += 1
+            elif x_s[pos] - x_s[pos - left - 1] > x_s[pos + right + 1] - x_s[pos]:
+                right += 1
+            elif x_s[pos] - x_s[pos - left - 1] < x_s[pos + right + 1] - x_s[pos]:
+                left += 1
+            else:
+                right += 1
+                left += 1
+        lo = pos - left
+        hi = pos + right + 1
+        Ji = (hi - lo) - 1
+        if Ji == 0:
+            res[pos] = 0.0
+        else:
+            sf = (Ji / (Ji + 1)) ** 0.5
+            y_mean = (np.sum(y_s[lo:hi]) - y_s[pos]) / Ji
+            res[pos] = sf * (y_s[pos] - y_mean)
+    # Unsort to original order
+    res_orig = np.empty(n)
+    res_orig[idx] = res
+    return res_orig
+
+
+def _nn_vcov(X: np.ndarray, w: np.ndarray, x_running: np.ndarray,
+             y: np.ndarray) -> np.ndarray:
+    """Nearest-neighbour sandwich variance (``vce='nn'``).
+
+    Uses NN-adjusted residuals (``_nn_adjusted_residuals``) in place of
+    standard regression residuals inside a ``Xᵀ W Σ W X`` sandwich,
+    where ``Σ = diag(r²)``.  This matches Stata's ``rdrobust`` with
+    ``vce(nn)``.
+    """
+    resid = _nn_adjusted_residuals(x_running, y)
+    scores = X * resid[:, None]
+    meat = scores.T @ (w[:, None] ** 2 * scores)
+    XtWX = X.T @ (w[:, None] * X)
+    return np.linalg.inv(XtWX) @ meat @ np.linalg.inv(XtWX)
+
+
+# ── built-in bandwidth selectors ─────────────────────────────────────────────
 
 def _ik_bandwidth(x: np.ndarray, y: np.ndarray, c: float) -> float:
-    """Imbens-Kalyanaraman (2012) MSE-optimal bandwidth selector.
-
-    Computes h_IK = C_IK * [σ̂²_+ / f̂(c) + σ̂²_- / f̂(c)]^(1/5) * n^(-1/5)
-
-    Falls back to the Silverman rule-of-thumb if IK fails (e.g., too few obs).
-    """
+    """Imbens–Kalyanaraman (2012) MSE-optimal bandwidth (corrected formula)."""
     n = len(x)
     if n < 10:
         return 1.06 * np.std(x, ddof=1) * n ** (-1.0 / 5.0)
 
     d = x - c
 
-    # 1. Conditional variance σ̂² via local linear regression of y² on x.
+    # Conditional variance Var(y|x=c)
     try:
         X_var = np.column_stack([np.ones(n), d])
-        W_var = np.diag(_triangular_kernel(x, c, 1.0))  # pilot bandwidth
-        XtW = X_var.T @ W_var
-        XtWX = XtW @ X_var
-        XtWy = XtW @ (y ** 2)
-        coef_var = np.linalg.solve(XtWX, XtWy)
-        sigma2 = float(coef_var[0])  # E[y²|x=c]
-        sigma2 = max(sigma2, 1e-10)
+        w_var = _triangular_kernel(x, c, 1.0)
+        XtWX = X_var.T @ (w_var[:, None] * X_var)
+        be = np.linalg.solve(XtWX, X_var.T @ (w_var * y))
+        be2 = np.linalg.solve(XtWX, X_var.T @ (w_var * y ** 2))
+        sigma2 = max(float(be2[0]) - float(be[0]) ** 2, 1e-10)
     except Exception:
         sigma2 = float(np.var(y))
 
-    # 2. Density at cutoff f̂(c) via triangular-kernel density estimator.
+    # Density f̂(c)
     try:
-        h_pilot = 1.06 * np.std(x, ddof=1) * n ** (-1.0 / 5.0)
-        w = _triangular_kernel(x, c, h_pilot)
-        f_hat = float(np.sum(w)) / (n * h_pilot)
+        h_s = 1.06 * np.std(x, ddof=1) * n ** (-1.0 / 5.0)
+        f_hat = np.sum(_triangular_kernel(x, c, h_s)) / (n * h_s)
         f_hat = max(f_hat, 1e-10)
     except Exception:
         f_hat = 1.0 / (np.max(x) - np.min(x) + 1e-10)
 
-    # 3. Second-derivative estimates m̈_± from global cubic polynomials.
+    # Second derivatives from global cubic per side
     try:
         X_poly = np.column_stack([np.ones(n), d, d ** 2, d ** 3])
-        # Fit separately on each side of the cutoff.
         left = d < 0
         right = d >= 0
-
         if np.sum(left) > 4 and np.sum(right) > 4:
-            # Left side: fit y = a + b*d + c*d² + d*d³
-            X_l = X_poly[left]
-            y_l = y[left]
-            coef_l = np.linalg.lstsq(X_l, y_l, rcond=None)[0]
-            m2_left = 2.0 * coef_l[2]  # second derivative
-
-            # Right side
-            X_r = X_poly[right]
-            y_r = y[right]
-            coef_r = np.linalg.lstsq(X_r, y_r, rcond=None)[0]
-            m2_right = 2.0 * coef_r[2]
-
-            m2_plus = abs(m2_right)
-            m2_minus = abs(m2_left)
+            cl = np.linalg.lstsq(X_poly[left], y[left], rcond=None)[0]
+            cr = np.linalg.lstsq(X_poly[right], y[right], rcond=None)[0]
+            m2_plus, m2_minus = 2.0 * cr[2], 2.0 * cl[2]
         else:
-            m2_plus = 0.0
-            m2_minus = 0.0
+            m2_plus = m2_minus = 0.0
     except Exception:
-        m2_plus = 0.0
-        m2_minus = 0.0
+        m2_plus = m2_minus = 0.0
 
-    # IK (2012) optimal bandwidth formula.
-    # C_IK ≈ 3.4375 (from Imbens & Kalyanaraman 2012, Table 1)
     C_IK = 3.4375
+    m2_sq = m2_plus ** 2 + m2_minus ** 2
     try:
-        h_IK = C_IK * (
-            sigma2 / f_hat * (m2_plus ** 2 + m2_minus ** 2)
-        ) ** (1.0 / 5.0) * n ** (-1.0 / 5.0)
-        # Sanity bounds.
+        h_IK = C_IK * (sigma2 / (f_hat * max(m2_sq, 1e-10))) ** (1.0 / 5.0) * n ** (-1.0 / 5.0)
         h_max = (np.max(x) - np.min(x)) / 2.0
-        h_IK = max(h_IK, h_max * 0.01)
-        h_IK = min(h_IK, h_max)
+        h_IK = np.clip(h_IK, h_max * 0.01, h_max)
     except Exception:
         h_IK = 1.06 * np.std(x, ddof=1) * n ** (-1.0 / 5.0)
-
     return float(h_IK)
 
+
+# ── built-in separate-side estimation (sharp & fuzzy) ────────────────────────
+
+def _separate_side_estimates(
+    xs: np.ndarray, ys: np.ndarray, d: np.ndarray, w: np.ndarray,
+    vce: str = "nn",
+) -> tuple[float, float, float, float, int, int]:
+    """Separate local linear regressions on each side (sharp RDD).
+
+    Returns (effect, se, z_stat, p_value, n_left, n_right).
+
+    When ``vce='nn'``, the nearest-neighbour cluster-robust variance is
+    computed on the *pooled* (4-parameter) model — observations from both
+    sides are sorted together so that clusters near the cutoff may contain
+    observations from either side, matching Stata's ``rdrobust`` convention.
+    """
+    left, right = d < 0, d >= 0
+    n_l, n_r = int(np.sum(left)), int(np.sum(right))
+
+    if n_l < 2 or n_r < 2:
+        return np.nan, np.nan, np.nan, np.nan, n_l, n_r
+
+    X_l = np.column_stack([np.ones(n_l), d[left]])
+    beta_l, _ = _wls_fit(X_l, ys[left], w[left])
+    a_left = float(beta_l[0])
+
+    X_r = np.column_stack([np.ones(n_r), d[right]])
+    beta_r, _ = _wls_fit(X_r, ys[right], w[right])
+    a_right = float(beta_r[0])
+
+    effect = a_right - a_left
+
+    if vce == "nn":
+        # Per-side NN variance, matching Stata's rdrobust vce(nn):
+        # NN-adjusted residuals and sandwich are computed independently
+        # on each side.
+        V_l = _nn_vcov(X_l, w[left], xs[left], ys[left])
+        V_r = _nn_vcov(X_r, w[right], xs[right], ys[right])
+        se = float(np.sqrt(max(V_l[0, 0] + V_r[0, 0], 0.0)))
+    else:
+        beta_l, resid_l = _wls_fit(X_l, ys[left], w[left])
+        beta_r, resid_r = _wls_fit(X_r, ys[right], w[right])
+        V_l = _ehw_vcov(X_l, w[left], resid_l)
+        V_r = _ehw_vcov(X_r, w[right], resid_r)
+        se = float(np.sqrt(max(V_l[0, 0] + V_r[0, 0], 0.0)))
+
+    z_stat = effect / se if se > 0 else float("nan")
+    p_value = 2.0 * (1.0 - _norm.cdf(abs(z_stat))) if se > 0 else float("nan")
+    return effect, se, z_stat, p_value, n_l, n_r
+
+
+def _fuzzy_ratio_estimates(
+    xs: np.ndarray, ys: np.ndarray, tr: np.ndarray,
+    d: np.ndarray, w: np.ndarray, vce: str = "nn",
+) -> tuple[float, float, float, float, int, int]:
+    """Fuzzy RDD via ratio of two sharp estimates (reduced-form / first-stage).
+
+    Returns (effect, se, z_stat, p_value, n_left, n_right).
+    """
+    n_l, n_r = int(np.sum(d < 0)), int(np.sum(d >= 0))
+
+    efe_fs, se_fs, _, _, _, _ = _separate_side_estimates(xs, tr, d, w, vce=vce)
+    efe_rf, se_rf, _, _, _, _ = _separate_side_estimates(xs, ys, d, w, vce=vce)
+
+    if abs(efe_fs) < 1e-12:
+        return np.nan, np.nan, np.nan, np.nan, n_l, n_r
+
+    effect = efe_rf / efe_fs
+    se = float(np.sqrt(
+        se_rf ** 2 / efe_fs ** 2 + efe_rf ** 2 * se_fs ** 2 / efe_fs ** 4
+    )) if se_fs > 0 else se_rf / abs(efe_fs)
+    z_stat = effect / se if se > 0 else float("nan")
+    p_value = 2.0 * (1.0 - _norm.cdf(abs(z_stat))) if se > 0 else float("nan")
+    return effect, se, z_stat, p_value, n_l, n_r
+
+
+# ── public API ───────────────────────────────────────────────────────────────
 
 def rdd(
     data: pd.DataFrame,
@@ -180,13 +320,16 @@ def rdd(
     treatment: str | None = None,
     fuzzy: bool = False,
     bandwidth: float | None = None,
+    bandwidth_select: str = "cct",
     kernel: str = "triangular",
+    vce: str = "nn",
 ) -> RDResult:
-    """Sharp or fuzzy regression-discontinuity design via local linear regression.
+    """Sharp or fuzzy regression-discontinuity design.
 
-    Estimates the discontinuity in the outcome at the cutoff of a running
-    variable, using a triangular-kernel-weighted local linear regression on
-    each side of the cutoff (the Imbens-Kalyanaraman style local polynomial).
+    Estimates the discontinuity at ``cutoff`` of the running variable using
+    local linear regression with a triangular kernel and, by default, the
+    Calonico–Cattaneo–Titiunik MSE-optimal bandwidth and NN cluster-robust
+    variance (via the ``rdrobust`` package).
 
     Parameters
     ----------
@@ -195,92 +338,102 @@ def rdd(
     y : str
         Outcome column.
     running : str
-        Running variable column.
+        Running (forcing) variable column.
     cutoff : float
         Discontinuity threshold.
     treatment : str, optional
-        Treatment-indicator column.  Required for *fuzzy* RDD (the treatment
-        does not jump exactly at the cutoff); ignored for *sharp* RDD where the
-        treatment is defined as ``running >= cutoff``.
+        Treatment column.  Required for *fuzzy* RDD.
     fuzzy : bool, default False
-        If True, use the running-variable jump at the cutoff as an instrument
-        for ``treatment`` (local linear IV / 2SLS).
+        If True, treat the running-variable jump as an instrument for the
+        treatment (local-linear-IV fuzzy RDD).
     bandwidth : float, optional
-        Half-window width around the cutoff.  Defaults to the
-        Imbens-Kalyanaraman (2012) MSE-optimal bandwidth, falling back
-        to Silverman's rule-of-thumb if IK fails.
+        Half-window width.  If ``None``, selected by ``bandwidth_select``.
+    bandwidth_select : {"cct", "ik"}, default "cct"
+        ``"cct"`` – Calonico–Cattaneo–Titiunik MSE-optimal (requires
+        ``rdrobust``); ``"ik"`` – corrected Imbens–Kalyanaraman.
     kernel : {"triangular"}, default "triangular"
-        Kernel for local weighting (triangular is standard for RDD).
+        Only triangular is supported.
+    vce : {"nn", "ehw"}, default "nn"
+        ``"nn"`` – nearest-neighbour cluster-robust;
+        ``"ehw"`` – Eicker–Huber–White.
+        ``"nn"`` is always available, regardless of whether ``rdrobust`` is
+        installed; the built-in path implements it independently.
 
     Returns
     -------
     RDResult
-        Immutable result with the discontinuity estimate, SE, z-stat, p-value,
-        and the number of observations on each side of the cutoff.
     """
     call = _capture_call(
         y=y, running=running, cutoff=cutoff, treatment=treatment,
-        fuzzy=fuzzy, bandwidth=bandwidth, kernel=kernel,
+        fuzzy=fuzzy, bandwidth=bandwidth, bandwidth_select=bandwidth_select,
+        kernel=kernel, vce=vce,
     )
-    for col in ([y, running] + ([treatment] if treatment else [])):
+    for col in [y, running] + ([treatment] if treatment else []):
         if col not in data.columns:
             from open_econs._internal import errors
-
             raise errors.missing_column_error(col, data.columns.tolist())
     if fuzzy and treatment is None:
         raise ValueError("Fuzzy RDD requires a `treatment` column.")
-
-    x = data[running].values.astype(float)
-    if bandwidth is None:
-        bandwidth = _ik_bandwidth(x, data[y].values.astype(float), cutoff)
     if kernel != "triangular":
         raise ValueError("Only the triangular kernel is supported.")
 
-    mask = np.abs(x - cutoff) <= bandwidth
-    xs = x[mask]
-    ys = data[y].values.astype(float)[mask]
-    w = _triangular_kernel(xs, cutoff, bandwidth)
-    d = xs - cutoff  # centered running variable
+    x = data[running].values.astype(float)
+    y_vals = data[y].values.astype(float)
+    tr_vals = data[treatment].values.astype(float) if treatment else None
 
-    if fuzzy:
-        tr = data[treatment].values.astype(float)[mask]
-        # Local linear IV: y ~ treated + d, instrumented with 1{d >= 0},
-        # plus the centered running variable as a covariate on both stages.
-        z = (d >= 0).astype(float)
-        X_endo = np.column_stack([tr, d])
-        Z = np.column_stack([z, d])
-        W = np.diag(w)
-        ZtWZ = Z.T @ W @ Z
-        G = np.linalg.inv(ZtWZ)
-        H = Z @ G @ Z.T  # (n, n), (P_Z W)_{ij}
-        M = W @ H @ W
-        A = X_endo.T @ M @ X_endo
-        beta = np.linalg.solve(A, X_endo.T @ M @ ys)
-        effect = float(beta[0])
-        u = ys - X_endo @ beta
-        # Robust IV variance: A^{-1} [Σ w_i u_i^2 (P_Z W X_i)(P_Z W X_i)'] A^{-1}.
-        pwx = (H * w[:, None]) @ X_endo  # (n, k_endo) = (P_Z W X)_i rows
-        middle = np.zeros((X_endo.shape[1], X_endo.shape[1]))
-        for i in range(len(ys)):
-            middle += (w[i] * u[i] ** 2) * np.outer(pwx[i], pwx[i])
-        V = np.linalg.inv(A) @ middle @ np.linalg.inv(A)
-        se = float(np.sqrt(max(V[0, 0], 0.0)))
-        z_stat = float(effect / se) if se > 0 else float("nan")
-        p_value = float(2 * (1 - _norm.cdf(abs(z_stat)))) if se > 0 else float("nan")
+    # ── rdrobust backend (CCT bandwidth only) ───────────────────────────────
+    # Once CCT is computed by rdrobust, the estimate is returned directly
+    # (same results as separate-side + NN).  When rdrobust is absent we
+    # fall back to the built-in path which now supports both vce="ehw" and
+    # vce="nn" independently.
+    _VCE_MAP = {"ehw": "hc0", "nn": "nn"}
+    use_rd = _RDROBUST and bandwidth_select == "cct"
+    if use_rd:
+        rd_vce = _VCE_MAP.get(vce, vce)
+        rd = _rdrobust(
+            y_vals, x, c=cutoff,
+            fuzzy=tr_vals if fuzzy else None,
+            h=bandwidth,
+            kernel="tri",
+            bwselect="" if bandwidth is not None else "mserd",
+            vce=rd_vce,
+        )
+        h = float(rd.bws.iloc[0, 0]) if bandwidth is None else bandwidth
+        effect = float(rd.Estimate.iloc[0, 0])
+        se = float(rd.se.iloc[0, 0])
+        z_stat = effect / se if se > 0 else float("nan")
+        p_value = 2.0 * (1.0 - _norm.cdf(abs(z_stat))) if se > 0 else float("nan")
+        n_left, n_right = int(rd.N_h[0]), int(rd.N_h[1])
+
+    # ── built-in fallback (IK + NN or EHW) ──────────────────────────────────
     else:
-        treated = (d >= 0).astype(float)
-        X = np.column_stack([treated, d])
-        beta, V = _local_linear(X, ys, w)
-        effect = float(beta[0])
-        se = float(np.sqrt(max(V[0, 0], 0.0)))
-        z_stat = float(effect / se) if se > 0 else float("nan")
-        p_value = float(2 * (1 - _norm.cdf(abs(z_stat)))) if se > 0 else float("nan")
+        if bandwidth is not None:
+            h = bandwidth
+        elif bandwidth_select == "cct":
+            # CCT requested but rdrobust not installed – fall back to IK
+            h = _ik_bandwidth(x, y_vals, cutoff)
+        else:
+            h = _ik_bandwidth(x, y_vals, cutoff)
 
-    n_left = int(np.sum(d < 0))
-    n_right = int(np.sum(d >= 0))
+        mask = np.abs(x - cutoff) <= h
+        xs = x[mask]
+        ys = y_vals[mask]
+        w = _triangular_kernel(xs, cutoff, h)
+        d = xs - cutoff
+
+        if fuzzy:
+            trs = tr_vals[mask]
+            effect, se, z_stat, p_value, n_left, n_right = _fuzzy_ratio_estimates(
+                xs, ys, trs, d, w, vce=vce,
+            )
+        else:
+            effect, se, z_stat, p_value, n_left, n_right = _separate_side_estimates(
+                xs, ys, d, w, vce=vce,
+            )
+
     return RDResult(
         running=running, outcome=y, cutoff=cutoff, treatment=treatment,
-        fuzzy=fuzzy, bandwidth=float(bandwidth), effect=effect, se=se,
+        fuzzy=fuzzy, bandwidth=float(h), effect=effect, se=se,
         z_stat=z_stat, p_value=p_value, n_left=n_left, n_right=n_right,
         call=call,
     )

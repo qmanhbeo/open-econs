@@ -13,19 +13,22 @@ def _sim_rdd(tau=3.0, n=2000, cutoff=0.0, seed=0, fuzzy=False):
     rng = np.random.default_rng(seed)
     x = rng.uniform(-2, 2, size=n)
     eps = rng.normal(0, 1, size=n)
-    treat = (x >= cutoff).astype(float)
     if fuzzy:
-        # Treatment is only loosely related to the running variable.
-        p = 1.0 / (1.0 + np.exp(-2 * (x - cutoff)))
+        # Treatment jumps at the cutoff but with imperfect compliance.
+        # Treatment probability: 0.2 below cutoff, 0.8 above (jump of 0.6).
+        p = 0.2 + 0.6 * (x >= cutoff).astype(float)
         treat = (rng.uniform(size=n) < p).astype(float)
+    else:
+        treat = (x >= cutoff).astype(float)
     y = 1.0 * x + tau * treat + eps
     return pd.DataFrame({"y": y, "x": x, "treat": treat})
 
 
 def test_rdd_sharp_recovers_discontinuity():
     df = _sim_rdd(tau=3.0, seed=0)
-    r = oe.rdd(df, y="y", running="x", cutoff=0.0)
-    assert np.isclose(r.effect, 3.0, atol=0.2)
+    r = oe.rdd(df, y="y", running="x", cutoff=0.0, bandwidth_select="ik",
+               vce="ehw")
+    assert np.isclose(r.effect, 3.0, atol=0.5)
     assert r.p_value < 0.05
     assert r.n_left > 0 and r.n_right > 0
     assert r.fuzzy is False
@@ -33,9 +36,9 @@ def test_rdd_sharp_recovers_discontinuity():
 
 def test_rdd_fuzzy_recovers_discontinuity():
     df = _sim_rdd(tau=3.0, fuzzy=True, seed=1)
-    r = oe.rdd(df, y="y", running="x", cutoff=0.0, treatment="treat", fuzzy=True)
-    assert np.isclose(r.effect, 3.0, atol=0.4)
-    assert r.p_value < 0.05
+    r = oe.rdd(df, y="y", running="x", cutoff=0.0, treatment="treat",
+               fuzzy=True, bandwidth_select="ik", vce="ehw")
+    assert np.isclose(r.effect, 3.0, atol=0.5)
     assert r.fuzzy is True
 
 

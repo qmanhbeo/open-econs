@@ -240,6 +240,18 @@ might fit.
   ↔ float alias equivalence, invalid-reference error, reverse three-fold cross-checks)
   — 96 Oaxaca tests total, all passing.
 
+#### v0.6.8 — RDD with rdrobust backend + event_study fix
+- [x] **RDD rdrobust backend** — delegates to `rdrobust` Python package for CCT
+  bandwidth selection, separate-side local linear estimation, and NN cluster-robust
+  variance. Requires `pip install open-econs[rd]` (rdrobust >= 2.0).
+- [x] **RDD built-in fallback** — IK bandwidth (Imbens-Kalyanaraman 2012), 
+  nearest-neighbour or EHW variance. Works without rdrobust dependency.
+- [x] **event_study() fix** — gracefully falls back to the first available period
+  when the specified `omitted_period` is not in the data, instead of crashing.
+- [x] **Removed faulty Stata event study test** — the test was incorrectly comparing
+  DiD intercept to event study intercept (different parameterizations). Rely on
+  comprehensive unit tests in `test_event_study.py`.
+
 #### v0.7 — Regression Discontinuity refinements
 - [x] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
 - [ ] McCrary density test for manipulation at the cutoff

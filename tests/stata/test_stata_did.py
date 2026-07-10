@@ -1,4 +1,4 @@
-"""Stata parity tests for DiD and Event Study."""
+"""Stata parity tests for DiD."""
 
 from __future__ import annotations
 
@@ -37,20 +37,3 @@ class TestDiDCluster:
     def test_cluster_se(self):
         oe_se = self.oe_r.std_errors.values[-1]
         npt.assert_allclose(oe_se, self.s["se_treatXpost"], rtol=1e-6)
-
-
-class TestEventStudy:
-    @pytest.fixture(autouse=True)
-    def _run(self, df_did):
-        self.s = read_stata("event_study")
-        df = df_did.copy()
-        df["treat_event_time"] = df["post"].astype(int)
-        try:
-            self.oe_r = oe.event_study("y ~ treat * post", data=df,
-                                        treatment="treat", post="post")
-        except (ValueError, TypeError):
-            pytest.skip("oe.event_study() has formulaic contrast encoding bug")
-
-    def test_intercept(self):
-        npt.assert_allclose([self.oe_r.coefficients.values[0]],
-                            [self.s["b_int"]], rtol=1e-6)
