@@ -300,7 +300,7 @@ def iv(
     else:
         Z_arr = Z_raw
 
-    exog_cols_in_model = [c for c in all_cols if c not in endog_vars and c != "Intercept"]
+    exog_cols_in_model = [c for c in all_cols if c not in endog_vars]
     endog_cols_in_model = [c for c in all_cols if c in endog_vars]
 
     exog_idx = [i for i, c in enumerate(all_cols) if c in exog_cols_in_model]
