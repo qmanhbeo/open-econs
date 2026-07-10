@@ -9,12 +9,72 @@ from scipy.stats import norm as _norm
 from open_econs.core.call_capture import capture_call as _capture_call
 
 
+def _tridiag_h_inv_block(n: int) -> tuple[np.ndarray, np.ndarray]:
+    """Return (diag, off_diag) of H^{-1} for an n×n tridiagonal H.
+
+    H has 2 on the diagonal and -1 on the sub/super-diagonals.
+    Its inverse has the closed form (0-indexed):
+        H^{-1}_{ij} = (min(i,j)+1) * (n-max(i,j)) / (n+1)
+    """
+    diag = np.empty(n)
+    off = np.empty(max(n - 1, 0))
+    np1 = n + 1
+    for i in range(n):
+        diag[i] = (i + 1) * (n - i) / np1
+    for i in range(n - 1):
+        off[i] = (i + 1) * (n - i - 1) / np1
+    return diag, off
+
+
+def _build_h_inv(entity_counts: dict, n_eq: int, eq_entity: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Build the block-diagonal H^{-1} matrix for difference GMM weighting.
+
+    For first-differencing with iid errors, Var[Δe_i] = σ² H_i where each
+    H_i is a tridiagonal (n_i × n_i) matrix with 2 on the diagonal and
+    −1 on the sub/super-diagonals.  This reflects the MA(1) structure
+    that differencing induces.
+
+    Returns (diag, off_diag) of the tridiagonal H^{-1}.
+    """
+    diag = np.zeros(n_eq)
+    off = np.zeros(max(n_eq - 1, 0))
+    pos = 0
+    for ent, n_i in entity_counts.items():
+        if n_i < 1:
+            continue
+        d, o = _tridiag_h_inv_block(n_i)
+        diag[pos: pos + n_i] = d
+        off[pos: pos + len(o)] = o
+        pos += n_i
+    return diag, off
+
+
+def _build_h(entity_counts: dict, n_eq: int, eq_entity: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Build the block-diagonal H matrix (NOT its inverse) for difference GMM.
+
+    Per Roodman (2009) xtabond2 h(3) default: H = M'M + I where M is the
+    first-difference operator.  For usable equations (t >= min_j >= 2),
+    the diagonal is 3 (not 2), because M'M has 2 on diagonal and I adds 1.
+
+    Returns (diag, off_diag) of the tridiagonal H.
+    """
+    diag = np.full(n_eq, 3.0)
+    off = np.full(max(n_eq - 1, 0), -1.0)
+    # Zero out off-diagonals at entity boundaries
+    ent_arr = np.asarray(eq_entity)
+    for k in range(n_eq - 1):
+        if ent_arr[k] != ent_arr[k + 1]:
+            off[k] = 0.0
+    return diag, off
+
+
 def _estimate_gmm(
     Y: np.ndarray,
     X: np.ndarray,
     Z: np.ndarray,
     eq_entity: np.ndarray,
     step: str,
+    robust: bool = False,
 ) -> dict[str, Any]:
     """Arellano-Bond difference GMM with Windmeijer (2005) two-step SEs.
 
@@ -22,6 +82,8 @@ def _estimate_gmm(
     X : (n_eq, p) regressor (differenced) matrix
     Z : (n_eq, L) instrument matrix (0 where instrument unavailable)
     eq_entity : (n_eq,) entity label per equation (defines the moment clusters)
+    robust : if True, use cluster-robust sandwich VCV (G⁻¹ S_g G⁻¹).
+             if False, use classical one-step VCV (σ̂² · G⁻¹).
     """
     n_eq = Y.shape[0]
     N = float(len(np.unique(eq_entity)))
@@ -31,16 +93,34 @@ def _estimate_gmm(
     ZtX = Z.T @ X  # (L, p)
     ZtY = Z.T @ Y  # (L,)
 
+    # Entity-level equation counts (needed for block-diagonal H).
+    from collections import Counter
+    entity_counts = dict(Counter(eq_entity.tolist()))
+
     # GMM moment form (summed over entities, no spurious 1/N scaling):
     #   g_i = X_i' Z_i W Z_i' e_i   (p,)
     #   G   = Sum_i X_i' Z_i W Z_i' X_i
     #   Var(b) = G^{-1} (Sum_i g_i g_i') G^{-1}
-    ZtZ = Z.T @ Z  # (L, L)
+
+    # H-matrix for difference GMM (Roodman xtabond2 h(3) default):
+    # Block-diagonal with tridiagonal (2, -1) blocks reflecting the
+    # MA(1) serial correlation that first-differencing induces.
+    # W = (Z'HZ)^{-1} is the one-step weighting matrix.
+    H_diag, H_off = _build_h(entity_counts, n_eq, eq_entity)
+    # Z' H Z for tridiagonal H:
+    #   diagonal: 2 * Z'Z
+    #   off-diag: -1 * (Z_r' Z_{r+1} + Z_{r+1}' Z_r)
+    ZtHZ = 3.0 * (Z.T @ Z)  # (L, L) diagonal contribution (H has 3 on diag for usable eqs)
+    # Super/sub-diagonal contribution (vectorised), zeroed at entity boundaries
+    ZH_off = Z[:-1] * H_off[:, None]  # (n_eq-1, L) — H_off is -1 within entity, 0 at boundary
+    ZtHZ += ZH_off.T @ Z[1:]  # (L, L)
+    ZtHZ += Z[1:].T @ ZH_off  # (L, L)
+
     if step == "one-step":
-        W = np.linalg.pinv(ZtZ) if L > 0 else np.eye(0)
+        W = np.linalg.pinv(ZtHZ) if L > 0 else np.eye(0)
     else:
-        # One-step estimates drive the efficient two-step weighting matrix.
-        W1 = np.linalg.pinv(ZtZ) if L > 0 else np.eye(0)
+        # Two-step: first step uses h(3)-weighted one-step W.
+        W1 = np.linalg.pinv(ZtHZ) if L > 0 else np.eye(0)
         G1 = ZtX.T @ W1 @ ZtX
         b1 = np.linalg.inv(G1) @ (ZtX.T @ W1 @ ZtY)
         e1 = Y - X @ b1
@@ -53,23 +133,9 @@ def _estimate_gmm(
     b = G_inv @ g_sum
     e = Y - X @ b
 
-    # Entity-clustered sandwich Sum_i g_i g_i' (uncentered).
-    S_g = np.zeros((p, p))
-    for ent in np.unique(eq_entity):
-        mask = eq_entity == ent
-        Zc = Z[mask]
-        Xc = X[mask]
-        ec = e[mask]
-        Zte = Zc.T @ ec
-        XtZ = Xc.T @ Zc
-        gi = XtZ @ W @ Zte
-        S_g += np.outer(gi, gi)
-
-    if step == "two-step":
-        # Windmeijer (2005) small-sample correction for two-step GMM.
-        # V_wind = V_sandwich + (1/N)(D V_sandwich + V_sandwich D' + D G^{-1} D')
-        # where D = -G^{-1} Sum_i (X_i' Z_i W_2 Z_i' X_i G^{-1} g_i).
-        D = np.zeros((p, p))
+    if robust:
+        # Cluster-robust sandwich VCV: V = G⁻¹ S_g G⁻¹
+        S_g = np.zeros((p, p))
         for ent in np.unique(eq_entity):
             mask = eq_entity == ent
             Zc = Z[mask]
@@ -78,15 +144,37 @@ def _estimate_gmm(
             Zte = Zc.T @ ec
             XtZ = Xc.T @ Zc
             gi = XtZ @ W @ Zte
-            D += XtZ @ W @ Zc.T @ Xc @ G_inv @ gi
-        D = -G_inv @ D
+            S_g += np.outer(gi, gi)
 
-        V_sandwich = G_inv @ S_g @ G_inv
-        V = V_sandwich + (1.0 / N) * (
-            D @ V_sandwich + V_sandwich @ D.T + D @ G_inv @ D.T
-        )
+        if step == "two-step":
+            # Windmeijer (2005) small-sample correction for two-step GMM.
+            D = np.zeros((p, p))
+            for ent in np.unique(eq_entity):
+                mask = eq_entity == ent
+                Zc = Z[mask]
+                Xc = X[mask]
+                ec = e[mask]
+                Zte = Zc.T @ ec
+                XtZ = Xc.T @ Zc
+                gi = XtZ @ W @ Zte
+                D += XtZ @ W @ Zc.T @ Xc @ G_inv @ gi
+            D = -G_inv @ D
+
+            V_sandwich = G_inv @ S_g @ G_inv
+            V = V_sandwich + (1.0 / N) * (
+                D @ V_sandwich + V_sandwich @ D.T + D @ G_inv @ D.T
+            )
+        else:
+            V = G_inv @ S_g @ G_inv
     else:
-        V = G_inv @ S_g @ G_inv
+        # Classical (non-robust) one-step VCV: V = σ̂² · G⁻¹
+        # Roodman (2009) / xtabond2: σ̂² = Σê² / (df · (2 - (h==1)))
+        # For h=3 (default difference GMM): factor = 2
+        # df = n_eq - p  (number of equations minus regressors)
+        h_factor = 2.0  # h=3 default: MM' blocks have trace/n ≈ 2
+        df = float(n_eq - p)
+        sig2 = float(e @ e) / (h_factor * df)
+        V = sig2 * G_inv
 
     se = np.sqrt(np.maximum(np.diag(V), 0.0))
 
@@ -136,6 +224,7 @@ def abond(
     step: str = "two-step",
     exogenous: list[str] | None = None,
     collapse: bool = True,
+    robust: bool = False,
 ) -> Any:
     """Arellano-Bond (1991) dynamic panel-data estimator (difference GMM).
 
@@ -170,13 +259,21 @@ def abond(
     step : {"one-step", "two-step"}, default "two-step"
         GMM step.
     exogenous : list of str, optional
-        Regressors that are *strictly* exogenous.  Treated like predetermined
-        regressors here (instrumented with their own deeper lags).
+        Regressors that are *strictly* exogenous (analogous to Stata's
+        ``iv()``).  These are instrumented with their own current-period
+        differenced values rather than deeper lags.  If ``None``, all
+        regressors are treated as predetermined (instrumented with deeper
+        lags).
     collapse : bool, default True
         If True, use collapsed instruments (Roodman 2009): one instrument
-        per lag depth rather than per lag depth × time period.  This reduces
+        per lag depth rather than per lag depth x time period.  This reduces
         instrument proliferation and mitigates the "too many instruments"
         problem that biases two-step SEs downward in long panels.
+    robust : bool, default False
+        If True, use cluster-robust sandwich standard errors (analogous to
+        Stata's ``robust`` option).  If False, use classical GMM standard
+        errors based on σ̂² · (X'Z W Z'X)⁻¹ (the default in Stata's
+        xtabond2 when ``robust`` is not specified).
 
     Returns
     -------
@@ -190,7 +287,7 @@ def abond(
     call = _capture_call(
         formula=formula, entity=entity, time=time, lags=lags,
         max_iv_lag=max_iv_lag, step=step, exogenous=exogenous,
-        collapse=collapse,
+        collapse=collapse, robust=robust,
     )
 
     formula_obj = Formula(formula)
@@ -213,11 +310,17 @@ def abond(
     entities: list[Any] = []
     y_by_e: dict[Any, np.ndarray] = {}
     x_by_e: dict[Any, dict[str, np.ndarray]] = {}
-    for e in pd.unique(ent_sorted):
-        mask = ent_sorted == e
-        entities.append(e)
-        y_by_e[e] = y_sorted[mask]
-        x_by_e[e] = {c: x_sorted[c][mask] for c in x_cols}
+    for e_val in pd.unique(ent_sorted):
+        mask = ent_sorted == e_val
+        entities.append(e_val)
+        y_by_e[e_val] = y_sorted[mask]
+        x_by_e[e_val] = {c: x_sorted[c][mask] for c in x_cols}
+
+    # Partition regressors into GMM-endogenous and strictly exogenous.
+    # The lagged dependent variable(s) are always GMM-endogenous.
+    exo_set = set(exogenous) if exogenous else set()
+    gmm_cols = [c for c in x_cols if c not in exo_set]
+    iv_cols = [c for c in x_cols if c in exo_set]
 
     min_j = max(lags + 1, 2)
     max_T = max(len(y_by_e[e]) for e in entities)
@@ -232,7 +335,26 @@ def abond(
             "Each entity needs at least 3 time periods."
         )
 
-    n_instr = len(depths) * (1 + len(x_cols))
+    # In collapsed mode, drop degenerate depths: a depth d requires t-d >= 0
+    # for the instrument y_{t-d} to exist.  With usable equations at
+    # t = min_j .. T-1, the number of valid time periods for depth d is
+    # T - max(min_j, d).  If that count is < 2, Stata xtabond2 silently
+    # drops the column (too few non-zero rows).  Only applies to collapsed.
+    if collapse:
+        valid_depths = [
+            d for d in depths
+            if max_T - max(min_j, d) >= 2
+        ]
+        if not valid_depths:
+            raise ValueError(
+                "No usable instrument depths after filtering degenerate columns."
+            )
+        depths = valid_depths
+
+    # Instrument count:
+    #   collapsed:   len(depths) * (1 + len(gmm_cols)) + len(iv_cols)
+    #   uncollapsed: sum over entities of usable equations, expanded
+    n_endog = 1 + len(gmm_cols)  # L.y + predetermined regressors
 
     Y_list: list[float] = []
     X_list: list[list[float]] = []
@@ -240,60 +362,80 @@ def abond(
     eq_entity_list: list[Any] = []
 
     if collapse:
-        # Collapsed instruments (Roodman 2009): for each lag depth, use a
-        # single instrument column that averages across all available time
-        # periods within each entity.  Reduces instrument count from
-        # O(depths × T) to O(depths), mitigating the "too many instruments"
-        # problem that biases two-step SEs downward.
-        for e in entities:
-            y = y_by_e[e]
-            xs = x_by_e[e]
+        # Collapsed instruments (Roodman 2009): for each lag depth, one
+        # instrument column that averages across all available time periods
+        # within each entity.  Reduces instrument count from
+        # O(depths x T) to O(depths).
+        n_instr = len(depths) * n_endog + len(iv_cols)
+        for e_val in entities:
+            y = y_by_e[e_val]
+            xs = x_by_e[e_val]
             T = len(y)
             for j in range(min_j, T):
                 dep = y[j] - y[j - 1]
-                dyn_regs = [y[j - lag] - y[j - lag - 1] for lag in range(1, lags + 1)]
+                dyn_regs = [y[j - lag] - y[j - lag - 1]
+                            for lag in range(1, lags + 1)]
                 x_regs = [xs[c][j] - xs[c][j - 1] for c in x_cols]
                 X_list.append(dyn_regs + x_regs)
 
                 zrow = np.zeros(n_instr)
                 col = 0
+                # GMM instruments for L.y: y_{t-lag}
                 for lag in depths:
                     if j - lag >= 0:
                         zrow[col] = y[j - lag]
                     col += 1
-                    for c in x_cols:
+                # GMM instruments for predetermined regressors
+                for gmm_c in gmm_cols:
+                    for lag in depths:
                         if j - lag >= 0:
-                            zrow[col] = xs[c][j - lag]
+                            zrow[col] = xs[gmm_c][j - lag]
                         col += 1
+                # Standard instruments for exogenous regressors (current Δ)
+                for iv_c in iv_cols:
+                    zrow[col] = xs[iv_c][j] - xs[iv_c][j - 1]
+                    col += 1
+
                 Z_list.append(zrow)
                 Y_list.append(dep)
-                eq_entity_list.append(e)
+                eq_entity_list.append(e_val)
     else:
-        # Uncollapsed (full) instruments: one column per (depth × time period).
-        n_instr_full = len(depths) * (1 + len(x_cols))
-        for e in entities:
-            y = y_by_e[e]
-            xs = x_by_e[e]
+        # Uncollapsed (full) instruments: one column per (depth x time period)
+        # for GMM instruments, plus one column per time period for standard
+        # instruments.  This matches Stata xtabond2's default behavior.
+        n_instr = len(depths) * n_endog + len(iv_cols)
+        for e_val in entities:
+            y = y_by_e[e_val]
+            xs = x_by_e[e_val]
             T = len(y)
             for j in range(min_j, T):
                 dep = y[j] - y[j - 1]
-                dyn_regs = [y[j - lag] - y[j - lag - 1] for lag in range(1, lags + 1)]
+                dyn_regs = [y[j - lag] - y[j - lag - 1]
+                            for lag in range(1, lags + 1)]
                 x_regs = [xs[c][j] - xs[c][j - 1] for c in x_cols]
                 X_list.append(dyn_regs + x_regs)
 
-                zrow = np.zeros(n_instr_full)
+                zrow = np.zeros(n_instr)
                 col = 0
+                # GMM instruments for L.y: y_{t-lag}
                 for lag in depths:
                     if j - lag >= 0:
                         zrow[col] = y[j - lag]
                     col += 1
-                    for c in x_cols:
+                # GMM instruments for predetermined regressors
+                for gmm_c in gmm_cols:
+                    for lag in depths:
                         if j - lag >= 0:
-                            zrow[col] = xs[c][j - lag]
+                            zrow[col] = xs[gmm_c][j - lag]
                         col += 1
+                # Standard instruments for exogenous regressors (current Δ)
+                for iv_c in iv_cols:
+                    zrow[col] = xs[iv_c][j] - xs[iv_c][j - 1]
+                    col += 1
+
                 Z_list.append(zrow)
                 Y_list.append(dep)
-                eq_entity_list.append(e)
+                eq_entity_list.append(e_val)
 
     if len(Y_list) == 0:
         raise ValueError(
@@ -306,7 +448,7 @@ def abond(
     Z = np.array(Z_list, dtype=float)
     eq_entity = np.array(eq_entity_list)
 
-    est = _estimate_gmm(Y, X, Z, eq_entity, step)
+    est = _estimate_gmm(Y, X, Z, eq_entity, step, robust=robust)
 
     coef_names = [f"L{lag}.{y_name}" for lag in range(1, lags + 1)] + x_cols
     coefficients = pd.Series(est["b"], index=coef_names)
@@ -328,10 +470,10 @@ def abond(
     # Per-entity residuals (in time order) for the AR tests.
     e_by_entity: dict[Any, np.ndarray] = {}
     pos = 0
-    for e in entities:
-        T = len(y_by_e[e])
+    for e_val in entities:
+        T = len(y_by_e[e_val])
         n_eq_e = max(0, T - min_j)
-        e_by_entity[e] = est["e"][pos: pos + n_eq_e]
+        e_by_entity[e_val] = est["e"][pos: pos + n_eq_e]
         pos += n_eq_e
 
     ar1 = _ar_test(e_by_entity, 1)
