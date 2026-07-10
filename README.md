@@ -10,7 +10,7 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (v0.6.8.2):** Stata-parity test suite — 35 hand-written
+> **Current version (v0.6.8.4):** Stata-parity test suite — 35 hand-written
 > `.do` files with committed `.dta` fixtures, dual-mode execution (live Stata
 > or CI fallback). **`staggered_did()` now implements the full Callaway &
 > Sant'Anna (2021) doubly‑robust estimator** with `covariates`, `method="dripw"`
@@ -19,7 +19,9 @@ AI agents never have to learn a new API.
 > built-in fallback (IK bandwidth, NN/HC variance) available without extra
 > dependencies. **`logit().margins()` / `probit().margins()`** compute
 > **average marginal effects (AME)** matching Stata's `margins, dydx(*)`.
-> All staggered‑DID, Oaxaca, and ABOND tests pass at machine precision.
+> **`ols(hac_adjust=True)`** applies Stata‑style `N/(N−K)` df correction for
+> HAC standard errors. All staggered‑DID, Oaxaca, ABOND, and FD tests pass
+> at machine precision.
 
 ## Why open-econs?
 
@@ -149,7 +151,7 @@ r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
 
 | Function | Description |
 |---|---|
-| `ols()` / `reg()` | OLS with HC1/robust/clustered SEs, **multi-way clustering** (`cluster=["a","b"]`), **Newey-West HAC** (`cov_type="HAC"`), WLS |
+| `ols()` / `reg()` | OLS with HC1/robust/clustered SEs, **multi-way clustering** (`cluster=["a","b"]`), **Newey-West HAC** (`cov_type="HAC"`, `hac_adjust=True` for Stata-style df correction), WLS |
 | `fe()` | Fixed effects (one-way entity, two-way entity + time) |
 | `iv()` | Instrumental variables / 2SLS with first-stage F-stat |
 | `logit()` | Binary logit with `.margins()`, `.predict()` |

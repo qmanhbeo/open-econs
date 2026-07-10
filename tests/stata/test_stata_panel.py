@@ -112,15 +112,16 @@ class TestPanelFD:
         self.oe_r = ctx.diff("y ~ x + z")
 
     def test_coefficients(self):
-        # oe uses linearmodels FirstDifferenceOLS vs Stata manual diff+regress
+        # Stata: manual diff + regress with noconstant
+        # OE: linearmodels FirstDifferenceOLS (same: forbids intercept)
         npt.assert_allclose(self.oe_r.coefficients.values,
                             [self.s["b_x"], self.s["b_z"]],
-                            rtol=5e-5)
+                            rtol=1e-6)
 
     def test_standard_errors(self):
         npt.assert_allclose(self.oe_r.std_errors.values,
                             [self.s["se_x"], self.s["se_z"]],
-                            rtol=1e-2)
+                            rtol=1e-6)
 
 
 class TestPanelHausman:

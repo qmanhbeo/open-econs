@@ -6,7 +6,7 @@ xtset entity time
 gen dy = D.y
 gen dx = D.x
 gen dz = D.z
-regress dy dx dz
+regress dy dx dz, noconstant
 
 scalar s_N   = e(N)
 scalar s_bx  = _b[dx]

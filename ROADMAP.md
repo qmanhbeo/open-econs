@@ -315,6 +315,21 @@ might fit.
   *are* endowment/coefficients, not the two‑fold meaning of those terms.
 - [x] All Oaxaca unit tests continue to pass unchanged.
 
+#### v0.6.8.4 — Newey‑West `hac_adjust` parameter + Panel FD fixture fix
+- [x] **`ols(hac_adjust=True)` / `newey_west_cov(adjust=True)`** — opt‑in Stata‑style
+  `N/(N−K)` degrees‑of‑freedom correction for HAC standard errors. Default remains
+  `False` (original Newey‑West 1987 formula, matching statsmodels and R `sandwich`).
+  Full comparison table (NW1987, OE, statsmodels, R sandwich, Stata, MATLAB) in
+  `ols()` docstring.
+- [x] **Stata parity for `hac_adjust=True`** — three new tests
+  (`TestOLSHACAdjust`, `test_hac_adjust_lags0_matches_hc1`,
+  `test_hac_adjust_panel_cluster`) verify the correction at rtol=1e‑7.
+- [x] **Panel FD fixture corrected** — Stata's `regress dy dx dz` implicitly includes
+  an intercept (Stata default). The correct first‑difference model has no intercept
+  (the fixed effects cancel out). Changed to `regress dy dx dz, noconstant`;
+  regenerated `panel_fd.dta` via StataMP. Test tolerances tightened from
+  `rtol=1e‑2` to `rtol=1e‑6`, matching FE/Pooled/RE parity.
+
 #### v0.7 — Regression Discontinuity refinements
 - [ ] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
 - [ ] McCrary density test for manipulation at the cutoff
