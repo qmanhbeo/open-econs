@@ -8,9 +8,9 @@ matrix b = e(b)
 matrix V = e(V)
 local cols = colsof(b)
 
-scalar s_gap = b[1,1]
-scalar s_exp = b[1,2]
-scalar s_unexp = b[1,3]
+scalar s_gap   = b[1,3]
+scalar s_exp   = b[1,4]
+scalar s_unexp = b[1,5]
 
 clear
 set obs 3

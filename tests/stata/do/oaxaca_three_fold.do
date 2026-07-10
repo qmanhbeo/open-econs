@@ -6,7 +6,7 @@ oaxaca y edu age, by(female)
 
 matrix b = e(b)
 
-scalar s_gap = b[1,1]
+scalar s_gap = b[1,3]
 
 clear
 set obs 1

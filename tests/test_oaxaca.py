@@ -270,3 +270,102 @@ class TestOaxaca:
         agg = d.tidy(detail=False)
         assert "Component" in agg.columns
         assert "Variable" not in agg.columns
+
+    # ---- reference parameter tests (two-fold) ----
+
+    def test_reference_pooled_is_default(self, df_oaxaca):
+        d_default = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female")
+        d_pooled = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female", reference="pooled")
+        assert abs(d_default.explained - d_pooled.explained) < 1e-12
+        assert abs(d_default.unexplained - d_pooled.unexplained) < 1e-12
+
+    def test_reference_omega_differs_from_pooled(self, df_oaxaca):
+        d_pooled = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female", reference="pooled")
+        d_omega = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female", reference="omega")
+        assert d_omega.type == "two-fold"
+        assert abs(d_omega.total_gap - d_pooled.total_gap) < 1e-12
+        assert abs(d_omega.explained - d_pooled.explained) > 1e-6
+
+    def test_reference_group1_and_group2_same_gap(self, df_oaxaca):
+        d1 = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female", reference="group1")
+        d2 = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female", reference="group2")
+        assert abs(d1.total_gap - d2.total_gap) < 1e-12
+        assert abs(d1.explained - d2.explained) > 1e-6
+
+    def test_reference_group1_matches_float_one(self, df_oaxaca):
+        d1 = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female", reference="group1")
+        d2 = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female", reference=1.0)
+        assert abs(d1.explained - d2.explained) < 1e-12
+        assert abs(d1.unexplained - d2.unexplained) < 1e-12
+
+    def test_reference_group2_matches_float_zero(self, df_oaxaca):
+        d1 = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female", reference="group2")
+        d2 = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female", reference=0.0)
+        assert abs(d1.explained - d2.explained) < 1e-12
+        assert abs(d1.unexplained - d2.unexplained) < 1e-12
+
+    @pytest.mark.parametrize("ref", ["pooled", "omega", "group1", "group2"])
+    def test_reference_components_sum_to_gap(self, df_oaxaca, ref):
+        d = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female", reference=ref)
+        assert abs(d.explained + d.unexplained - d.total_gap) < 1e-12
+
+    @pytest.mark.parametrize("ref", ["pooled", "omega", "group1", "group2"])
+    def test_reference_var_detail_sums_match_aggregate(self, df_oaxaca, ref):
+        d = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female", reference=ref)
+        assert abs(d.variable_detail["Explained"].sum() - d.explained) < 1e-12
+        assert abs(d.variable_detail["Unexplained"].sum() - d.unexplained) < 1e-12
+
+    @pytest.mark.parametrize("weight", [0.3, 0.5, 0.8])
+    def test_reference_float_weight_components_sum_to_gap(self, df_oaxaca, weight):
+        d = oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female", reference=weight)
+        assert abs(d.explained + d.unexplained - d.total_gap) < 1e-12
+
+    def test_reference_invalid_string_raises(self, df_oaxaca):
+        with pytest.raises(ValueError, match="Unknown reference"):
+            oe.oaxaca("income ~ education + age + female", data=df_oaxaca, by="female", reference="bad_ref")
+
+    # ---- reverse three-fold tests ----
+
+    def test_three_fold_reverse_components_sum_to_gap(self, df_oaxaca):
+        d = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female",
+            decomposition_type="three-fold", reverse=True,
+        )
+        assert d.type == "three-fold"
+        assert abs(d.explained + d.unexplained + d.interaction - d.total_gap) < 1e-12
+
+    def test_three_fold_reverse_endowment_matches_group1_explained(self, df_oaxaca):
+        d_rev = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female",
+            decomposition_type="three-fold", reverse=True,
+        )
+        d_g1 = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female", reference="group1",
+        )
+        assert abs(d_rev.explained - d_g1.explained) < 1e-12
+
+    def test_three_fold_reverse_var_detail_sums_match_aggregate(self, df_oaxaca):
+        d = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female",
+            decomposition_type="three-fold", reverse=True,
+        )
+        assert abs(d.variable_detail["Endowment"].sum() - d.explained) < 1e-12
+        assert abs(d.variable_detail["Coefficients"].sum() - d.unexplained) < 1e-12
+        assert abs(d.variable_detail["Interaction"].sum() - d.interaction) < 1e-12
+
+    def test_three_fold_reverse_interaction_flipped_sign(self, df_oaxaca):
+        d_norm = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female",
+            decomposition_type="three-fold",
+        )
+        d_rev = oe.oaxaca(
+            "income ~ education + age + female",
+            data=df_oaxaca, by="female",
+            decomposition_type="three-fold", reverse=True,
+        )
+        assert abs(d_rev.interaction + d_norm.interaction) < 1e-12

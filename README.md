@@ -10,12 +10,13 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (v0.6.6):** Stata-parity test suite — 28 hand-written
+> **Current version (v0.6.7):** Stata-parity test suite — 30 hand-written
 > `.do` files with committed `.dta` fixtures, dual-mode execution (live Stata
-> or CI fallback). **Non-collapsed (uncollapsed) `abond()` now matches Stata's
-> `xtabond2` to ~1e-7** across all four flavors (one-step, two-step, robust,
-> two-step-robust) — 40 Stata-parity tests, all passing. Collapsed path
-> unchanged and still passing.
+> or CI fallback). **Oaxaca decomposition now matches Stata's `oaxaca` to
+> machine precision** (two-fold `pooled`, three-fold `threefold`, and all
+> `reference` types: pooled, omega, group1, group2, custom weight). Three
+> Stata-parity tests verify the aggregate components. 96 Oaxaca tests total,
+> all passing.
 
 ## Why open-econs?
 
@@ -109,6 +110,18 @@ d.explained          # 16.00  (covariate-driven gap)
 d.unexplained        #  4.00  (coefficient-driven gap)
 d.total_gap          # 20.00  (female mean - male mean)
 
+# Advanced: two-fold with different reference coefficients
+d_omega = oe.oaxaca("income ~ education + age + female", data=df, by="female",
+                     reference="omega")     # pooled without group dummy
+d_g1    = oe.oaxaca("income ~ education + age + female", data=df, by="female",
+                     reference="group1")    # Group 1 coefficients as reference
+d_cust  = oe.oaxaca("income ~ education + age + female", data=df, by="female",
+                     reference=0.7)         # custom weight (0–1)
+
+# Advanced: three-fold from Group 1 perspective
+d_rev = oe.oaxaca("income ~ education + age + female", data=df, by="female",
+                   decomposition_type="three-fold", reverse=True)
+
 # --- Context remembers the dataset ---
 ctx.ols("income ~ education + age")            # same as oe.ols(..., data=df)
 ctx.logit("female ~ education + age")
@@ -138,7 +151,7 @@ r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
 | `iv()` | Instrumental variables / 2SLS with first-stage F-stat |
 | `logit()` | Binary logit with `.margins()`, `.predict()` |
 | `probit()` | Binary probit (same API as logit) |
-| `oaxaca()` | Oaxaca-Blinder decomposition (two-fold, three-fold) |
+| `oaxaca()` | Oaxaca-Blinder decomposition (two-fold, three-fold; reference types: pooled, omega, group1, group2, custom weight; reverse three-fold) |
 | `ctx.vif()` | Variance inflation factor / collinearity diagnostics |
 | `abond()` | Arellano-Bond dynamic panel (difference GMM), one/two-step Windmeijer SEs, Hansen J + AR(1)/AR(2). Collapsed one-step non-robust now matches Stata `xtabond2` to ~1e-7 |
 | `staggered_did()` | Callaway-Sant'Anna (2021) staggered / heterogeneous-timing DiD |

@@ -224,6 +224,22 @@ might fit.
   flavors at full double precision.
 - [x] **Collapsed path untouched** — no regressions.
 
+#### v0.6.7 — Oaxaca Stata parity & advanced options
+- [x] **Stata parity fix** — `.do` files mis-extracted the `e(b)` matrix (columns 1/2/3
+  instead of 3/4/5), causing all 3 Stata-parity tests to fail against group means instead
+  of decomposition components. Fixed both `oaxaca_two_fold.do` and `oaxaca_three_fold.do`;
+  regenerated `.dta` fixtures. OE now matches Stata's actual `pooled` and `threefold`
+  output to machine precision.
+- [x] **`reference` parameter** (two-fold) — `"pooled"` (default), `"omega"` (pooled without
+  group dummy), `"group1"`/`"group2"` (single-group coefficients), or a float (0–1) custom
+  weight. Maps to Stata's `pooled`, `omega`, and `weight()` options.
+- [x] **`reverse` parameter** (three-fold) — `reverse=True` uses Group 1 coefficients as
+  the reference (Stata's `threefold(reverse)`). Components sum to gap; variable-level
+  detail matches.
+- [x] **21 new tests** at `1e-12` tolerance (component consistency, var-detail sums, string
+  ↔ float alias equivalence, invalid-reference error, reverse three-fold cross-checks)
+  — 96 Oaxaca tests total, all passing.
+
 #### v0.7 — Regression Discontinuity refinements
 - [x] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
 - [ ] McCrary density test for manipulation at the cutoff

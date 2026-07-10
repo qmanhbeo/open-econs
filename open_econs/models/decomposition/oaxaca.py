@@ -9,11 +9,36 @@ from open_econs._internal.formula import parse_formula
 from open_econs.core.results import OaxacaResult
 
 
+_REFERENCE_ALIASES = {
+    "pooled": "pooled",
+    "omega": "nuemark",
+    "group1": "self_submitted",
+    "group2": "self_submitted",
+}
+
+
+def _resolve_reference(reference: str | float) -> tuple[str, float]:
+    """Convert a user-facing reference spec to a statsmodels two_fold_type + weight."""
+    if isinstance(reference, (int, float)):
+        return "self_submitted", float(reference)
+    ref = reference.lower()
+    if ref not in _REFERENCE_ALIASES:
+        allowed = ", ".join(f"'{k}'" for k in _REFERENCE_ALIASES)
+        raise ValueError(
+            f"Unknown reference '{reference}'. Allowed: {allowed}, or a float (0-1)."
+        )
+    sm_type = _REFERENCE_ALIASES[ref]
+    weight = 1.0 if ref == "group1" else 0.0
+    return sm_type, weight
+
+
 def oaxaca(
     formula: str,
     data: pd.DataFrame,
     by: str,
     decomposition_type: str = "two-fold",
+    reference: str | float = "pooled",
+    reverse: bool = False,
     std: bool = False,
     bootstrap_n: int = 1000,
     conf_level: float = 0.95,
@@ -34,6 +59,22 @@ def oaxaca(
         of *formula*.
     decomposition_type : str, default "two-fold"
         Either ``"two-fold"`` or ``"three-fold"``.
+    reference : str or float, default "pooled"
+        Controls the reference coefficients used in the ``"two-fold"``
+        decomposition.  Options:
+
+        - ``"pooled"`` — pooled model including the group dummy (Stata's ``pooled``).
+        - ``"omega"`` — pooled model *excluding* the group dummy (Stata's ``omega``).
+        - ``"group1"`` — Group 1 coefficients as reference (Stata's ``weight(1)``).
+        - ``"group2"`` — Group 2 coefficients as reference (Stata's ``weight(0)``).
+        - float (0–1) — custom weight for Group 1 coefficients
+          (1 = Group 1, 0 = Group 2; Stata's ``weight()``).
+
+        Ignored for ``"three-fold"``.
+    reverse : bool, default False
+        If ``True`` and ``decomposition_type="three-fold"``, uses Group 1
+        coefficients as the reference (Stata's ``threefold(reverse)``).
+        The default (``False``) uses Group 2 coefficients as the reference.
     std : bool, default False
         If True, compute bootstrapped standard errors.  Bootstrap is
         computationally expensive; 500 iterations is a reasonable minimum
@@ -76,6 +117,7 @@ def oaxaca(
 
     call = _capture_call(
         formula=formula, by=by, decomposition_type=decomposition_type,
+        reference=reference, reverse=reverse,
         std=std, bootstrap_n=bootstrap_n, conf_level=conf_level, seed=seed,
         swap=swap,
     )
@@ -128,19 +170,35 @@ def oaxaca(
     )
 
     if decomposition_type == "two-fold":
-        stats_result = model.two_fold(std=std, n=bootstrap_n, conf=conf_level)
+        two_fold_type, weight = _resolve_reference(reference)
+        submitted_weight = weight if two_fold_type == "self_submitted" else None
+        stats_result = model.two_fold(two_fold_type=two_fold_type, submitted_weight=submitted_weight, std=std, n=bootstrap_n, conf=conf_level)
         explained = float(stats_result.params[1])
         unexplained = float(stats_result.params[0])
         gap_val = float(stats_result.params[2])
         interaction = None
     elif decomposition_type == "three-fold":
-        stats_result = model.three_fold(std=std, n=bootstrap_n, conf=conf_level)
-        endowment = float(stats_result.params[0])
-        coefficients = float(stats_result.params[1])
-        interaction = float(stats_result.params[2])
-        gap_val = float(stats_result.params[3])
-        explained = endowment
-        unexplained = coefficients
+        if reverse:
+            gap_val = float(model.gap)
+            f_mean = model.exog_f_mean
+            s_mean = model.exog_s_mean
+            f_params = model._f_model.params
+            s_params = model._s_model.params
+            endowment_full = float((f_mean - s_mean) @ f_params)
+            coeff_full = float(f_mean @ (f_params - s_params))
+            interaction_full = -float((f_mean - s_mean) @ (f_params - s_params))
+            explained = endowment_full
+            unexplained = coeff_full
+            interaction = interaction_full
+            stats_result = None
+        else:
+            stats_result = model.three_fold(std=std, n=bootstrap_n, conf=conf_level)
+            endowment = float(stats_result.params[0])
+            coefficients = float(stats_result.params[1])
+            interaction = float(stats_result.params[2])
+            gap_val = float(stats_result.params[3])
+            explained = endowment
+            unexplained = coefficients
     else:
         raise ValueError(
             f"Unknown decomposition_type '{decomposition_type}'. "
@@ -163,9 +221,14 @@ def oaxaca(
             "Unexplained": unexpl_vec[:len(var_names)],
         })
     else:
-        endow_vec = (f_mean - s_mean) * s_params
-        coeff_vec = s_mean * (f_params - s_params)
-        inter_vec = (f_mean - s_mean) * (f_params - s_params)
+        if reverse:
+            endow_vec = (f_mean - s_mean) * f_params
+            coeff_vec = f_mean * (f_params - s_params)
+            inter_vec = -(f_mean - s_mean) * (f_params - s_params)
+        else:
+            endow_vec = (f_mean - s_mean) * s_params
+            coeff_vec = s_mean * (f_params - s_params)
+            inter_vec = (f_mean - s_mean) * (f_params - s_params)
         var_detail = pd.DataFrame({
             "Variable": var_names,
             "Endowment": endow_vec[:len(var_names)],
@@ -179,7 +242,7 @@ def oaxaca(
                     idx_map.get(model.bi[1], str(model.bi[1])))
 
     std_series: pd.Series | None = None
-    if std and stats_result.std:
+    if std and stats_result is not None and stats_result.std is not None:
         if decomposition_type == "two-fold":
             labels = ["Unexplained", "Explained"]
         else:
