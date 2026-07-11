@@ -20,6 +20,7 @@ reg = ols
 
 __all__ = [
     "ols", "reg", "logit", "probit", "fe", "iv", "oaxaca",
-    "did", "event_study", "balance", "abond", "staggered_did", "density_test", "cem", "psm", "rdd",
+    "did", "event_study", "balance", "abond", "staggered_did", "density_test", "cem",
+    "psm", "rdd", "rosenbaum_bounds",
     "Context", "PanelContext", "__version__",
 ]
