@@ -239,6 +239,42 @@ class PanelContext:
 
         return _ols(formula=formula, data=self._data, cluster=cluster, cov_type=cov_type)
 
+    def gmm(
+        self,
+        formula: str,
+        *,
+        step: str = "two-step",
+        cov_type: str | None = None,
+        cluster: str | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Linear GMM (cross-sectional delegate).
+
+        Thin wrapper around the top-level :func:`gmm` that forwards the
+        context's data (``self._data``).  When the caller does not supply
+        them, ``cluster`` defaults to the context's entity column and
+        ``cov_type`` defaults to ``"cluster"`` -- mirroring the default-context
+        injection convention of :meth:`pooled`; explicit ``cluster=`` /
+        ``cov_type=`` always win and are forwarded unchanged.  The top-level
+        estimator rejects a cluster with a non-cluster ``cov_type``, so no
+        entity cluster is injected in that case.
+
+        For dynamic panel models with lagged dependent variables and
+        instrument construction from the panel structure, see :meth:`abond`;
+        this method provides plain linear GMM with entity-clustering
+        convenience only.
+        """
+        from open_econs.models.linear.gmm import gmm as _gmm
+
+        use_cov = "cluster" if cov_type is None else cov_type
+        # Mirror PanelContext.pooled(): inject the entity cluster only when the
+        # covariance type is (or defaults to) clustering.
+        use_cluster = self._entity if (use_cov == "cluster" and cluster is None) else cluster
+        return _gmm(
+            formula=formula, data=self._data, step=step,
+            cov_type=use_cov, cluster=use_cluster, **kwargs,
+        )
+
     def logit(self, formula: str, cov_type: str = "nonrobust") -> Any:
         from open_econs.models.discrete.logit import logit as _logit
 
