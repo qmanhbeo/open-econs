@@ -57,6 +57,11 @@ class PSMResult(BaseModel):
         Boolean mask indexed like ``original_data`` indicating which
         observations were included in the matched sample (treated with a
         pair within caliper, and controls used at least once).
+    _pairs : dict[int, int]
+        Bidirectional match-pair mapping (treated -> control and
+        control -> treated), stored for downstream sensitivity analysis.
+    _outcome : str
+        Name of the outcome column used when fitting.
     """
 
     def __init__(
@@ -77,6 +82,8 @@ class PSMResult(BaseModel):
         treatment: str,
         weights: np.ndarray,
         matched: np.ndarray,
+        outcome: str,
+        pairs: dict[int, int],
     ) -> None:
         self.effect = effect
         self.se = se
@@ -96,6 +103,8 @@ class PSMResult(BaseModel):
         self._treatment = treatment
         self._weights_arr = weights
         self._matched_arr = matched
+        self._outcome = outcome
+        self._pairs = pairs
         self._freeze()
 
     @property
@@ -169,6 +178,53 @@ class PSMResult(BaseModel):
             treatment=self._treatment,
             covariates=covariates,
             weights=_wcol,
+        )
+
+    def sensitivity(
+        self,
+        outcome: str | None = None,
+        gamma_max: float = 6.0,
+        gamma_inc: float = 0.1,
+    ) -> Any:
+        """Rosenbaum bounds sensitivity analysis for the matched sample.
+
+        Extracts within-pair outcome differences from the stored match
+        pairs and delegates to :func:`rosenbaum_bounds`.
+
+        Parameters
+        ----------
+        outcome : str, optional
+            Name of the outcome column.  If None, uses the outcome column
+            that was used when fitting the PSM model.
+        gamma_max : float, default 6.0
+            Maximum value of the sensitivity parameter :math:`\\Gamma`.
+        gamma_inc : float, default 0.1
+            Step size for the :math:`\\Gamma` grid.
+
+        Returns
+        -------
+        RosenbaumBoundsResult
+        """
+        from open_econs.models.causal.sensitivity import rosenbaum_bounds
+
+        _outcome = outcome if outcome is not None else self._outcome
+        y = self.original_data[_outcome].values
+        t = self.original_data[self._treatment].values
+
+        diffs = [
+            float(y[i] - y[j])
+            for i, j in self._pairs.items()
+            if t[i] == 1
+        ]
+
+        if len(diffs) < 2:
+            raise RuntimeError(
+                "Fewer than 2 treated-matched pairs found. "
+                "Cannot compute Rosenbaum bounds."
+            )
+
+        return rosenbaum_bounds(
+            diffs, gamma_max=gamma_max, gamma_inc=gamma_inc,
         )
 
 
@@ -588,4 +644,6 @@ def psm(
         treatment=treatment,
         weights=weights_arr,
         matched=matched_arr,
+        outcome=outcome,
+        pairs=pairs,
     )
