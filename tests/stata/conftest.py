@@ -40,3 +40,8 @@ def df_panel() -> pd.DataFrame:
 @pytest.fixture(scope="session")
 def df_oaxaca() -> pd.DataFrame:
     return _load_csv("df_oaxaca")
+
+
+@pytest.fixture(scope="session")
+def df_balance_weighted() -> pd.DataFrame:
+    return _load_csv("df_balance_weighted")
