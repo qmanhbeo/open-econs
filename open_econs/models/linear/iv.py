@@ -209,9 +209,7 @@ def iv(
     parsed = _parse_iv_formula(formula, data)
     y_arr = parsed["y"]
     X_full = parsed["X"]
-    all_cols = parsed["coef_names"]
     has_inner_endog = parsed["has_inner_endog"]
-    endog_vars = parsed["endog_vars"]
     instr_matrix = parsed["instr_matrix"]
     exog_idx = parsed["exog_idx"]
     endog_idx = parsed["endog_idx"]
