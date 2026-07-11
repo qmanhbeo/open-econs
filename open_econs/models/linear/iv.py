@@ -206,86 +206,15 @@ def iv(
     """
     call = _capture_call(formula=formula, cov_type=cov_type)
 
-    if "|" not in formula:
-        raise ValueError(
-            "iv() requires a three-part formula: 'y ~ exog | endog ~ instruments'"
-        )
-
-    y_part, instr_part = formula.split("|", 1)
-    y_part = y_part.strip()
-    instr_part = instr_part.strip()
-
-    y_formula = y_part
-    rhs_split = y_part.split("~", 1)
-    dep_var = rhs_split[0].strip()
-
-    if len(rhs_split) > 1:
-        rhs_expr = rhs_split[1].strip()
-    else:
-        rhs_expr = ""
-
-    has_inner_endog = "~" in instr_part
-    if has_inner_endog:
-        endog_part, instr_expr = instr_part.split("~", 1)
-        endog_expr = endog_part.strip()
-        instr_expr = instr_expr.strip()
-
-        endog_vars = _extract_vars(endog_expr)
-        exog_vars = _extract_vars(rhs_expr)
-
-        all_rhs_vars = list(dict.fromkeys(exog_vars + endog_vars))
-        full_rhs_formula = " + ".join(all_rhs_vars)
-        y_formula = f"{dep_var} ~ {full_rhs_formula}"
-    else:
-        all_rhs_vars = _extract_vars(rhs_expr)
-        endog_vars = all_rhs_vars
-        exog_vars = []
-        instr_expr = instr_part
-        full_rhs_formula = " + ".join(all_rhs_vars)
-        y_formula = f"{dep_var} ~ {full_rhs_formula}"
-
-    from formulaic import Formula
-
-    try:
-        matrices = Formula(y_formula).get_model_matrix(data, na_action="drop")
-    except Exception as e:
-        msg = str(e)
-        if "not present in the dataset" in msg or "is not present" in msg:
-            import re as _re
-            m = _re.search(r"`(\w+)`", msg)
-            bad_col = m.group(1) if m else y_part
-            raise errors.missing_column_error(bad_col, data.columns.tolist()) from e
-        raise
-
-    if hasattr(matrices, "rhs"):
-        XX = matrices.rhs
-        yy = matrices.lhs
-    else:
-        from open_econs._internal.formula import parse_formula as _parse
-        yy, XX = _parse(y_formula, data)
-        matrices = None
-
-    original_n = len(data)
-    dropped = original_n - len(yy)
-    if dropped > 0:
-        import warnings as _w
-        _w.warn(
-            errors.rows_dropped_warning(dropped, original_n, []),
-            RuntimeWarning,
-            stacklevel=3,
-        )
-
-    if len(yy) == 0:
-        raise errors.empty_data_error(original_n, dropped, [])
-
-    y_arr = yy.values.ravel().astype(float)
-    X_full = XX.values.astype(float)
-    all_cols = XX.columns.tolist()
-
-    instr_matrices = Formula(instr_expr).get_model_matrix(data, na_action="drop")
-    Z_mat = instr_matrices.rhs if hasattr(instr_matrices, "rhs") else instr_matrices
-    instr_cols = [c for c in Z_mat.columns if c != "Intercept"]
-    Z_raw = Z_mat[instr_cols].values.astype(float) if instr_cols else None
+    parsed = _parse_iv_formula(formula, data)
+    y_arr = parsed["y"]
+    X_full = parsed["X"]
+    all_cols = parsed["coef_names"]
+    has_inner_endog = parsed["has_inner_endog"]
+    endog_vars = parsed["endog_vars"]
+    instr_matrix = parsed["instr_matrix"]
+    exog_idx = parsed["exog_idx"]
+    endog_idx = parsed["endog_idx"]
 
     if not has_inner_endog:
         import warnings as _w
@@ -296,15 +225,8 @@ def iv(
             "See the iv() docstring for details.",
             FutureWarning, stacklevel=3,
         )
-        Z_arr = Z_raw
-    else:
-        Z_arr = Z_raw
 
-    exog_cols_in_model = [c for c in all_cols if c not in endog_vars]
-    endog_cols_in_model = [c for c in all_cols if c in endog_vars]
-
-    exog_idx = [i for i, c in enumerate(all_cols) if c in exog_cols_in_model]
-    endog_idx = [i for i, c in enumerate(all_cols) if c in endog_cols_in_model]
+    Z_arr = instr_matrix if instr_matrix.shape[1] > 0 else None
 
     X_exog = X_full[:, exog_idx] if exog_idx else None
     X_endog = X_full[:, endog_idx] if endog_idx else None
@@ -374,8 +296,8 @@ def iv(
         cragg_donald_f=cragg_donald,
         hansen_j_stat=hansen_j,
         hansen_j_p=hansen_p,
-        fitted=pd.Series(fitted_arr, index=XX.index, name="fitted"),
-        residuals=pd.Series(residuals_arr, index=XX.index, name="residuals"),
+        fitted=pd.Series(fitted_arr, index=parsed["index"], name="fitted"),
+        residuals=pd.Series(residuals_arr, index=parsed["index"], name="residuals"),
         call=call,
         _fit=fitted,
     )
@@ -390,5 +312,138 @@ def _extract_vars(expr: str) -> list[str]:
         if t and t not in ("1", "0", "-1"):
             result.append(t)
     return result
+
+
+def _parse_iv_formula(formula: str, data: pd.DataFrame) -> dict:
+    """Parse an IV/2SLS/GMM formula into aligned model matrices.
+
+    Shared by :func:`iv` and :func:`open_econs.models.linear.gmm.gmm` so the
+    ``y ~ exog | endog ~ instruments`` grammar is implemented exactly once.
+
+    Returns a dict with:
+
+    * ``y`` : ndarray (n,) dependent vector.
+    * ``X`` : ndarray (n, p) full regressor matrix (incl. intercept).
+    * ``coef_names`` : list[str] of length ``p`` (X column labels).
+    * ``exog_idx`` : positions of exogenous regressors (incl. intercept) in ``X``.
+    * ``endog_idx`` : positions of endogenous regressors in ``X``.
+    * ``instr_matrix`` : ndarray (n, L_instr) instrument variables only (intercept
+      dropped) -- the explicit instruments named after ``~`` in the inner block.
+    * ``has_inner_endog`` : whether the ``| endog ~ instruments`` syntax was used.
+    * ``endog_vars`` : list of endogenous variable names.
+    * ``index`` : pandas.Index of the kept (aligned, non-missing) rows.
+    * ``dropped`` / ``original_n`` : row accounting.
+
+    The instrument matrix ``Z`` handed to a GMM solver must be the exogenous
+    regressors (their own instruments) concatenated with ``instr_matrix``;
+    the caller assembles that.  Rows of ``y``, ``X`` and ``instr_matrix`` are
+    aligned to a common index so they never silently disagree.
+    """
+    if "|" not in formula:
+        raise ValueError(
+            "This estimator requires a three-part formula: 'y ~ exog | endog ~ instruments'"
+        )
+
+    y_part, instr_part = formula.split("|", 1)
+    y_part = y_part.strip()
+    instr_part = instr_part.strip()
+
+    rhs_split = y_part.split("~", 1)
+    dep_var = rhs_split[0].strip()
+    rhs_expr = rhs_split[1].strip() if len(rhs_split) > 1 else ""
+
+    has_inner_endog = "~" in instr_part
+    if has_inner_endog:
+        endog_part, instr_expr = instr_part.split("~", 1)
+        endog_expr = endog_part.strip()
+        instr_expr = instr_expr.strip()
+        endog_vars = _extract_vars(endog_expr)
+        exog_vars = _extract_vars(rhs_expr)
+        all_rhs_vars = list(dict.fromkeys(exog_vars + endog_vars))
+        full_rhs_formula = " + ".join(all_rhs_vars)
+        y_formula = f"{dep_var} ~ {full_rhs_formula}"
+    else:
+        all_rhs_vars = _extract_vars(rhs_expr)
+        endog_vars = all_rhs_vars
+        exog_vars = []
+        instr_expr = instr_part
+        full_rhs_formula = " + ".join(all_rhs_vars)
+        y_formula = f"{dep_var} ~ {full_rhs_formula}"
+
+    from formulaic import Formula
+
+    try:
+        matrices = Formula(y_formula).get_model_matrix(data, na_action="drop")
+    except Exception as e:
+        msg = str(e)
+        if "not present in the dataset" in msg or "is not present" in msg:
+            import re as _re
+            m = _re.search(r"`(\w+)`", msg)
+            bad_col = m.group(1) if m else y_part
+            raise errors.missing_column_error(bad_col, data.columns.tolist()) from e
+        raise
+
+    if hasattr(matrices, "rhs"):
+        XX = matrices.rhs
+        yy = matrices.lhs
+    else:
+        from open_econs._internal.formula import parse_formula as _parse
+        yy, XX = _parse(y_formula, data)
+        matrices = None
+
+    original_n = len(data)
+    dropped = original_n - len(yy)
+    if dropped > 0:
+        import warnings as _w
+        _w.warn(
+            errors.rows_dropped_warning(dropped, original_n, []),
+            RuntimeWarning,
+            stacklevel=3,
+        )
+
+    if len(yy) == 0:
+        raise errors.empty_data_error(original_n, dropped, [])
+
+    x_index = XX.index
+    instr_matrices = Formula(instr_expr).get_model_matrix(
+        data.loc[x_index], na_action="drop",
+    )
+    # A single-sided instrument formula ("z1 + z2") returns a bare DataFrame;
+    # a two-sided one returns a ModelMatrix with .rhs/.lhs.
+    Z_instr = instr_matrices.rhs if hasattr(instr_matrices, "rhs") else instr_matrices
+
+    # Align instrument rows to the regressor rows (instruments may carry their
+    # own missing values), so y / X / instruments are always the same length.
+    keep = x_index.intersection(Z_instr.index)
+    yy = yy.loc[keep]
+    XX = XX.loc[keep]
+    Z_instr = Z_instr.loc[keep]
+
+    y_arr = yy.values.ravel().astype(float)
+    X_full = XX.values.astype(float)
+    all_cols = XX.columns.tolist()
+    instr_cols = [c for c in Z_instr.columns if c != "Intercept"]
+    instr_matrix = (
+        Z_instr[instr_cols].values.astype(float) if instr_cols
+        else np.zeros((len(X_full), 0))
+    )
+
+    endog_cols_in_model = [c for c in all_cols if c in endog_vars]
+    exog_idx = [i for i, c in enumerate(all_cols) if c not in endog_cols_in_model]
+    endog_idx = [i for i, c in enumerate(all_cols) if c in endog_cols_in_model]
+
+    return {
+        "y": y_arr,
+        "X": X_full,
+        "coef_names": all_cols,
+        "exog_idx": exog_idx,
+        "endog_idx": endog_idx,
+        "instr_matrix": instr_matrix,
+        "has_inner_endog": has_inner_endog,
+        "endog_vars": endog_vars,
+        "index": keep,
+        "dropped": original_n - len(keep),
+        "original_n": original_n,
+    }
 
 
