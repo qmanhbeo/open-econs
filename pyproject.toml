@@ -9,6 +9,7 @@ dependencies = [
     "statsmodels>=0.14",
     "formulaic>=1.0",
     "scipy>=1.11",
+    "sympy>=1.12",
     "linearmodels>=6.0",
     "jinja2>=3.0",
 ]
