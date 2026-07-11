@@ -232,7 +232,17 @@ might fit.
   (b) Default caliper (1.0) validated; tighter calipers not independently tested.
   See ``tests/test_psm.py``.
 - [ ] Kernel / smooth-weight matching on top of the PS engine
-- [ ] Coarsened exact matching
+- [x] Coarsened exact matching
+
+  Core CEM: auto-Sturges coarsening (matching Stata's default), explicit
+  cutpoints per variable, exact matching for categorical variables, ATT
+  weights matching Stata's ``cem-mata.do`` formula.  Strata, weights, and
+  matched flags validated per-observation against Stata's ``cem`` SSC
+  package on a 1000-obs fixture at the exact-match level (no tolerance).
+  See ``tests/test_cem.py``.
+
+  **Pass 1 only** — no SE (Pass 2), no k2k / alternate coarsening /
+  balance diagnostics (Pass 3).
 - [ ] Post-matching balance diagnostics reusing `ctx.balance()` from v0.5
 - [ ] Sensitivity analysis (Rosenbaum bounds)
 
