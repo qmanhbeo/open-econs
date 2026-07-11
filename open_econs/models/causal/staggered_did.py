@@ -106,16 +106,25 @@ def _cell_dripw(
     pre: float,
     covariates: list[str],
     cluster: str,
+    all_entities: np.ndarray,
 ) -> dict:
-    """CS2021 doubly-robust ATT(g,t) for one cell.
+    """CS2021 doubly-robust ATT(g,t) for one cell (Sant'Anna & Zhao 2020 / DRDID ``drdid_panel``).
 
-    Computes the ATT via the influence-function moment condition:
+    Implements the influence-function-based DR-DiD estimator.  For each entity,
+    the cell-level influence function is
 
-        RIF_i = (D_i/p_D  -  w_i/mean_w) * (ΔY_i - m_0(X_i))
-        ATT   = mean(RIF)
+        att_inf_func_i = inf_treat_i - inf_control_i
 
-    where D = treatment indicator, p_D = mean(D),
-    w_i = (1-D_i) * p(X_i)/(1-p(X_i)), m_0(X) = E[ΔY | X, D=0].
+    where each component carries the bias-correcting terms for the estimated
+    propensity score (logit) and outcome regression (OLS).  The stored
+    per-entity ``RIF`` is shifted so that ``mean(RIF) = ATT(g,t)``:
+
+        RIF_i = att_inf_func_i + ATT(g,t)
+
+    and the cluster-robust standard error uses the full-sample influence
+    function, ``V = sum_i (RIF_i - mean(RIF))² / N²`` with ``N`` the
+    full-sample entity count.  See the ``ROADMAP`` changelog for the full
+    formula and the ``DRDID`` (Sant'Anna & Zhao 2020) reference.
     """
     import statsmodels.api as sm
 
@@ -130,59 +139,87 @@ def _cell_dripw(
     n_treat = int(D.sum())
     n_ctrl = int((~D.astype(bool)).sum())
     n_entities = len(merged)
+    entity_ids = merged[entity].values
 
     if n_treat < 1 or n_ctrl < 2:
         return {
             "cohort": int(gco), "time": int(t), "lead": int(t - gco),
             "att": float("nan"), "se": float("nan"), "p_value": float("nan"),
-            "n_treat": n_treat, "n_control": n_ctrl,
+            "n_treat": n_treat, "n_control": n_ctrl, "rif": None,
         }
 
     dy = merged["dy"].values.astype(float)
-    cl_groups = merged[cluster].values if cluster else None
 
     # ---------- PS model (logit) ----------
     X = sm.add_constant(merged[covariates].values.astype(float))
-    logit_fit = sm.Logit(D, X).fit(disp=False, maxiter=100)
-    p = logit_fit.predict(X)
+    logit_fit = sm.Logit(D, X).fit(disp=False, maxiter=200)
+    ps = np.minimum(logit_fit.predict(X), 1 - 1e-6)
 
-    # ---------- Outcome regression (OLS on controls at base period) ----------
-    ctrl_idx = ~D.astype(bool)
-    ols_fit = sm.OLS(dy[ctrl_idx], X[ctrl_idx]).fit()
-    m0 = ols_fit.predict(X)
+    # ---------- Outcome regression (WLS on controls, weights = 1-D) ----------
+    weights_ols = 1.0 - D
+    ctrl = ~D.astype(bool)
+    wls = sm.WLS(dy[ctrl], X[ctrl], weights=weights_ols[ctrl]).fit()
+    out_delta = X @ wls.params
 
-    # ---------- RIF ----------
-    w = (1.0 - D) * p / np.clip(1.0 - p, 1e-15, None)
-    p_D = float(np.mean(D))
-    mean_w = float(np.mean(w))
+    # ---------- DR weights ----------
+    trim_ps = np.ones(n_entities, dtype=bool)
+    trim_ps[D == 0] = ps[D == 0] < 0.995
+    w_treat = trim_ps * D
+    w_cont = trim_ps * ps * (1.0 - D) / np.clip(1.0 - ps, 1e-15, None)
+    mw_treat = float(np.mean(w_treat))
+    mw_cont = float(np.mean(w_cont))
 
-    # Handle edge cases where PS is extreme
-    if p_D <= 0 or mean_w <= 0:
-        return {
-            "cohort": int(gco), "time": int(t), "lead": int(t - gco),
-            "att": float("nan"), "se": float("nan"), "p_value": float("nan"),
-            "n_treat": n_treat, "n_control": n_ctrl,
-        }
+    dr_att_treat = w_treat * (dy - out_delta)
+    dr_att_cont = w_cont * (dy - out_delta)
+    eta_treat = float(np.mean(dr_att_treat) / mw_treat)
+    eta_cont = float(np.mean(dr_att_cont) / mw_cont)
+    dr_att = eta_treat - eta_cont
 
-    rif = (D / p_D - w / mean_w) * (dy - m0)
-    att = float(np.mean(rif))
+    # ---------- OLS asymptotic-linear representation ----------
+    wols_x = weights_ols[:, None] * X
+    wols_eX = weights_ols[:, None] * (dy - out_delta)[:, None] * X
+    XpX = (wols_x.T @ X) / n_entities
+    XpX_inv = np.linalg.inv(XpX)
+    asy_lin_rep_wols = wols_eX @ XpX_inv
 
-    # ---------- Cluster-robust SE via aggregated influence functions ----------
-    rif_c = rif - att
-    if cluster and cl_groups is not None:
-        cl_df = pd.DataFrame({"rif_c": rif_c, "cl": cl_groups})
-        cl_agg = cl_df.groupby("cl")["rif_c"].sum()
-        V = float((cl_agg ** 2).sum() / (n_entities ** 2))
-    else:
-        V = float(np.sum(rif_c ** 2) / (n_entities ** 2))
+    # ---------- logit asymptotic-linear representation ----------
+    W = ps * (1.0 - ps)
+    score_ps = (D - ps)[:, None] * X
+    XtWX_ps = X.T @ (W[:, None] * X)
+    Hessian_ps = np.linalg.inv(XtWX_ps) * n_entities
+    asy_lin_rep_ps = score_ps @ Hessian_ps
 
+    # ---------- treated-component influence function ----------
+    inf_treat_1 = dr_att_treat - w_treat * eta_treat
+    M1 = (w_treat[:, None] * X).sum(axis=0) / n_entities
+    inf_treat_2 = asy_lin_rep_wols @ M1
+    inf_treat = (inf_treat_1 - inf_treat_2) / mw_treat
+
+    # ---------- control-component influence function (with correction terms) ----------
+    inf_cont_1 = dr_att_cont - w_cont * eta_cont
+    M2 = ((w_cont * (dy - out_delta - eta_cont))[:, None] * X).sum(axis=0) / n_entities
+    inf_cont_2 = asy_lin_rep_ps @ M2
+    M3 = (w_cont[:, None] * X).sum(axis=0) / n_entities
+    inf_cont_3 = asy_lin_rep_wols @ M3
+    inf_control = (inf_cont_1 + inf_cont_2 - inf_cont_3) / mw_cont
+
+    att_inf_func = inf_treat - inf_control
+    # csdid stores the SHIFTED RIF so that mean(RIF) = ATT
+    rif_shifted = att_inf_func + dr_att
+    rif_series = pd.Series(rif_shifted, index=entity_ids)
+
+    # ---------- cluster-robust SE via full-sample influence function ----------
+    n_full = len(all_entities)
+    rif_full = rif_series.reindex(all_entities).fillna(0.0)
+    rif_c = rif_full - rif_full.mean()
+    V = float(np.sum(rif_c ** 2) / (n_full ** 2))
     se = float(np.sqrt(V)) if V > 0 else float("nan")
-    p_val = float(2 * (1 - _norm.cdf(abs(att / se)))) if (se > 0 and np.isfinite(se)) else float("nan")
+    p_val = float(2 * (1 - _norm.cdf(abs(dr_att / se)))) if (se > 0 and np.isfinite(se)) else float("nan")
 
     return {
         "cohort": int(gco), "time": int(t), "lead": int(t - gco),
-        "att": att, "se": se, "p_value": p_val,
-        "n_treat": n_treat, "n_control": n_ctrl,
+        "att": float(dr_att), "se": se, "p_value": p_val,
+        "n_treat": n_treat, "n_control": n_ctrl, "rif": rif_series,
     }
 
 
@@ -256,6 +293,32 @@ def staggered_did(
     Fernando Rios-Avila — see the `stpackages repository
     <https://github.com/friosavila/stpackages/tree/main/csdid>`_ and
     `drdid <https://github.com/friosavila/stpackages/tree/main/drdid>`_.
+
+    With ``method="dripw"`` the ATT(g,t) influence function follows
+    Sant'Anna & Zhao (2020), as implemented in the R ``DRDID`` package
+    (``drdid_panel`` / the ``trad`` method, which is ``csdid``'s default
+    ``dripw``).  For each cell, with propensity score ``ps`` (logit of the
+    group indicator on covariates, controls trimmed at ``ps < 0.995``),
+    outcome regression ``m0`` (WLS of ``ΔY`` on covariates, weighted by
+    ``1 - D``), and weights ``w_treat = ps·D``,
+    ``w_cont = ps·(1-D)/(1-ps)``::
+
+        att_inf_func = inf_treat - inf_control
+
+        inf_treat  = (dr_att_treat - w_treat·eta_treat - asy_lin_rep_wols·M1) / mw_treat
+        inf_control = (dr_att_cont - w_cont·eta_cont
+                       + asy_lin_rep_ps·M2 - asy_lin_rep_wols·M3) / mw_cont
+
+    where the ``asy_lin_rep_*`` terms are the asymptotic-linear
+    representations of the estimated propensity-score and outcome-regression
+    coefficients (the bias-correcting nuisance-parameter corrections).  The
+    stored per-entity ``RIF`` is shifted so ``mean(RIF) = ATT(g,t)``.
+
+    Per-cell cluster-robust SE uses the full-sample influence function,
+    ``V = Σ_i (RIF_i - mean(RIF))² / N²`` (``N`` = full-sample entity count,
+    no small-sample correction).  The overall pooled SE aggregates the
+    per-entity RIFs across post-treatment cells with equal weight
+    (``1/K``) and applies the same full-sample IF variance.
     """
     if method is None:
         method = "dripw" if (covariates is not None and len(covariates) > 0) else "reg"
@@ -295,6 +358,7 @@ def staggered_did(
     never = df["__g"] == np.inf
     all_times = np.sort(df[time].unique())
     cohorts = sorted(s for s in df["__g"].unique() if np.isfinite(s))
+    all_entities = df[entity].unique()
 
     rows = []
     import statsmodels.api as sm
@@ -321,7 +385,7 @@ def staggered_did(
 
             if method == "dripw" and covariates:
                 res = _cell_dripw(sub, y, entity, time, treatment,
-                                  gco, t, pre, covariates, cluster)
+                                  gco, t, pre, covariates, cluster, all_entities)
                 rows.append(res)
             else:
                 # method == "reg": 2x2 OLS interaction (backward compatible)
@@ -357,8 +421,30 @@ def staggered_did(
         raise ValueError("All (g,t) cells produced NaN; check covariates and sample sizes.")
 
     gt = gt.sort_values(["cohort", "time"]).reset_index(drop=True)
-    overall = float(np.average(gt["att"], weights=gt["n_treat"]))
-    overall_se = float(np.sqrt(np.average(gt["se"] ** 2, weights=gt["n_treat"])))
+
+    # ---- Aggregated ATT / SE from the full-sample influence function ----
+    # Combine each post-treatment cell's per-entity RIF with equal weight
+    # (1/K across the K cells) and take the cluster-robust SE of the
+    # aggregated RIF, V = sum_i (agg_rif_i - mean)² / N² (N = full-sample
+    # entity count).  This reproduces csdid's full-sample IF rescaling.
+    K = len(gt)
+    rif_matrix = pd.DataFrame(index=all_entities)
+    for i, row in gt.iterrows():
+        cell_rif = row.get("rif")
+        if cell_rif is None:
+            continue
+        rif_matrix[i] = cell_rif.reindex(all_entities).fillna(0.0)
+    if K > 0 and not rif_matrix.empty:
+        w_eq = np.ones(K) / K
+        agg_rif = rif_matrix.mul(w_eq, axis=1).sum(axis=1)
+        overall = float(agg_rif.mean())
+        agg_c = agg_rif - agg_rif.mean()
+        overall_se = float(np.sqrt(np.sum(agg_c ** 2) / (len(all_entities) ** 2)))
+    else:
+        # Fallback (e.g. method="reg" cells carry no per-entity RIF): use the
+        # weighted average of per-cell cluster SEs, consistent with prior behaviour.
+        overall = float(np.average(gt["att"], weights=gt["n_treat"]))
+        overall_se = float(np.sqrt(np.average(gt["se"] ** 2, weights=gt["n_treat"])))
     overall_p = float(2 * (1 - _norm.cdf(abs(overall / overall_se)))) if overall_se > 0 else float("nan")
 
     ev = (
@@ -405,7 +491,8 @@ def staggered_did(
                     if method == "dripw" and covariates:
                         try:
                             res = _cell_dripw(sub, y, entity, time, treatment,
-                                              gco, t, pre, covariates, cluster)
+                                              gco, t, pre, covariates, cluster,
+                                              boot_entities_unique)
                             if np.isfinite(res["att"]):
                                 boot_rows.append({"att": res["att"], "n_treat": res["n_treat"]})
                         except Exception:
