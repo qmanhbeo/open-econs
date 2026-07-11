@@ -69,38 +69,50 @@ class TestGmmCoreIdentityWeight:
                 gmm = estimate_gmm(Y, X, Z, eq, step, robust, None)
                 assert np.allclose(gmm["b"], iv.coefficients.values, atol=1e-8)
 
-    def test_se_nonrobust_convention_gap(self, exactly_identified_2sls):
-        """Identity-weight one-step NON-robust SEs differ from textbook 2SLS by a
-        precise, explainable factor -- encode it rather than hide it.
-
-        factor = (1 / sqrt(2)) * sqrt(n / (n - k))
-
-        * 1/sqrt(2): the shared core scales sig2 by e1'e1 / (2*n).  That is the
-          Arellano-Bond *difference*-GMM normalization (see _gmm_core.py:101,104)
-          and is irrelevant to the plain iid case, but it is baked into the
-          shared core so it leaks into the W=None path.
-        * sqrt(n/(n-k)): the small-sample multiplier the core applies in the
-          one-step non-robust branch (_gmm_core.py:177-181).
-        """
-        df, Y, X, Z, eq, n = exactly_identified_2sls
-        k = X.shape[1]
+    def test_se_generic_default_matches_iv_nonrobust(self, exactly_identified_2sls):
+        """With the new GENERIC defaults (sig2_scale=1.0, no small-sample
+        correction) the identity-weight one-step NON-robust SEs must match
+        textbook 2SLS exactly -- the Arellano-Bond leaks are gone, so there is
+        no convention gap to encode anymore."""
+        df, Y, X, Z, eq, _ = exactly_identified_2sls
         iv = oe.iv("y ~ 1 | x ~ z", data=df, cov_type="nonrobust")
         gmm = estimate_gmm(Y, X, Z, eq, "one-step", False, None)
-        factor = (1.0 / np.sqrt(2.0)) * np.sqrt(n / (n - k))
-        assert np.allclose(gmm["se"], iv.std_errors.values * factor, rtol=1e-8, atol=1e-10)
+        assert np.allclose(gmm["se"], iv.std_errors.values, rtol=1e-8, atol=1e-10)
 
-    def test_se_robust_convention_gap(self, exactly_identified_2sls):
-        """Robust (one-step and two-step) GMM SEs differ from linearmodels
-        'robust' (debiased=False) 2SLS SEs *only* by the small-sample multiplier
-        sqrt(n/(n-k)); the AB 1/2 sig2 factor does not enter the robust path.
+    def test_se_generic_default_matches_iv_robust(self, exactly_identified_2sls):
+        """With generic defaults, identity-weight robust (one-step & two-step)
+        SEs match linearmodels 'robust' (debiased=False) 2SLS exactly -- the
+        small-sample multiplier no longer distorts the shared core."""
+        df, Y, X, Z, eq, _ = exactly_identified_2sls
+        iv = oe.iv("y ~ 1 | x ~ z", data=df, cov_type="robust")
+        for step in ("one-step", "two-step"):
+            gmm = estimate_gmm(Y, X, Z, eq, step, True, None)
+            assert np.allclose(gmm["se"], iv.std_errors.values, rtol=1e-8, atol=1e-10)
 
-        This is a genuine convention difference vs a textbook 2SLS reference and
-        is asserted exactly (not loosened) so the gap is documented, not hidden.
+    def test_ab_params_reproduce_ab_convention(self, exactly_identified_2sls):
+        """Passing the explicit AB values (sig2_scale=0.5,
+        small_sample_correction=True) must reproduce the original AB convention
+        gaps vs 2SLS -- proving the decoupling is faithful, not a silent change.
+
+        non-robust one-step: factor (1/sqrt(2)) * sqrt(n/(n-k))
+        robust (one/two-step): factor sqrt(n/(n-k))
         """
         df, Y, X, Z, eq, n = exactly_identified_2sls
         k = X.shape[1]
-        iv = oe.iv("y ~ 1 | x ~ z", data=df, cov_type="robust")
-        factor = np.sqrt(n / (n - k))
+        nonrobust_factor = (1.0 / np.sqrt(2.0)) * np.sqrt(n / (n - k))
+        robust_factor = np.sqrt(n / (n - k))
+        iv_nr = oe.iv("y ~ 1 | x ~ z", data=df, cov_type="nonrobust")
+        iv_r = oe.iv("y ~ 1 | x ~ z", data=df, cov_type="robust")
+        gmm_nr = estimate_gmm(
+            Y, X, Z, eq, "one-step", False, None,
+            sig2_scale=0.5, small_sample_correction=True,
+        )
+        assert np.allclose(gmm_nr["se"], iv_nr.std_errors.values * nonrobust_factor,
+                           rtol=1e-8, atol=1e-10)
         for step in ("one-step", "two-step"):
-            gmm = estimate_gmm(Y, X, Z, eq, step, True, None)
-            assert np.allclose(gmm["se"], iv.std_errors.values * factor, rtol=1e-8, atol=1e-10)
+            gmm_r = estimate_gmm(
+                Y, X, Z, eq, step, True, None,
+                sig2_scale=0.5, small_sample_correction=True,
+            )
+            assert np.allclose(gmm_r["se"], iv_r.std_errors.values * robust_factor,
+                               rtol=1e-8, atol=1e-10)
