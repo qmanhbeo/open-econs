@@ -32,6 +32,8 @@ def estimate_gmm(
     step: str,
     robust: bool = False,
     W: np.ndarray | None = None,
+    sig2_scale: float = 1.0,
+    small_sample_correction: bool = False,
 ) -> dict[str, Any]:
     """General two-step GMM estimator, mirroring xtabond2's Mata source (v3.7.2).
 
@@ -74,6 +76,17 @@ def estimate_gmm(
         Use cluster-robust sandwich standard errors.
     W : ndarray, shape (n_eq, n_eq), optional
         One-step weighting matrix.  Defaults to identity (plain/iid).
+    sig2_scale : float, default 1.0
+        Scale applied to the residual variance ``sig2 = sig2_scale · e'e / n``.
+        The default ``1.0`` is the generic GMM convention.  Arellano-Bond passes
+        ``0.5`` (its first-difference ``1/2`` normalization: ``sig2 = e'e / (2n)``).
+    small_sample_correction : bool, default False
+        If True, apply the estimator-specific finite-sample multipliers to the
+        variance ``V`` (one-step non-robust: ``wttot/(wttot-k)``; otherwise
+        ``(NObs-1)/(NObs-k)·NGroups/(NGroups-1)``) and the Stata/AB
+        ``wttot/(wttot-k)`` multiplier to ``sig2``, mirroring xtabond2's Mata
+        source.  If False (generic default), no small-sample correction is
+        applied to ``V`` or ``sig2``.
     """
     n_eq = Y.shape[0]
     N = float(len(np.unique(eq_entity)))
@@ -101,7 +114,7 @@ def estimate_gmm(
     wttot = float(n_eq)        # = NObs (no weights, difference GMM)
     NGroups = float(N)
     k = float(p)
-    sig2 = float(e1 @ e1) / 2.0 / wttot
+    sig2 = sig2_scale * float(e1 @ e1) / wttot
     # Mata 418-419: rescale A1, V1 by sig2 (one-step non-robust branch uses this)
     A1 = A1_raw / sig2
     V1 = V1_raw * sig2
@@ -137,7 +150,7 @@ def estimate_gmm(
         b2 = V2 @ (ZtX.T @ A2 @ ZtY)
         e2 = Y - X @ b2
         if step == "two-step":
-            sig2 = float(e2 @ e2) / 2.0 / wttot   # Mata 480: two-step sig2 from e2
+            sig2 = sig2_scale * float(e2 @ e2) / wttot   # Mata 480: two-step sig2 from e2
         A2Ze = A2 @ (Z.T @ e2)
         if step == "one-step":
             b = b1
@@ -173,13 +186,19 @@ def estimate_gmm(
     # --- Small-sample correction (Mata 562-565) ---
     # NB: Mata multiplies V by the *branch-specific* multiplier but multiplies
     # sig2 by `tmp = wttot/(wttot-k)` ALWAYS (line 565 uses `tmp`, not the
-    # branch multiplier).  Keep the two multipliers separate.
-    if onestepnonrobust:
-        small_mult = wttot / (wttot - k)
+    # branch multiplier).  Keep the two multipliers separate.  Both are applied
+    # only when `small_sample_correction` is requested (generic default: none).
+    if small_sample_correction:
+        if onestepnonrobust:
+            small_mult = wttot / (wttot - k)
+        else:
+            small_mult = ((wttot - 1.0) / (wttot - k)) * (NGroups / (NGroups - 1.0))
+        sig2_mult = wttot / (wttot - k)
     else:
-        small_mult = ((wttot - 1.0) / (wttot - k)) * (NGroups / (NGroups - 1.0))
+        small_mult = 1.0
+        sig2_mult = 1.0
     V = pV * small_mult
-    sig2 = sig2 * (wttot / (wttot - k))
+    sig2 = sig2 * sig2_mult
 
     se = np.sqrt(np.maximum(np.diag(V), 0.0))
 
