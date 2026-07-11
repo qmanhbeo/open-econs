@@ -23,7 +23,11 @@ class PanelContext:
 
     Once created with ``entity`` and ``time`` columns, the panel methods
     (``pooled``, ``fe``, ``re``, ``diff``, ``driscoll_kraay``, ``hausman``)
-    no longer need those columns re-specified on every call.
+    no longer need those columns re-specified on every call.  Cross-sectional
+    estimators that do not need panel structure are also exposed as thin
+    delegates (``ols``, ``logit``, ``probit``, ``did``, ``event_study``,
+    ``balance``, ``gmm``) that forward the context's data and, where relevant,
+    default ``cluster`` to the context's entity column.
 
     Parameters
     ----------

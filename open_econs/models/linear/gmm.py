@@ -170,7 +170,10 @@ def gmm(
     -----
     This estimator uses the shared core's *generic* conventions (``sig2_scale``
     default 1.0, no small-sample correction).  The Arellano-Bond-specific
-    normalization is intentionally not available here.
+    normalization is intentionally not available here.  For dynamic panel
+    models with lagged dependent variables and instrument construction from
+    the panel structure, see :func:`abond`; this function provides plain
+    linear GMM only (no panel-specific instrument or lag handling).
     """
     if step not in ("one-step", "two-step"):
         raise ValueError("step must be 'one-step' or 'two-step'.")
