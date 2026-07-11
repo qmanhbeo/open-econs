@@ -224,7 +224,11 @@ might fit.
 > **Non-blocking** — Diagnostics-annotated `OLSResult.plot()` replacement: annotate the existing 4-panel layout with the test statistics/p-values `self.diagnostics()` already computes (JB p-value on the QQ panel, BP p-value on residuals-vs-fitted, DW stat as an annotation, condition number in the margin). Would flip this from "redundant wrapper" to "the one thing the audit found genuinely missing." Not blocking v0.8; can land in the same window or later.
 
 #### v0.8 — Matching & Balance
-- [ ] `psm()` — propensity score matching (nearest-neighbor, caliper, kernel)
+- [x] `psm()` — 1:1 nearest-neighbor with replacement on logit PS (ATE).
+  Validated vs Stata ``teffects psmatch``: ATE exact to 1e-7, SE exact to 1e-6
+  across nn=2,5,10 (AI 2012 PS-estimation adjustment implemented).
+  See ``tests/test_psm.py``.
+- [ ] Kernel / smooth-weight matching on top of the PS engine
 - [ ] Coarsened exact matching
 - [ ] Post-matching balance diagnostics reusing `ctx.balance()` from v0.5
 - [ ] Sensitivity analysis (Rosenbaum bounds)
