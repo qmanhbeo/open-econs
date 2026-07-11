@@ -1,3 +1,5 @@
+from pathlib import Path as _Path
+
 import pytest
 import pandas as pd
 import numpy as np
@@ -121,3 +123,57 @@ def df_panel_dup_index() -> pd.DataFrame:
     # Duplicate one (entity, time) pair.
     dup_row = df.iloc[[5]].copy()
     return pd.concat([df, dup_row], ignore_index=True)
+
+
+# ── CSV-backed Stata-parity fixtures ────────────────────────────────────────
+# Relocated here from tests/stata/conftest.py (Dec 2024) to work around an
+# order-dependent fixture-resolution failure (pytest ~9.1.1, Win, editable
+# install) whose root cause was not fully identified.
+#
+# Trigger pattern: two test files importing open_econs.models.causal.rdd at
+# module scope in the same session, combined with tests/stata/ files that
+# depended on CSV-backed fixtures defined in tests/stata/conftest.py.  The
+# fixture chain for tests/stata/*.py would sometimes bind to tests/conftest.py
+# only, making the CSV-backed fixtures invisible.
+#
+# Candidate mechanisms ruled out before relocating:
+#   · bare conftest-name collision (tests/*/__init__.py present;
+#     confirmed distinct module names via __name__ tracing)
+#   · sys.path insertion order (–import-mode=importlib had no effect)
+#   · rddensity/rdrobust/lpdensity pytest plugin (none exist in env)
+#   · stale duplicate open-econs installation (single editable install)
+#   · Stata subprocess during collection (bug reproduced with STATA_EXE
+#     disabled; module-level read_stata deferred to fixture)
+#   · duplicate fixture definitions in sibling conftest (removing them
+#     had no effect)
+#
+# Root cause suspected but not confirmed: import of open_econs.models.causal.rdd
+# at module scope across two test files (one in tests/, one in tests/stata/)
+# alters pytest's conftest-chain binding for the tests/stata/ directory under
+# importlib/prepend modes in a way specific to pytest 9.x on Windows.
+# Moving these four CSV-backed fixtures to the parent conftest makes them
+# always visible regardless of collection order/import timing.
+
+_STATA_FIXTURES = _Path(__file__).resolve().parent / "stata" / "fixtures"
+
+def _load_stata_csv(name: str) -> pd.DataFrame:
+    p = _STATA_FIXTURES / f"{name}.csv"
+    if not p.exists():
+        raise FileNotFoundError(f"Fixture not found: {p}")
+    return pd.read_csv(p)
+
+@pytest.fixture(scope="session")
+def df_iv() -> pd.DataFrame:
+    return _load_stata_csv("df_iv")
+
+@pytest.fixture(scope="session")
+def df_logit() -> pd.DataFrame:
+    return _load_stata_csv("df_logit")
+
+@pytest.fixture(scope="session")
+def df_did() -> pd.DataFrame:
+    return _load_stata_csv("df_did")
+
+@pytest.fixture(scope="session")
+def df_rdd() -> pd.DataFrame:
+    return _load_stata_csv("df_rdd")

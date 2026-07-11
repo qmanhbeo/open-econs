@@ -38,25 +38,5 @@ def df_panel() -> pd.DataFrame:
 
 
 @pytest.fixture(scope="session")
-def df_iv() -> pd.DataFrame:
-    return _load_csv("df_iv")
-
-
-@pytest.fixture(scope="session")
-def df_logit() -> pd.DataFrame:
-    return _load_csv("df_logit")
-
-
-@pytest.fixture(scope="session")
-def df_did() -> pd.DataFrame:
-    return _load_csv("df_did")
-
-
-@pytest.fixture(scope="session")
 def df_oaxaca() -> pd.DataFrame:
     return _load_csv("df_oaxaca")
-
-
-@pytest.fixture(scope="session")
-def df_rdd() -> pd.DataFrame:
-    return _load_csv("df_rdd")
