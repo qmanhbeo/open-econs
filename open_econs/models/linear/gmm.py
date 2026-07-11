@@ -130,7 +130,7 @@ def gmm(
     formula: str,
     data: pd.DataFrame,
     *,
-    step: str = "twostep",
+    step: str = "two-step",
     cov_type: str = "robust",
     cluster: str | None = None,
 ) -> GMMResult:
@@ -147,7 +147,7 @@ def gmm(
         endogenous) for backward compatibility with :func:`iv`.
     data : pd.DataFrame
         Data containing all variables referenced in *formula*.
-    step : {"onestep", "twostep"}, default "twostep"
+    step : {"one-step", "two-step"}, default "two-step"
         GMM step.  The one-step estimator with identity weighting is identical
         to 2SLS; the two-step estimator uses the efficient
         ``S = Σ (Zᵢ'eᵢ)(Zᵢ'eᵢ)'`` weighting.
@@ -172,8 +172,8 @@ def gmm(
     default 1.0, no small-sample correction).  The Arellano-Bond-specific
     normalization is intentionally not available here.
     """
-    if step not in ("onestep", "twostep"):
-        raise ValueError("step must be 'onestep' or 'twostep'.")
+    if step not in ("one-step", "two-step"):
+        raise ValueError("step must be 'one-step' or 'two-step'.")
     if cov_type not in ("robust", "cluster"):
         raise ValueError("cov_type must be 'robust' or 'cluster'.")
     if cov_type == "cluster":
@@ -216,8 +216,8 @@ def gmm(
         eq_entity = np.arange(n)
         robust = True
 
-    # Map the public step keyword onto the core's hyphenated spelling.
-    core_step = "one-step" if step == "onestep" else "two-step"
+    # Public step spelling now matches the core's hyphenated spelling.
+    core_step = step
 
     # Generic defaults (sig2_scale=1.0, small_sample_correction=False) are used;
     # the AB-specific conventions are intentionally not exposed here.
