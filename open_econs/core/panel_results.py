@@ -12,7 +12,28 @@ from open_econs.core.results import OLSResult
 
 
 class RandomEffectsResult(BaseModel):
-    """Result of a panel random-effects (Glass-S Arnarsson / Swamy-Arora) estimator."""
+    """Result of a panel random-effects (Swamy-Arora) estimator.
+
+    Attributes
+    ----------
+    r_squared_overall : float
+        Sum-of-squares R² for the overall (pooled) fit, per linearmodels.
+        Computed as ``1 - RSS/TSS`` where residuals are GLS-transformed.
+        **Can be negative** when GLS residuals have larger SS than the
+        raw total SS around the grand mean.  Stata does not report R²
+        for RE models at all.  Use ``r_squared_overall_corr`` for a
+        bounded alternative.
+    r_squared_within : float
+        Sum-of-squares R² for the within (entity-demeaned) fit.
+    r_squared_between : float
+        Sum-of-squares R² for the between (entity-averaged) fit.
+        Can also be negative for the same GLS reason as overall.
+    r_squared_overall_corr : float
+        Correlation-squared R² for the overall fit.  Always in [0, 1].
+        Safer for reporting when the SS-based measure goes negative.
+    r_squared : float
+        The within R² (linearmodels maps ``rsquared`` → within).
+    """
 
     def __init__(
         self,
@@ -31,6 +52,7 @@ class RandomEffectsResult(BaseModel):
         r_squared_within: float,
         r_squared_between: float,
         r_squared_overall: float,
+        r_squared_overall_corr: float,
         cov_type: str,
         theta: float,
         sigma2_effects: float,
@@ -64,6 +86,7 @@ class RandomEffectsResult(BaseModel):
         self.r_squared_within = r_squared_within
         self.r_squared_between = r_squared_between
         self.r_squared_overall = r_squared_overall
+        self.r_squared_overall_corr = r_squared_overall_corr
         self.theta = theta
         self.sigma2_effects = sigma2_effects
         self.sigma2_eps = sigma2_eps
@@ -103,6 +126,7 @@ class RandomEffectsResult(BaseModel):
             f"No. Time periods:            {self.n_time}\n"
             f"Covariance Type:             {self.cov_type}\n"
             f"R-squared (overall):       {self.r_squared_overall:.6f}\n"
+            f"R-squared (overall, corr): {self.r_squared_overall_corr:.6f}\n"
             f"R-squared (within):        {self.r_squared_within:.6f}\n"
             f"R-squared (between):       {self.r_squared_between:.6f}\n"
             f"Var(Effects) / sigma2_u:     {self.sigma2_effects:.4f}\n"
@@ -540,6 +564,7 @@ def _re_result_from_fit(
         r_squared_within=float(getattr(fit, "rsquared_within", float("nan"))),
         r_squared_between=float(getattr(fit, "rsquared_between", float("nan"))),
         r_squared_overall=float(getattr(fit, "rsquared_overall", float("nan"))),
+        r_squared_overall_corr=float(getattr(fit, "corr_squared_overall", float("nan"))),
         cov_type=cov_type,
         theta=theta_scalar,
         sigma2_effects=sigma2_effects,

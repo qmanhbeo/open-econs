@@ -82,12 +82,17 @@ def test_re_theta_in_unit_interval(n_unit, n_time, seed):
 def test_re_r2_measures_in_unit_interval(n_unit, n_time, seed):
     df = _random_panel(n_unit, n_time, seed)
     r = oe.PanelContext(df, entity="entity", time="time").re("y ~ x + z")
-    # Overall R2 is a genuine R2 and must lie in [0, 1]. The within/between
-    # decompositions can fall slightly outside [0, 1] in finite samples, so we
-    # only require them to be finite here.
+    # linearmodels' SS-based R² for RE/GLS can go negative (and above 1)
+    # because GLS-transformed residuals may have larger SS than the raw
+    # total SS around the grand mean.  This is inherent to the formula and
+    # matches linearmodels' own output.  Stata does not report R² for RE.
+    # We only require finiteness for the SS-based measures; the
+    # correlation-squared alternative (r_squared_overall_corr) is always in [0,1].
     assert np.isfinite(r.r_squared_within)
     assert np.isfinite(r.r_squared_between)
-    assert 0.0 <= r.r_squared_overall <= 1.0 + 1e-9
+    assert np.isfinite(r.r_squared_overall)
+    assert np.isfinite(r.r_squared_overall_corr)
+    assert 0.0 <= r.r_squared_overall_corr <= 1.0 + 1e-9
 
 
 @settings(max_examples=20, deadline=None)
