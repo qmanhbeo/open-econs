@@ -1,3 +1,4 @@
+import warnings
 from datetime import datetime
 from typing import Any
 
@@ -275,6 +276,15 @@ f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
         return pred
 
     def plot(self) -> None:
+        warnings.warn(
+            "OLSResult.plot() is deprecated in v0.8 and will be removed in v0.9. "
+            "This method is a generic R plot(lm) replica that does not use OE's "
+            "own diagnostics (Jarque-Bera, Breusch-Pagan, Durbin-Watson, Ramsey "
+            "RESET). Use self.diagnostics() for the actual test statistics and "
+            "matplotlib (via pip install open-econs[plot]) for residual visuals.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         try:
             import matplotlib.pyplot as plt
         except ImportError:
@@ -302,7 +312,7 @@ f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
         ax3.set_xlabel("Fitted values")
         ax3.set_ylabel("Sqrt(|Residuals|)")
         ax3.set_title("Scale-Location")
-        ax4.text(0.5, 0.5, "Leverage plot: planned for v0.4", ha="center", va="center", transform=ax4.transAxes)
+        ax4.text(0.5, 0.5, "Leverage plot: planned for v0.4 — see DeprecationWarning above", ha="center", va="center", transform=ax4.transAxes)
         ax4.set_title("Residuals vs Leverage")
         fig.tight_layout()
         plt.show()
