@@ -126,6 +126,88 @@ def newey_west_cov(
     return V
 
 
+def white_cov(J: np.ndarray, resid: np.ndarray, kind: str = "HC2") -> np.ndarray:
+    """Heteroskedasticity-consistent (MacKinnon & White 1985) covariance for a
+    nonlinear least-squares problem, reusing the *linear* sandwich machinery.
+
+    For OLS the robust estimators replace the iid variance ``sigma^2 (X'X)^-1``
+    with an empirical sandwich built from the score contributions ``x_i e_i``.
+    In NLS the design matrix at the optimum is the Jacobian of the mean function
+    with respect to the parameters, ``J = d f(x_i, theta) / d theta`` (n by k),
+    and the score contributions are ``J_i e_i``.  Substituting ``J`` for the
+    linear ``X`` gives the Gauss-Newton heteroskedasticity-robust covariance.
+
+    The scaling formulas below mirror statsmodels' OLS HC0-HC3 estimators exactly
+    (verified against ``statsmodels/regression/linear_model.py``
+    ``RegressionResults._HCCM`` / ``HC{0,1,2,3}_se``):
+
+    * HC0: ``scale_i = e_i^2``  (White 1980, raw)
+    * HC1: ``scale_i = (n / (n - k)) * e_i^2``  (MacKinnon-White finite-sample)
+    * HC2: ``scale_i = e_i^2 / (1 - h_ii)``
+    * HC3: ``scale_i = e_i^2 / (1 - h_ii)^2``
+
+    where ``h_ii = diag(J (J'J)^-1 J')`` is the leverage of the Jacobian (the
+    Gauss-Newton "hat" diagonal).  The covariance is then
+
+        ``V = (J'J)^-1 J' diag(scale) J (J'J)^-1``
+
+    i.e. ``pinv @ diag(scale) @ pinv.T`` with
+    ``pinv = (J'J)^-1 J'`` -- the same construction statsmodels uses
+    (``_HCCM``), with no extra overall ``sigma^2`` factor.  This is the
+    finite-sample-consistent counterpart to the naive iid variance
+    ``sigma^2 (J'J)^-1`` (``sigma^2 = SSR / (n - k)``), which ``nls()`` computes
+    separately for ``cov_type="nonrobust"``.
+
+    Parameters
+    ----------
+    J : np.ndarray
+        Jacobian of the mean function w.r.t. the parameters evaluated at the
+        solution, shape ``(n, k)``.  For NLS this is ``-res.jac`` when the
+        Jacobian was estimated numerically, or the analytic ``df/dtheta``.
+    resid : np.ndarray
+        Residuals ``y - f(x, theta_hat)`` at the solution, shape ``(n,)``.
+    kind : {"HC0", "HC1", "HC2", "HC3"}, default "HC2"
+        Which MacKinnon-White estimator to use.  ``"HC2"`` matches the library's
+        default robust SE (the same default as ``oe.ols``).
+
+    Returns
+    -------
+    np.ndarray
+        The ``(k, k)`` variance-covariance matrix of the NLS parameters.
+    """
+    J = np.asarray(J, dtype=float)
+    resid = np.asarray(resid, dtype=float).ravel()
+    if J.ndim != 2:
+        raise ValueError("white_cov expects J with shape (n, k).")
+    if resid.shape[0] != J.shape[0]:
+        raise ValueError("white_cov: resid length must match J's row count.")
+    n, k = J.shape
+    if kind not in ("HC0", "HC1", "HC2", "HC3"):
+        raise ValueError(f"kind must be one of HC0/HC1/HC2/HC3, got {kind!r}.")
+    if n <= k:
+        raise ValueError("white_cov requires n > k (more observations than parameters).")
+
+    # pinv = (J'J)^-1 J'  -- the pseudoinverse of the Jacobian.
+    pinv = np.linalg.pinv(J)  # (k, n)
+    # Leverage h_ii = diag(J @ pinv) = diag(J (J'J)^-1 J').
+    h = np.einsum("ij,ji->i", J, pinv)  # (n,)
+    h = np.clip(h, 0.0, 1.0 - 1e-12)  # guard against numerical > 1
+
+    e2 = resid ** 2
+    if kind == "HC0":
+        scale = e2
+    elif kind == "HC1":
+        scale = e2 * (n / (n - k))
+    elif kind == "HC2":
+        scale = e2 / (1.0 - h)
+    else:  # HC3
+        scale = e2 / (1.0 - h) ** 2
+
+    # V = pinv @ diag(scale) @ pinv.T  (matches statsmodels' _HCCM).
+    V = pinv @ (scale[:, None] * pinv.T)
+    return V
+
+
 def _as_int_labels(arr: np.ndarray) -> np.ndarray:
     uniq, inv = np.unique(arr, return_inverse=True)
     return inv
