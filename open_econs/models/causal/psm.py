@@ -24,6 +24,39 @@ class PSMResult(BaseModel):
     Immutable result with ``.tidy()`` (DataFrame of the treatment effect
     estimate), ``.summary()`` (text), and the standard ``.export()`` /
     ``.to_latex()`` / ``.to_html()`` interface.
+
+    Attributes
+    ----------
+    effect : float
+        ATE estimate.
+    se : float
+        Abadie-Imbens robust standard error.
+    z_stat : float
+        z-statistic for the ATE.
+    p_value : float
+        Two-sided p-value for the ATE.
+    conf_int_lower, conf_int_upper : float
+        95 % confidence interval bounds.
+    n_treated, n_control : int
+        Number of treated / control observations in the matching universe.
+    n_matched : int
+        Number of matched pairs.
+    caliper : float
+        Maximum absolute PS difference for a match.
+    estimand : str
+        Target estimand (currently only ``"ate"``).
+    original_data : pd.DataFrame
+        Data on which matching was performed (after optional common-support
+        trimming).  Includes all columns from the original input.
+    weights : pd.Series
+        Match-frequency weights indexed like ``original_data``.
+        Treated observations have weight 1; control observations have weight
+        equal to ``K(i)``, the number of times they are used as a match
+        (0 for unused controls).
+    matched : pd.Series
+        Boolean mask indexed like ``original_data`` indicating which
+        observations were included in the matched sample (treated with a
+        pair within caliper, and controls used at least once).
     """
 
     def __init__(
@@ -40,6 +73,10 @@ class PSMResult(BaseModel):
         caliper: float,
         estimand: str,
         call: dict[str, Any],
+        original_data: pd.DataFrame,
+        treatment: str,
+        weights: np.ndarray,
+        matched: np.ndarray,
     ) -> None:
         self.effect = effect
         self.se = se
@@ -55,7 +92,25 @@ class PSMResult(BaseModel):
         self.call = call
         self.timestamp = __import__("datetime").datetime.now()
         self.package_version = __version__
+        self.original_data = original_data
+        self._treatment = treatment
+        self._weights_arr = weights
+        self._matched_arr = matched
         self._freeze()
+
+    @property
+    def weights(self) -> pd.Series:
+        return pd.Series(
+            self._weights_arr, name="psm_weights",
+            index=self.original_data.index,
+        )
+
+    @property
+    def matched(self) -> pd.Series:
+        return pd.Series(
+            self._matched_arr, name="psm_matched",
+            index=self.original_data.index,
+        )
 
     def tidy(self) -> pd.DataFrame:
         return pd.DataFrame({
@@ -81,6 +136,40 @@ class PSMResult(BaseModel):
         )
         tbl = self.tidy().to_string(index=False)
         return header + tbl + "\n================================================================\n"
+
+    def balance(
+        self,
+        covariates: list[str] | None = None,
+    ) -> pd.DataFrame:
+        """Covariate balance table on the matched sample (weighted).
+
+        Delegates to :func:`open_econs.models.causal.balance.balance`,
+        restricting to matched observations and passing the PSM match-
+        frequency weights.
+
+        Parameters
+        ----------
+        covariates : list of str, optional
+            Covariates to compare.  If omitted, all numeric columns other
+            than the treatment variable are used.
+
+        Returns
+        -------
+        pd.DataFrame
+            Balance table with SMD, variance ratios, and weighted t-tests.
+        """
+        from open_econs.models.causal.balance import balance
+
+        m = self._matched_arr
+        data = self.original_data.iloc[m].copy()
+        _wcol = "_psm_weights_"
+        data[_wcol] = self._weights_arr[m]
+        return balance(
+            data=data,
+            treatment=self._treatment,
+            covariates=covariates,
+            weights=_wcol,
+        )
 
 
 def _compute_propensity_scores(
@@ -200,6 +289,25 @@ def _compute_local_cov(
     return (z_nb - z_mean).T @ (y_nb - y_mean) / (len(neighborhood) - 1)
 
 
+def _count_matches(pairs: dict[int, int], n: int) -> np.ndarray:
+    """K(i) = number of times each observation is used as an opposite-treatment match.
+
+    Parameters
+    ----------
+    pairs : dict mapping each matched observation to its partner.
+    n : total number of observations in the matching universe.
+
+    Returns
+    -------
+    np.ndarray
+        Integer array of length *n* with match-frequency counts.
+    """
+    K = np.zeros(n, dtype=int)
+    for i, j in pairs.items():
+        K[j] += 1
+    return K
+
+
 def _compute_ai_variance(
     y: np.ndarray,
     treatment: np.ndarray,
@@ -235,10 +343,7 @@ def _compute_ai_variance(
     n = len(y)
 
     # --- K counting ---
-    # K(i) = number of times observation i is used as an opposite-treatment match
-    K = np.zeros(n, dtype=int)
-    for i, j in pairs.items():
-        K[j] += 1
+    K = _count_matches(pairs, n)
     Km = K.astype(float)
 
     # K'(i) = Σ_{j: i ∈ Ω(j)} 1/|Ω(j)|² — for 1:1 matching, K' = K
@@ -459,6 +564,14 @@ def psm(
     n_c = n - n_t
     n_matched = len(pairs) // 2
 
+    # Build per-observation weight and match indicator
+    K = _count_matches(pairs, n)
+    weights_arr = np.where(t == 1, 1.0, K.astype(float))
+    matched_arr = np.zeros(n, dtype=bool)
+    for i in range(n):
+        if (t[i] == 1 and i in pairs) or K[i] > 0:
+            matched_arr[i] = True
+
     return PSMResult(
         effect=float(tau),
         se=float(se),
@@ -471,4 +584,8 @@ def psm(
         caliper=caliper,
         estimand=estimand,
         call=call,
+        original_data=_data,
+        treatment=treatment,
+        weights=weights_arr,
+        matched=matched_arr,
     )
