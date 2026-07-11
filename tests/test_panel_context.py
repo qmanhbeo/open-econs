@@ -105,3 +105,35 @@ def test_panelcontext_cross_section_delegation(df_panel):
     pc = oe.PanelContext(df_panel, entity="entity", time="time")
     r = pc.ols("y ~ x + z")
     assert r.nobs == len(df_panel)
+
+
+def test_panelcontext_gmm_defaults_to_entity_cluster(df_panel):
+    # ctx.gmm(formula) with no explicit cluster must be identical to calling the
+    # top-level gmm() directly with cluster=<entity col> and cov_type="cluster".
+    pc = oe.PanelContext(df_panel, entity="entity", time="time")
+    formula = "y ~ x | z"
+    delegated = pc.gmm(formula)
+    direct = oe.gmm(formula, data=df_panel, cluster="entity", cov_type="cluster")
+    assert delegated.cov_type == "cluster"
+    assert delegated.step == "two-step"
+    assert np.allclose(delegated.coefficients.values, direct.coefficients.values)
+    assert np.allclose(delegated.std_errors.values, direct.std_errors.values)
+    assert np.allclose(delegated.hansen_j, direct.hansen_j)
+
+
+def test_panelcontext_gmm_explicit_cluster_and_covtype_win(df_panel):
+    pc = oe.PanelContext(df_panel, entity="entity", time="time")
+    formula = "y ~ x | z"
+    # explicit cluster= overrides the entity default (and cov_type still
+    # defaults to "cluster").
+    r_cluster = pc.gmm(formula, cluster="time")
+    direct_cluster = oe.gmm(
+        formula, data=df_panel, cluster="time", cov_type="cluster"
+    )
+    assert r_cluster.cov_type == "cluster"
+    assert np.allclose(r_cluster.std_errors.values, direct_cluster.std_errors.values)
+    # explicit cov_type="robust" is honored and no entity cluster is injected.
+    r_robust = pc.gmm(formula, cov_type="robust")
+    direct_robust = oe.gmm(formula, data=df_panel, cov_type="robust")
+    assert r_robust.cov_type == "robust"
+    assert np.allclose(r_robust.std_errors.values, direct_robust.std_errors.values)
