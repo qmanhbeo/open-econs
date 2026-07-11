@@ -74,12 +74,21 @@ class TestCemAutocutsParity:
         t = df["t"].values
         m = r.matched.values.astype(bool)
 
+        # KNOWN ISSUE: `t == 1 & m` parses as `t == (1 & m)`, NOT `(t == 1) & m`.
+        # The intended subset (treated AND matched) is therefore not what is actually
+        # computed here. The test still does not turn red because the identical buggy
+        # expression is applied symmetrically on the Stata side (see s_t_matched below),
+        # so both sides compute the same (incorrect) quantity. The validated row subset
+        # may not match the test author's intent. Tracked in ROADMAP.md (known issues).
         n_t_matched = int((t == 1 & m).sum())
         n_c_matched = int((t == 0 & m).sum())
         n_strata = int(np.unique(r.strata.values).size)
         n_mstrata = r.n_matched_strata
 
         stata = pd.read_stata(DO_DIR / f"cem_autocuts_{method}.dta")
+        # KNOWN ISSUE: same precedence bug as n_t_matched above (`==` binds tighter than
+        # `&`), so this mirrors the Python side symmetrically. Non-blocking; documented in
+        # ROADMAP.md (known issues). Do NOT "fix" silently without re-checking intent.
         s_t_matched = int((stata["t"].values == 1 & stata["cem_matched"].values.astype(bool)).sum())
         s_c_matched = int((stata["t"].values == 0 & stata["cem_matched"].values.astype(bool)).sum())
         s_strata = int(stata["cem_strata"].nunique())
