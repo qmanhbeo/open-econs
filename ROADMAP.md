@@ -213,8 +213,8 @@ might fit.
   - Parity now holds at **rtol=1e-6** (was 0.2/0.6); all 18 staggered-DiD tests pass.
     References: see README.
 - [x] `test_stata_staggered_did.py` → live `read_stata()` comparison *(done: fcc8fe8)*
-- [ ] RDD bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
-- [ ] McCrary density test for manipulation at the cutoff
+- [x] RDD bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik) — both `ik` (built-in `_ik_bandwidth`) and `cct` (rdrobust backend) present and tested; `rdd.py:186` / `rdd.py:390`. CCT-without-rdrobust silently falls back to IK, consistent with the established built-in-fallback design.
+- [x] McCrary / CJM density test for manipulation at the cutoff — `oe.density_test()` + `RDResult.density_test()`; dual backend (rddensity wrapper + native built-in); matches Stata `rddensity` to machine precision; `rddensity>=2.0`.  See `open_econs/models/causal/rdd.py`.
 - [ ] Built-in RD plot (binned scatter + fitted lines either side of cutoff)
 
 #### v0.8 — Matching & Balance

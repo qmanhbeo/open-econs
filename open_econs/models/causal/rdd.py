@@ -30,6 +30,13 @@ try:
 except ImportError:
     _RDROBUST = False
 
+try:
+    from rddensity import rddensity as _rddensity
+
+    _RDENSITY = True
+except ImportError:
+    _RDENSITY = False
+
 
 class RDResult(BaseModel):
     """Result of a regression-discontinuity design (sharp or fuzzy)."""
@@ -89,6 +96,34 @@ class RDResult(BaseModel):
             f"  Observations     : {self.n_left} left / {self.n_right} right\n"
             f"  Discontinuity    : {self.effect:.4f} (se {self.se:.4f}, "
             f"p {self.p_value:.3f})\n"
+        )
+
+    def density_test(
+        self, data: pd.DataFrame, backend: str = "auto",
+        h: float | tuple[float, float] | None = None, **kwargs: Any,
+    ) -> "DensityTestResult":
+        """McCrary / Cattaneo–Jansson–Ma density (manipulation) test.
+
+        Tests for a discontinuity in the density of the running variable at the
+        cutoff — evidence of manipulation (e.g. units sorting around the
+        threshold).  Delegates to :func:`density_test` using ``self.running``
+        and ``self.cutoff``; the original analysis ``data`` must be supplied
+        because the result object does not retain the dataset.
+
+        Parameters
+        ----------
+        data : pd.DataFrame
+            Analysis data (must contain the running variable).
+        backend : {"auto", "rddensity", "builtin"}, default "auto"
+            ``"rddensity"`` uses the ``rddensity`` package (authors' reference
+            implementation); ``"builtin"`` uses the from-source estimator;
+            ``"auto"`` picks ``rddensity`` when installed, else ``builtin``.
+        h : float or (float, float), optional
+            Bandwidth(s).  A scalar applies a common bandwidth; a 2-tuple sets
+            ``(h_left, h_right)``.  If ``None``, selected automatically.
+        """
+        return density_test(
+            data, self.running, self.cutoff, backend=backend, h=h, **kwargs
         )
 
 
@@ -437,4 +472,377 @@ def rdd(
         fuzzy=fuzzy, bandwidth=float(h), effect=effect, se=se,
         z_stat=z_stat, p_value=p_value, n_left=n_left, n_right=n_right,
         call=call,
+    )
+
+
+# ── McCrary / Cattaneo–Jansson–Ma density (manipulation) test ─────────────────
+# Implements the CJM manipulation test (``rddensity``; Cattaneo, Jansson & Ma,
+# 2020, Review of Economics and Statistics).  The reference implementation is the
+# authors' own ``rddensity`` (Python ``rddensity`` package and Stata
+# ``rddensity``).  The ``backend="rddensity"`` path is a thin wrapper around that
+# package; the ``backend="builtin"`` path re-implements the estimator *from
+# source* (data centred at the cutoff, empirical-CDF ranks as the outcome,
+# combined ``[-h_l, h_r]`` window, unrestricted local-polynomial density
+# estimation with the jackknife influence-function variance) so it works without
+# the optional dependency while matching Stata ``rddensity`` to machine precision
+# when the same bandwidth is supplied.
+#
+# Unlike McCrary (2008)'s original binned-histogram test, CJM estimates the
+# density with a local-polynomial CDF regression and tests
+# ``theta = fhat_r - fhat_l`` (the discontinuity in the *level* of the density at
+# the cutoff), with SE from the variance of the two one-sided estimates.  The
+# estimator below is a faithful transcription of ``rddensity``'s ``__rddensity_fv``
+# routine (fitselect="unrestricted"), which is the quantity Stata ``rddensity``
+# stores in ``e(f_ql)`` / ``e(f_qr)`` / ``e(se_q)`` / ``e(T_q)`` / ``e(pv_q)``.
+
+
+def __rddensity_unique(x: np.ndarray) -> dict[str, np.ndarray]:
+    """Unique values + frequencies (matches rddensity's __rddensityUnique)."""
+    values = np.asarray(x, dtype=float).reshape(-1)
+    n = len(values)
+    if n == 0:
+        return {
+            "unique": np.array([]), "freq": np.array([]),
+            "indexFirst": np.array([]), "indexLast": np.array([]),
+        }
+    if n == 1:
+        return {
+            "unique": values.copy(), "freq": np.array([1]),
+            "indexFirst": np.array([0]), "indexLast": np.array([0]),
+        }
+    unique_mask = np.r_[values[1:] != values[:-1], True]
+    unique = values[unique_mask]
+    index_last = np.flatnonzero(unique_mask)
+    freq = np.diff(np.r_[-1, index_last])
+    index_first = index_last - freq + 1
+    return {
+        "unique": unique, "freq": freq,
+        "indexFirst": index_first, "indexLast": index_last,
+    }
+
+
+def _cjm_density_test(
+    x: np.ndarray, cutoff: float, hl: float, hr: float,
+    kernel: str = "triangular", mass_points: bool = True,
+    p: int = 3, s: int = 1, vce: str = "jackknife",
+) -> dict[str, float]:
+    """Core CJM density-discontinuity estimate (transcribed from rddensity).
+
+    Returns a dict with ``theta`` (fhat_r - fhat_l), ``se`` (jackknife), the two
+    one-sided density estimates ``fhat_l`` / ``fhat_r``, the sample sizes
+    ``n_left`` / ``n_right`` (total either side) and ``n_eff_left`` /
+    ``n_eff_right`` (inside the window), and the bandwidths ``hl`` / ``hr``.
+    """
+    x = np.asarray(x, dtype=float).reshape(-1)
+    n = len(x)
+    nan = dict(
+        theta=float("nan"), se=float("nan"), fhat_l=float("nan"),
+        fhat_r=float("nan"), n_left=float("nan"), n_right=float("nan"),
+        n_eff_left=float("nan"), n_eff_right=float("nan"), hl=hl, hr=hr,
+    )
+    if n < 2:
+        return nan
+
+    # Centre at the cutoff and rank the empirical CDF (0, 1/(n-1), ..., 1).
+    X = np.sort(x) - cutoff
+    Y = np.arange(n, dtype=float) / (n - 1.0)
+    if mass_points:
+        uniq = __rddensity_unique(X)
+        Y = np.repeat(Y[uniq["indexLast"]], uniq["freq"])
+
+    # Combined window [-hl, hr]; left points (X<0) precede right points (X>=0)
+    # because X is sorted.
+    h_mask = (X >= -hl) & (X <= hr)
+    Xh = X[h_mask]
+    Yh = Y[h_mask]
+    nh = len(Xh)
+    if nh < 2:
+        return nan
+    nlh = int(np.sum(Xh < 0))
+    nrh = nh - nlh
+    nl = int(np.sum(X < 0))
+    nr = n - nl
+
+    # Triangular kernel weights.
+    W = np.full(nh, np.nan)
+    if kernel == "uniform":
+        W[0:nlh] = 1.0 / (2.0 * hl)
+        W[nlh:nh] = 1.0 / (2.0 * hr)
+    elif kernel == "epanechnikov":
+        W[0:nlh] = 0.75 * (1.0 - (Xh[0:nlh] / hl) ** 2) / hl
+        W[nlh:nh] = 0.75 * (1.0 - (Xh[nlh:nh] / hr) ** 2) / hr
+    else:  # triangular
+        W[0:nlh] = (1.0 + Xh[0:nlh] / hl) / hl
+        W[nlh:nh] = (1.0 - Xh[nlh:nh] / hr) / hr
+
+    # Design matrix: even columns = left polynomial, odd = right polynomial.
+    ncol = 2 * p + 2
+    Xp = np.zeros((nh, ncol))
+    Hp = np.repeat(0.0, ncol)
+    for power in range(p + 1):
+        Xp[0:nlh, 2 * power] = np.power(Xh[0:nlh] / hl, power)
+        Xp[nlh:nh, 2 * power + 1] = np.power(Xh[nlh:nh] / hr, power)
+        Hp[2 * power] = np.power(hl, power)
+        Hp[2 * power + 1] = np.power(hr, power)
+    HpInv = np.diag(1.0 / Hp)
+    XpW = Xp * W[:, None]
+
+    try:
+        Sinv = np.linalg.inv(XpW.T @ Xp)
+    except np.linalg.LinAlgError:
+        return nan
+
+    b = (XpW.T @ Yh) @ Sinv @ HpInv
+    fhat_l = float(b[2])
+    fhat_r = float(b[3])
+    theta = fhat_r - fhat_l
+
+    # Jackknife influence-function variance (rddensity's default vce).
+    L = np.zeros((nh, ncol))
+    if mass_points:
+        XUnique = __rddensity_unique(Xh)
+        indexUnique = XUnique["indexFirst"]
+        freqUnique = XUnique["freq"]
+        for jj in range(ncol):
+            tail = np.cumsum(np.r_[0.0, XpW[::-1, jj]]) / (n - 1.0)
+            L[:, jj] = np.repeat(tail[nh - 1 :: -1][indexUnique], freqUnique)
+    else:
+        for jj in range(ncol):
+            tail = np.cumsum(np.r_[0.0, XpW[::-1, jj]]) / (n - 1.0)
+            L[:, jj] = tail[nh - 1 :: -1]
+    V = HpInv @ Sinv @ (L.T @ L) @ Sinv @ HpInv
+    v_ll = V[2, 2]
+    v_rr = V[3, 3]
+    v_lr = V[2, 3]
+    se = float(np.sqrt(max(v_ll + v_rr - 2.0 * v_lr, 0.0)))
+
+    return dict(
+        theta=theta, se=se, fhat_l=fhat_l, fhat_r=fhat_r,
+        n_left=float(nl), n_right=float(nr),
+        n_eff_left=float(nlh), n_eff_right=float(nrh),
+        hl=hl, hr=hr,
+    )
+
+
+def _cjm_bandwidth(
+    x: np.ndarray, cutoff: float, kernel: str = "triangular",
+    mass_points: bool = True, p: int = 2,
+) -> tuple[float, float]:
+    """Automatic (h_l, h_r) bandwidth selection.
+
+    Uses ``rddensity``'s ``rdbwdensity`` MSE-DPI selector with the ``comb`` rule
+    (median of the each / diff / sum bandwidths) when available — identical to
+    what ``rddensity`` itself does — and falls back to a Silverman-style rule per
+    side otherwise (clearly an approximation; the validated configuration passes
+    ``h`` explicitly).
+    """
+    x = np.asarray(x, dtype=float).reshape(-1)
+    try:
+        from rddensity.rdbwdensity import rdbwdensity as _rdbwdensity_fn
+
+        _have = True
+    except ImportError:
+        _have = False
+
+    if _have:
+        try:
+            Xc = np.sort(x) - cutoff
+            out = _rdbwdensity_fn(
+                X=Xc, c=0.0, p=p, kernel=kernel, fitselect="unrestricted",
+                vce="jackknife", regularize=True, massPoints=mass_points,
+            )
+            bw = out.h
+            bw_l = float(bw.loc["l", "bw"])
+            bw_r = float(bw.loc["r", "bw"])
+            bw_d = float(bw.loc["diff", "bw"])
+            bw_s = float(bw.loc["sum", "bw"])
+            hl = float(np.median([bw_l, bw_d, bw_s]))
+            hr = float(np.median([bw_r, bw_d, bw_s]))
+            return hl, hr
+        except Exception:
+            # Cutoff outside the data range, too few observations for the
+            # MSE-DPI selector, etc. - fall back to the simple rule below.
+            pass
+
+    # Fallback: Silverman-style per side.
+    xl = x[x < cutoff]
+    xr = x[x >= cutoff]
+    nl, nr = len(xl), len(xr)
+    sl = float(np.std(xl, ddof=1)) if nl > 1 else 1.0
+    sr = float(np.std(xr, ddof=1)) if nr > 1 else 1.0
+    hl = 2.0 * 1.06 * sl * (nl ** (-1.0 / 5.0)) if nl > 1 else 0.5
+    hr = 2.0 * 1.06 * sr * (nr ** (-1.0 / 5.0)) if nr > 1 else 0.5
+    return hl, hr
+
+
+class DensityTestResult(BaseModel):
+    """Result of a McCrary / Cattaneo–Jansson–Ma density (manipulation) test."""
+
+    def __init__(
+        self, *, theta: float, se: float, z_stat: float, p_value: float,
+        h_left: float, h_right: float,         n_left: int, n_right: int,
+        fhat_left: float, fhat_right: float, backend: str, call: dict[str, Any],
+    ) -> None:
+        self.theta = theta
+        self.se = se
+        self.z_stat = z_stat
+        self.p_value = p_value
+        self.h_left = h_left
+        self.h_right = h_right
+        self.n_left = n_left
+        self.n_right = n_right
+        self.fhat_left = fhat_left
+        self.fhat_right = fhat_right
+        self.backend = backend
+        self.call = call
+        self.timestamp = __import__("datetime").datetime.now()
+        self.package_version = __version__
+        self._freeze()
+
+    def tidy(self) -> pd.DataFrame:
+        return pd.DataFrame({
+            "term": [
+                "theta (fhat_r - fhat_l)", "se", "z", "P>|z|",
+                "fhat_left", "fhat_right", "h_left", "h_right",
+                "n_left", "n_right", "backend",
+            ],
+            "value": [
+                self.theta, self.se, self.z_stat, self.p_value,
+                self.fhat_left, self.fhat_right, self.h_left, self.h_right,
+                self.n_left, self.n_right, self.backend,
+            ],
+        })
+
+    def summary(self) -> str:
+        return (
+            "      Density (Manipulation) Test — Cattaneo–Jansson–Ma      \n"
+            "==================================================================\n"
+            f"  theta (fhat_r - fhat_l): {self.theta:.6f}\n"
+            f"  se                    : {self.se:.6f}\n"
+            f"  z                     : {self.z_stat:.4f}\n"
+            f"  P>|z|                 : {self.p_value:.4f}\n"
+            f"  fhat_left / fhat_right: {self.fhat_left:.6f} / {self.fhat_right:.6f}\n"
+            f"  h_left / h_right      : {self.h_left:.6f} / {self.h_right:.6f}\n"
+            f"  n_left / n_right      : {int(self.n_left)} / {int(self.n_right)}\n"
+            f"  backend               : {self.backend}\n"
+        )
+
+
+def density_test(
+    data: pd.DataFrame, running: str, cutoff: float,
+    backend: str = "auto", h: float | tuple[float, float] | None = None,
+    kernel: str = "triangular", mass_points: bool = True,
+    p: int = 2, q: int = 3,
+) -> DensityTestResult:
+    """McCrary / Cattaneco–Jansson–Ma density (manipulation) test for RDD.
+
+    Tests for a discontinuity in the density of the running variable at the
+    cutoff.  A discontinuous density (bunching of observations just above or
+    below the threshold) is evidence that units may have manipulated their
+    position relative to the cutoff, threatening the RDD identifying
+    assumption.  This is a diagnostic on the *running variable* — it does not
+    use the outcome.
+
+    Two computational paths, matching the project's optional-dependency
+    pattern:
+
+    1. **``backend="rddensity"``** (default when the ``rddensity`` package is
+       installed): thin wrapper around the authors' reference implementation.
+    2. **``backend="builtin"``**: from-source estimator (CJM local-polynomial
+       density estimation with jackknife variance), no extra dependency.
+
+    Both paths match Stata ``rddensity`` to machine precision when given the
+    same bandwidth.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Analysis data.
+    running : str
+        Running (forcing) variable column.
+    cutoff : float
+        Discontinuity threshold.
+    backend : {"auto", "rddensity", "builtin"}, default "auto"
+        Estimation path.
+    h : float or (float, float), optional
+        Bandwidth(s).  Scalar = common; 2-tuple = ``(h_left, h_right)``.  If
+        ``None``, selected automatically (``rddensity``'s MSE-DPI rule, or a
+        Silverman fallback).
+    kernel : {"triangular"}, default "triangular"
+        Only triangular is supported (matches ``rddensity``).
+    mass_points : bool, default True
+        Adjust for tied observations (matches ``rddensity``).
+    p : int, default 2
+        Polynomial order for bandwidth selection.
+    q : int, default 3
+        Polynomial order for density estimation (bias-correction order).
+
+    Returns
+    -------
+    DensityTestResult
+    """
+    call = _capture_call(
+        running=running, cutoff=cutoff, backend=backend, h=h,
+        kernel=kernel, mass_points=mass_points, p=p, q=q,
+    )
+    if running not in data.columns:
+        from open_econs._internal import errors
+
+        raise errors.missing_column_error(running, data.columns.tolist())
+    if kernel != "triangular":
+        raise ValueError("Only the triangular kernel is supported.")
+
+    x = data[running].values.astype(float)
+
+    if backend == "rddensity" or (backend == "auto" and _RDENSITY):
+        if not _RDENSITY:
+            raise RuntimeError(
+                "backend='rddensity' requires the `rddensity` package "
+                "(pip install open-econs[rd])."
+            )
+        rd_kwargs = dict(
+            c=cutoff, kernel=kernel, vce="jackknife",
+            massPoints=mass_points, p=p, q=q,
+        )
+        if h is not None:
+            rd_kwargs["h"] = h
+        rd = _rddensity(x, **rd_kwargs)
+        hl = float(rd.h["left"])
+        hr = float(rd.h["right"])
+        theta = float(rd.hat["diff"])
+        se = float(rd.sd_jk["diff"])
+        z_stat = float(rd.test["t_jk"])
+        p_value = float(rd.test["p_jk"])
+        fhat_l = float(rd.hat["left"])
+        fhat_r = float(rd.hat["right"])
+        n_l = int(rd.n["left"])
+        n_r = int(rd.n["right"])
+        used = "rddensity"
+    else:
+        if h is None:
+            hl, hr = _cjm_bandwidth(
+                x, cutoff, kernel=kernel, mass_points=mass_points, p=p,
+            )
+        elif isinstance(h, (int, float)):
+            hl = hr = float(h)
+        else:
+            hl, hr = float(h[0]), float(h[1])
+        res = _cjm_density_test(
+            x, cutoff, hl, hr, kernel=kernel, mass_points=mass_points,
+            p=q, s=1, vce="jackknife",
+        )
+        theta = res["theta"]
+        se = res["se"]
+        fhat_l = res["fhat_l"]
+        fhat_r = res["fhat_r"]
+        n_l = int(res["n_left"]) if np.isfinite(res["n_left"]) else 0
+        n_r = int(res["n_right"]) if np.isfinite(res["n_right"]) else 0
+        z_stat = theta / se if se > 0 else float("nan")
+        p_value = 2.0 * (1.0 - _norm.cdf(abs(z_stat))) if se > 0 else float("nan")
+        used = "builtin"
+
+    return DensityTestResult(
+        theta=theta, se=se, z_stat=z_stat, p_value=p_value,
+        h_left=hl, h_right=hr, n_left=n_l, n_right=n_r,
+        fhat_left=fhat_l, fhat_right=fhat_r, backend=used, call=call,
     )

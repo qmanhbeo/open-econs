@@ -9,7 +9,7 @@ from .models.linear.abond import abond
 from .models.causal.did import did, event_study
 from .models.causal.balance import balance
 from .models.causal.staggered_did import staggered_did
-from .models.causal.rdd import rdd
+from .models.causal.rdd import density_test, rdd
 from .core.context import Context
 from .core.panel_context import PanelContext
 
