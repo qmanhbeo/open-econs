@@ -1,7 +1,10 @@
 """Stata parity tests for Staggered DiD (SSC: csdid).
 
-Cell-by-cell ATT(g,t) and SE parity, plus aggregated ATT parity,
-mapping the abond test pattern.
+Cell-by-cell ATT(g,t) and SE parity, plus aggregated ATT/SE parity, read live
+from Stata-generated .dta fixtures via ``read_stata``.  Every expected value is
+loaded once at module level (cached) from ``staggered_did.dta`` /
+``staggered_did_unbalanced.dta``; the aggregated SE is recomputed in Stata from
+csdid's per-entity RIF using open_econs' exact aggregation formula.
 """
 
 from __future__ import annotations
@@ -15,30 +18,11 @@ import open_econs as oe
 
 from .stata_runner import FIXTURES_DIR, read_stata
 
+RTOL = 1e-6
 
-# Cell-level ground truth from Stata csdid with covariates (method dripw)
-# Post-treatment cells only (t >= g) on the balanced fixture.
-# Extracted at full double precision from the .dta fixture.
-#
-# The .do file now filters to `entity < 20` (matching the Python test), which
-# drops the gvar=5 entities 20-29. They never turn on in the data (max time=4),
-# so dropping them leaves the g=3 ATT(g,t) and SEs unchanged (verified: only
-# floating-point noise). The csdid weights move from 0.125 to 0.25 because the
-# g=5 cells no longer share the weight mass (only the 4 g=3 cells remain).
-_CELL_B = {
-    (3, 3): 0.30123529722907494,
-    (3, 4): -0.5875691446021463,
-}
-_CELL_SE = {
-    (3, 3): 0.4652265300783386,
-    (3, 4): 0.49419991367141947,
-}
-_CELL_W = {
-    (3, 3): 0.25,
-    (3, 4): 0.25,
-}
-
-_POST_KEYS = list(_CELL_B.keys())
+# Load Stata ground truth once per module (cached), not per test method.
+S = read_stata("staggered_did")
+S_U = read_stata("staggered_did_unbalanced")
 
 
 def _oe_att_gt(oe_r: oe.StaggeredDiDResult) -> dict[tuple[int, int], float]:
@@ -59,9 +43,7 @@ class TestStaggeredDiDWithCovariates:
     the per-cell computation here).
     """
 
-    _B = np.array([_CELL_B[k] for k in _POST_KEYS])
-    _W = np.array([_CELL_W[k] for k in _POST_KEYS])
-    _SE = np.array([_CELL_SE[k] for k in _POST_KEYS])
+    _POST_KEYS = [(3, 3), (3, 4)]
 
     @pytest.fixture(autouse=True)
     def _run(self, df_panel):
@@ -82,33 +64,33 @@ class TestStaggeredDiDWithCovariates:
 
     def test_cell_att_g3_t3(self):
         gt = _oe_att_gt(self.oe_r)
-        npt.assert_allclose(gt[(3, 3)], _CELL_B[(3, 3)], rtol=1e-6)
+        npt.assert_allclose(gt[(3, 3)], S["b_g3_t2_3"], rtol=RTOL)
 
     def test_cell_att_g3_t4(self):
         gt = _oe_att_gt(self.oe_r)
-        npt.assert_allclose(gt[(3, 4)], _CELL_B[(3, 4)], rtol=1e-6)
+        npt.assert_allclose(gt[(3, 4)], S["b_g3_t2_4"], rtol=RTOL)
 
     def test_cell_se_g3_t3(self):
         gt = _oe_se_gt(self.oe_r)
-        npt.assert_allclose(gt[(3, 3)], _CELL_SE[(3, 3)], rtol=1e-6)
+        npt.assert_allclose(gt[(3, 3)], S["se_g3_t2_3"], rtol=RTOL)
 
     def test_cell_se_g3_t4(self):
         gt = _oe_se_gt(self.oe_r)
-        npt.assert_allclose(gt[(3, 4)], _CELL_SE[(3, 4)], rtol=1e-6)
+        npt.assert_allclose(gt[(3, 4)], S["se_g3_t2_4"], rtol=RTOL)
 
     def test_aggregated_att_simple(self):
         """Simple ATT = weighted avg of post-treatment cells using csdid weights."""
-        w = self._W
-        b = self._B
+        b = np.array([S["b_g3_t2_3"], S["b_g3_t2_4"]])
+        w = np.array([S["w_g3_t2_3"], S["w_g3_t2_4"]])
         simple_gt = np.average(b, weights=w)
-        npt.assert_allclose(self.oe_r.att, simple_gt, rtol=1e-6)
+        npt.assert_allclose(self.oe_r.att, simple_gt, rtol=RTOL)
 
     def test_aggregated_se(self):
         # csdid's aggregated SE uses the full-sample IF rescaling (weighted
         # average of per-entity RIFs across post-treatment cells), NOT the
-        # naive sqrt(weighted avg per-cell se^2). Validated value = 0.41781627.
-        _AGG_SE = 0.41781627
-        npt.assert_allclose(self.oe_r.att_se, _AGG_SE, rtol=1e-6)
+        # naive sqrt(weighted avg per-cell se^2).  Recomputed in Stata from
+        # csdid's per-entity RIF (staggered_did.do) = 0.41781627.
+        npt.assert_allclose(self.oe_r.att_se, S["agg_se"], rtol=RTOL)
 
     def test_cell_count(self):
         assert len(self.oe_r.att_group_time) == 2  # 2 post-treatment cells
@@ -121,24 +103,12 @@ class TestStaggeredDiDWithCovariatesUnbalanced:
     g=5 (treated at t=5).  Entities 23-29 (g=5) never have treat=1 in the data
     (max time=4, treatment at t=5).
 
-    Stata reference values from staggered_did_unbalanced.dta.  The .do file now
-    filters to `entity < 23`, matching the Python test and dropping the gvar=5
-    entities 23-29.  Dropping them leaves the g=3 ATT(g,t) and SEs unchanged
-    (verified: only floating-point noise); the csdid weights move from
-    0.133333 to 0.25 because the g=5 cells no longer share the weight mass.
-
     SEs differ from csdid by a larger margin than the balanced case because
     csdid's makerif2 full-sample IF rescaling is more impactful when cohorts
     are unbalanced.  ATTs match at rtol=1e-6.
     """
 
-    _POST_KEYS = [
-        (3, 3),  # g=3, t=3  (Stata label: b_g3_t2_3)
-        (3, 4),  # g=3, t=4  (Stata label: b_g3_t2_4)
-    ]
-    _B = np.array([1.8156907408740837, 2.3993270357682666])
-    _SE = np.array([0.7054067384885818, 0.609847150360171])
-    _W = np.array([0.25, 0.25])
+    _POST_KEYS = [(3, 3), (3, 4)]
 
     @pytest.fixture(autouse=True)
     def _run(self):
@@ -155,25 +125,30 @@ class TestStaggeredDiDWithCovariatesUnbalanced:
 
     def test_unbalanced_cell_att_g3_t3(self):
         gt = _oe_att_gt(self.oe_r)
-        npt.assert_allclose(gt[(3, 3)], 1.8156907408740837, rtol=1e-6)
+        npt.assert_allclose(gt[(3, 3)], S_U["b_g3_t2_3"], rtol=RTOL)
 
     def test_unbalanced_cell_att_g3_t4(self):
         gt = _oe_att_gt(self.oe_r)
-        npt.assert_allclose(gt[(3, 4)], 2.3993270357682666, rtol=1e-6)
+        npt.assert_allclose(gt[(3, 4)], S_U["b_g3_t2_4"], rtol=RTOL)
 
     def test_unbalanced_cell_se_g3_t3(self):
         gt = _oe_se_gt(self.oe_r)
-        npt.assert_allclose(gt[(3, 3)], 0.7054067384885818, rtol=1e-6)
+        npt.assert_allclose(gt[(3, 3)], S_U["se_g3_t2_3"], rtol=RTOL)
 
     def test_unbalanced_cell_se_g3_t4(self):
         gt = _oe_se_gt(self.oe_r)
-        npt.assert_allclose(gt[(3, 4)], 0.609847150360171, rtol=1e-6)
+        npt.assert_allclose(gt[(3, 4)], S_U["se_g3_t2_4"], rtol=RTOL)
 
     def test_unbalanced_aggregated_att(self):
-        w = self._W[:2]  # post-treatment weights only
-        b = self._B
-        simple_gt = np.average(b, weights=w[:2])
-        npt.assert_allclose(self.oe_r.att, simple_gt, rtol=1e-6)
+        b = np.array([S_U["b_g3_t2_3"], S_U["b_g3_t2_4"]])
+        w = np.array([S_U["w_g3_t2_3"], S_U["w_g3_t2_4"]])
+        simple_gt = np.average(b, weights=w)
+        npt.assert_allclose(self.oe_r.att, simple_gt, rtol=RTOL)
+
+    def test_unbalanced_aggregated_se(self):
+        # Aggregated SE recomputed in Stata from csdid's per-entity RIF using
+        # open_econs' exact aggregation = 0.62720813.
+        npt.assert_allclose(self.oe_r.att_se, S_U["agg_se"], rtol=RTOL)
 
     def test_unbalanced_cell_count(self):
         assert len(self.oe_r.att_group_time) == 2

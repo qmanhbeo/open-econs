@@ -15,8 +15,11 @@ drop if entity >= 23
 gen gvar = 0
 replace gvar = 3 if entity >= 15 & entity < 23
 
-* Run csdid with covariates (dripw, default)
-csdid y x z, ivar(entity) time(time) gvar(gvar)
+* Run csdid with covariates (dripw, default).  saverif() dumps the per-entity
+* RIF dataset so we can recompute the full-sample aggregated SE the same way
+* open_econs does (equal-weight average over post-treatment cells, then the
+* cluster-robust influence-function variance V = sum((RIF-mean)^2)/N^2).
+csdid y x z, ivar(entity) time(time) gvar(gvar) saverif(tmp_rif_ub)
 
 * e(b) is 1x8: first 4 are ATT(g=3, t), last 4 are weights
 * (gvar=5 cohort dropped above, so only g=3 remains)
@@ -53,20 +56,58 @@ forvalues i = 1/8 {
 * Also store e(N)
 scalar s_N = e(N)
 
+* ---- Aggregated SE from per-entity RIF (open_econs method) ----
+use tmp_rif_ub.dta, clear
+* Post-treatment cells for cohort g=3 are t=3 (_g3_2_3) and t=4 (_g3_2_4).
+gen double agg_rif = (_g3_2_3 + _g3_2_4) / 2
+summ agg_rif
+scalar mean_r = r(mean)
+gen double dev = agg_rif - mean_r
+egen double ssd = sum(dev^2)
+scalar agg_se = sqrt(ssd / (_N^2))
+erase tmp_rif_ub.dta
+drop _all
+
 clear
-set obs 17
+set obs 18
 gen str20 name  = ""
 gen double value = .
 
-local i = 1
-foreach var in b_g3_t0_1 b_g3_t1_2 b_g3_t2_3 b_g3_t2_4 ///
-              w_g3_t0_1 w_g3_t1_2 w_g3_t2_3 w_g3_t2_4 ///
-              se_g3_t0_1 se_g3_t1_2 se_g3_t2_3 se_g3_t2_4 ///
-              se_w_g3_t0_1 se_w_g3_t1_2 se_w_g3_t2_3 se_w_g3_t2_4 ///
-              s_N {
-    replace name  = "`var'"  in `i'
-    replace value = `var'    in `i'
-    local ++i
-}
+replace name  = "b_g3_t0_1"      in 1
+replace value = b_g3_t0_1        in 1
+replace name  = "b_g3_t1_2"      in 2
+replace value = b_g3_t1_2        in 2
+replace name  = "b_g3_t2_3"      in 3
+replace value = b_g3_t2_3        in 3
+replace name  = "b_g3_t2_4"      in 4
+replace value = b_g3_t2_4        in 4
+replace name  = "w_g3_t0_1"      in 5
+replace value = w_g3_t0_1        in 5
+replace name  = "w_g3_t1_2"      in 6
+replace value = w_g3_t1_2        in 6
+replace name  = "w_g3_t2_3"      in 7
+replace value = w_g3_t2_3        in 7
+replace name  = "w_g3_t2_4"      in 8
+replace value = w_g3_t2_4        in 8
+replace name  = "se_g3_t0_1"     in 9
+replace value = se_g3_t0_1       in 9
+replace name  = "se_g3_t1_2"     in 10
+replace value = se_g3_t1_2       in 10
+replace name  = "se_g3_t2_3"     in 11
+replace value = se_g3_t2_3       in 11
+replace name  = "se_g3_t2_4"     in 12
+replace value = se_g3_t2_4       in 12
+replace name  = "se_w_g3_t0_1"   in 13
+replace value = se_w_g3_t0_1     in 13
+replace name  = "se_w_g3_t1_2"   in 14
+replace value = se_w_g3_t1_2     in 14
+replace name  = "se_w_g3_t2_3"   in 15
+replace value = se_w_g3_t2_3     in 15
+replace name  = "se_w_g3_t2_4"   in 16
+replace value = se_w_g3_t2_4     in 16
+replace name  = "s_N"            in 17
+replace value = s_N              in 17
+replace name  = "agg_se"         in 18
+replace value = agg_se           in 18
 
 save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\staggered_did_unbalanced.dta", replace
