@@ -125,6 +125,7 @@ class Context:
         self,
         treatment: str,
         covariates: list[str] | None = None,
+        weights: str | None = None,
     ) -> pd.DataFrame:
         from open_econs.models.causal.balance import balance as _balance
 
@@ -132,6 +133,7 @@ class Context:
             self._data,
             treatment=treatment,
             covariates=covariates,
+            weights=weights,
         )
 
     # ── panel-data engine (delegates to a transient PanelContext) ──
