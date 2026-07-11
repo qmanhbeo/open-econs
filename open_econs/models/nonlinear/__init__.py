@@ -1,3 +1,3 @@
-from open_econs.models.nonlinear.nls import NLSResult
+﻿from open_econs.models.nonlinear.nls import NLSResult, nls
 
-__all__ = ["NLSResult"]
+__all__ = ["nls", "NLSResult"]
