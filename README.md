@@ -10,7 +10,7 @@ workflows and modern, production-grade Python systems.  Every estimator follows
 the same interface — `summary`, `tidy`, `export` — so researchers and
 AI agents never have to learn a new API.
 
-> **Current version (v0.6.9):** 142 Stata‑parity tests across all estimators
+> **Current version (v0.8.0):** 142 Stata‑parity tests across all estimators
 > — 22 `.do` files with cached `.dta` fixtures, dual‑mode execution (live
 > Stata or CI fallback). **All 8 ABOND flavors** (collapsed/non‑collapsed ×
 > one/two‑step × robust/non‑robust) verified against `xtabond2` 3.7.2 at
