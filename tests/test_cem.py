@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from open_econs.models.causal.balance import balance as _balance
 from open_econs.models.causal.cem import cem
 
 FIXTURE = "tests/stata/fixtures/df_cem.csv"
@@ -127,3 +128,34 @@ def test_cem_weight_properties(df):
 
     # All weights non-negative
     assert (r.weights.values >= 0.0).all()
+
+
+# ── Balance delegation ───────────────────────────────────────
+
+def test_cem_balance_delegation(df):
+    """CEMResult.balance() matches direct balance() call with same inputs."""
+    r = cem(df, treatment="t", covariates=["x1", "x2", "x3"], cutpoints=CUTPOINTS)
+
+    result_bal = r.balance(covariates=["x1", "x2", "x3"])
+
+    m = r.matched.values.astype(bool)
+    data_m = df.iloc[m].copy()
+    data_m["_cem_weights_"] = r.weights.values[m]
+    direct_bal = _balance(
+        data=data_m,
+        treatment="t",
+        covariates=["x1", "x2", "x3"],
+        weights="_cem_weights_",
+    )
+
+    pd.testing.assert_frame_equal(result_bal, direct_bal)
+
+
+def test_cem_balance_shape(df):
+    """Smoke test: balance() returns expected columns."""
+    r = cem(df, treatment="t", covariates=["x1", "x2", "x3"], cutpoints=CUTPOINTS)
+    bal = r.balance(covariates=["x1", "x2", "x3"])
+    assert "SMD" in bal.columns
+    assert "Variance Ratio" in bal.columns
+    assert len(bal) == 3  # x1, x2, x3
+    assert bal["P>|t|"].is_monotonic_increasing  # sorted by p-value
