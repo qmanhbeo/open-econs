@@ -144,6 +144,7 @@ class CEMResult(BaseModel):
         weights: np.ndarray,
         matched: np.ndarray,
         treatment: np.ndarray,
+        treatment_name: str,
         coarsened: dict[str, np.ndarray],
         breakpoints: dict[str, np.ndarray],
         call: dict[str, Any],
@@ -153,6 +154,7 @@ class CEMResult(BaseModel):
         self._weights = weights
         self._matched = matched
         self._treatment = treatment
+        self._treatment_name = treatment_name
         self._coarsened = coarsened
         self._breakpoints = breakpoints
         self.call = call
@@ -207,6 +209,39 @@ class CEMResult(BaseModel):
                 sum_wt, sum_wc,
             ],
         })
+
+    def balance(
+        self,
+        covariates: list[str] | None = None,
+    ) -> pd.DataFrame:
+        """Covariate balance table on the matched sample (weighted).
+
+        Delegates to :func:`open_econs.models.causal.balance.balance`,
+        restricting to matched observations and passing the CEM ATT weights.
+
+        Parameters
+        ----------
+        covariates : list of str, optional
+            Covariates to compare.  If omitted, all numeric columns other
+            than the treatment variable are used.
+
+        Returns
+        -------
+        pd.DataFrame
+            Balance table with SMD, variance ratios, and weighted t-tests.
+        """
+        from open_econs.models.causal.balance import balance
+
+        m = self._matched.astype(bool)
+        data = self.original_data.iloc[m].copy()
+        _wcol = "_cem_weights_"
+        data[_wcol] = self._weights[m]
+        return balance(
+            data=data,
+            treatment=self._treatment_name,
+            covariates=covariates,
+            weights=_wcol,
+        )
 
     def summary(self) -> str:
         t = self._treatment.astype(bool)
@@ -372,6 +407,7 @@ def cem(
         weights=weights,
         matched=matched,
         treatment=t,
+        treatment_name=treatment,
         coarsened=coarsened,
         breakpoints=bp_store,
         call=call,
