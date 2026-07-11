@@ -4,11 +4,13 @@ Validated against Stata's ``cem`` SSC package
 (Blackwell, Iacus, King, Porro 2009, Stata Journal 9(4): 524-546).
 
 Default coarsening follows Stata's default: Sturges' rule
-applied to each variable.  Pass explicit cutpoints to override.
+applied to each variable.  Pass explicit cutpoints to override
+or set ``autocuts`` to one of ``"fd"``, ``"scott"``, ``"ss"``.
 
 Reference
 ---------
-Stata source: C:\\ado\\plus\\c\\cem.ado, C:\\ado\\plus\\c\\cem-mata.do
+Stata source: https://github.com/IQSS/cem-stata (``cem.ado``, ``cem-mata.do``)
+R source: https://github.com/IQSS/cem (``R/reduce.var.R``, ``R/nclass.ss.R``)
 """
 
 from __future__ import annotations
@@ -32,6 +34,81 @@ def _sturges_breaks(x: np.ndarray) -> np.ndarray:
     n = len(x)
     k = int(np.ceil(np.log2(n) + 1))
     return np.linspace(x.min(), x.max(), k)
+
+
+def _fd_breaks(x: np.ndarray) -> np.ndarray:
+    """Freedman-Diaconis breakpoints, matching ``cem-mata.do`` ``FD()`` + ``rangen()``.
+
+    Bin width h = 2 * IQR * n^(-1/3).
+    If IQR == 0, falls back to MAD = median(|x - median(x)|).
+    If still ≤ 0, returns 2 breakpoints (1 bin).
+    Returns k = ceil(range / h) equally-spaced points covering [min, max]
+    (producing k-1 bins via ``_coarsen``, matching Stata's ``rangen``
+    convention).
+    """
+    n = len(x)
+    q75, q25 = np.percentile(x, [75, 25])
+    iqr = q75 - q25
+    h = 2.0 * iqr * n ** (-1.0 / 3.0)
+    if h <= 0:
+        mad = np.median(np.abs(x - np.median(x)))
+        h = 2.0 * mad * n ** (-1.0 / 3.0)
+    if h <= 0:
+        return np.array([x.min(), x.max()])
+    k = max(int(np.ceil((x.max() - x.min()) / h)), 2)
+    return np.linspace(x.min(), x.max(), k)
+
+
+def _scott_breaks(x: np.ndarray) -> np.ndarray:
+    """Scott's-rule breakpoints, matching ``cem-mata.do`` ``scott()`` + ``rangen()``.
+
+    Bin width h = 3.5 * sigma * n^(-1/3).
+    Returns k = ceil(range / h) equally-spaced points covering [min, max]
+    (producing k-1 bins via ``_coarsen``, matching Stata's ``rangen``
+    convention).
+    """
+    n = len(x)
+    h = 3.5 * x.std(ddof=1) * n ** (-1.0 / 3.0)
+    if h <= 0:
+        return np.array([x.min(), x.max()])
+    k = max(int(np.ceil((x.max() - x.min()) / h)), 2)
+    return np.linspace(x.min(), x.max(), k)
+
+
+def _ss_breaks(x: np.ndarray) -> np.ndarray:
+    """Shimazaki-Shinomoto breakpoints, matching ``cem-mata.do`` ``shsh()`` + ``rangen()``.
+
+    Directly ports ``cem-mata.do`` (IQSS/cem-stata) lines 75-92.
+
+    Minimizes C(N) = (2k̄ − v) / D² over N = 2..100 (number of BREAKPOINTS),
+    where:
+      D = range / N
+      edges = rangen(min, max, N) → N breakpoints → N-1 bins
+      v = Σ(counts − k̄)² / N   (population variance, divided by N)
+      k̄ = mean(counts)
+
+    Returns optimal N breakpoints (Stata convention: rangen receives the
+    optimal N directly, producing N-1 actual bins via ``_coarsen``).
+    Verified against Stata 17's ``cem`` with ``autocuts(ss)`` on a 500-obs
+    synthetic fixture.
+    """
+    x_min, x_max = x.min(), x.max()
+    x_range = x_max - x_min
+    best_n = 2
+    best_cost = np.inf
+    for N in range(2, 101):
+        D = x_range / N
+        if D <= 0:
+            continue
+        edges = np.linspace(x_min, x_max, N)
+        counts, _ = np.histogram(x, bins=edges)
+        k_bar = counts.mean()
+        v = np.sum((counts - k_bar) ** 2) / N
+        cost = (2.0 * k_bar - v) / (D * D)
+        if cost < best_cost:
+            best_cost = cost
+            best_n = N
+    return np.linspace(x.min(), x.max(), best_n)
 
 
 def _coarsen(x: np.ndarray, breaks: np.ndarray) -> np.ndarray:
@@ -147,6 +224,7 @@ class CEMResult(BaseModel):
         treatment_name: str,
         coarsened: dict[str, np.ndarray],
         breakpoints: dict[str, np.ndarray],
+        autocuts: str,
         call: dict[str, Any],
     ) -> None:
         self.original_data = original_data
@@ -157,6 +235,7 @@ class CEMResult(BaseModel):
         self._treatment_name = treatment_name
         self._coarsened = coarsened
         self._breakpoints = breakpoints
+        self._autocuts = autocuts
         self.call = call
         self.timestamp = __import__("datetime").datetime.now()
         self.package_version = __version__
@@ -257,6 +336,7 @@ class CEMResult(BaseModel):
         lines = [
             "              Coarsened Exact Matching Results               ",
             "============================================================",
+            f"Auto-coarsening method:         {self._autocuts:>8s}",
             f"Number of strata:               {n_strata:>8d}",
             f"Number of matched strata:       {n_mstrata:>8d}",
             "",
@@ -273,6 +353,7 @@ class CEMResult(BaseModel):
 
     def _export_core(self) -> dict[str, Any]:
         return {
+            "autocuts": self._autocuts,
             "n_strata": int(np.unique(self._strata).size),
             "n_matched_strata": self.n_matched_strata,
             "n_matched": int(self._matched.sum()),
@@ -290,6 +371,7 @@ def cem(
     treatment: str,
     covariates: list[str] | None = None,
     cutpoints: dict[str, int | list[float] | str] | None = None,
+    autocuts: str = "sturges",
 ) -> CEMResult:
     """Coarsened Exact Matching.
 
@@ -308,12 +390,30 @@ def cem(
         * ``int`` — number of equally-spaced bins.
         * ``list[float]`` — explicit breakpoints (used directly with
           ``_coarsen``, matching Stata syntax).
-        * ``"sturges"`` — Sturges' rule (default if a variable is absent
-          from the dict).
+        * ``"sturges"`` — Sturges' rule.
+        * ``"fd"`` — Freedman-Diaconis rule (with MAD fallback when IQR=0).
+        * ``"scott"`` — Scott's rule.
+        * ``"ss"`` — Shimazaki-Shinomoto rule.
         * ``"exact"`` — no coarsening (match on original values).
 
-        Variables not present in *cutpoints* default to Sturges' rule,
-        matching Stata's ``cem`` default.
+        Variables not present in *cutpoints* default to ``autocuts``.
+    autocuts : str, default ``"sturges"``
+        Default coarsening method for variables not listed in *cutpoints*.
+        One of ``"sturges"``, ``"fd"``, ``"scott"``, ``"ss"``.
+
+        Formula sources (verified against ``cem-mata.do`` at IQSS/cem-stata
+        and ``nclass.*`` / ``reduce.var.R`` at IQSS/cem):
+
+        * ``"sturges"``: k = ceil(log2(n) + 1) breakpoints.
+        * ``"fd"``: h = 2·IQR·n⁻¹⸍³, nbins = ceil(range/h).  Falls back to
+          MAD = median(|x − median(x)|) when IQR = 0.
+        * ``"scott"``: h = 3.5·σ·n⁻¹⸍³, nbins = ceil(range/h).
+        * ``"ss"``: minimises C(N) = (2k̄ − var(k)) / D², N ∈ [2, 100].
+
+        **Pass 3a status**: implemented, formula-verified against Stata/R
+        source.  Live Stata output validation via
+        ``tests/stata/test_stata_cem_autocuts.py`` — see that file for
+        current parity status.
 
     Returns
     -------
@@ -326,6 +426,15 @@ def cem(
     >>> r = oe.cem(df, treatment="t", covariates=["x1", "x2"])
     >>> r.tidy()
     >>> r.summary()
+
+    Use alternative auto-coarsening::
+
+        >>> r = oe.cem(df, treatment="t", autocuts="fd")
+
+    Per-variable overrides via *cutpoints*::
+
+        >>> r = oe.cem(df, treatment="t",
+        ...            cutpoints={"x1": "fd", "x2": 5, "x3": "exact"})
 
     Estimate the ATT from CEM output (weighted OLS on matched subset)::
 
@@ -340,6 +449,7 @@ def cem(
     """
     call = _capture_call(
         treatment=treatment, covariates=covariates, cutpoints=cutpoints,
+        autocuts=autocuts,
     )
 
     _data = data.copy()
@@ -358,20 +468,26 @@ def cem(
     # Build coarsened variables and breakpoints
     coarsened: dict[str, np.ndarray] = {}
     bp_store: dict[str, np.ndarray] = {}
+    _autocuts_methods = {
+        "sturges": _sturges_breaks,
+        "fd": _fd_breaks,
+        "scott": _scott_breaks,
+        "ss": _ss_breaks,
+    }
 
     for var in covariates:
         x = _data[var].values.astype(float)
-        spec = cutpoints.get(var, "sturges")
+        spec = cutpoints.get(var, autocuts)
 
         if isinstance(spec, str):
             if spec == "exact":
                 breaks = None
-            elif spec == "sturges":
-                breaks = _sturges_breaks(x)
+            elif spec in _autocuts_methods:
+                breaks = _autocuts_methods[spec](x)
             else:
                 raise ValueError(
                     f"Unknown binning method '{spec}' for '{var}'. "
-                    f"Use 'sturges', 'exact', int, or list[float]."
+                    f"Use {list(_autocuts_methods.keys()) + ['exact', 'int', 'list[float]']}."
                 )
         elif isinstance(spec, int):
             if spec < 2:
@@ -410,5 +526,6 @@ def cem(
         treatment_name=treatment,
         coarsened=coarsened,
         breakpoints=bp_store,
+        autocuts=autocuts,
         call=call,
     )
