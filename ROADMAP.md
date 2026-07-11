@@ -256,8 +256,10 @@ might fit.
       (no treated-weight override) — structurally identical to pstest for
       OE's matching estimators where treated weight = 1 by construction.
       Stata parity via ``pstest`` formula confirmed against ``balance_weighted.dta``.
-- [ ] Pass 2 — wire ``PSMResult.balance()`` and ``CEMResult.balance()`` to
+- [x] Pass 2 — wire ``PSMResult.balance()`` and ``CEMResult.balance()`` to
       ``ctx.balance(weights=)`` using each estimator's internal weight vector.
+      (Also exposed ``PSMResult.weights`` and ``PSMResult.matched`` as public
+      ``pd.Series`` attributes; ``CEMResult`` already had those.)
 - [ ] Sensitivity analysis (Rosenbaum bounds)
 
 #### v0.9 — Structural Foundations & Release Candidate
