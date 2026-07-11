@@ -267,7 +267,12 @@ might fit.
       ``ctx.balance(weights=)`` using each estimator's internal weight vector.
       (Also exposed ``PSMResult.weights`` and ``PSMResult.matched`` as public
       ``pd.Series`` attributes; ``CEMResult`` already had those.)
-- [ ] Sensitivity analysis (Rosenbaum bounds)
+- [x] Sensitivity analysis (Rosenbaum bounds) — ``rosenbaum_bounds()`` standalone function +
+      ``PSMResult.sensitivity()`` wired to stored ``_pairs`` dict.  Validated against
+      Stata ``rbounds`` (Gangl v1.1.6) at Γ = 1, 2, 3.  Zero-difference pairs follow
+      Stata convention (included in rank computation, psp=psm=0) — confirmed from
+      ``rbounds.ado`` ``rbrksm`` lines 131–132.  Pass 1: p-value bounds only (no
+      Hodges-Lehmann, no CIs, no CEM).
 
 #### v0.9 — Structural Foundations & Release Candidate
 - [ ] `gmm()` — general GMM estimation framework other estimators can build on

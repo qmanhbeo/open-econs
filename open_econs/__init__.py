@@ -11,6 +11,7 @@ from .models.causal.balance import balance
 from .models.causal.staggered_did import staggered_did
 from .models.causal.cem import cem
 from .models.causal.psm import psm
+from .models.causal.sensitivity import rosenbaum_bounds
 from .models.causal.rdd import density_test, rdd
 from .core.context import Context
 from .core.panel_context import PanelContext
