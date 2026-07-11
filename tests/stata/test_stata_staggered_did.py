@@ -90,11 +90,11 @@ class TestStaggeredDiDWithCovariates:
 
     def test_cell_se_g3_t3(self):
         gt = _oe_se_gt(self.oe_r)
-        npt.assert_allclose(gt[(3, 3)], _CELL_SE[(3, 3)], rtol=0.2)
+        npt.assert_allclose(gt[(3, 3)], _CELL_SE[(3, 3)], rtol=1e-6)
 
     def test_cell_se_g3_t4(self):
         gt = _oe_se_gt(self.oe_r)
-        npt.assert_allclose(gt[(3, 4)], _CELL_SE[(3, 4)], rtol=0.2)
+        npt.assert_allclose(gt[(3, 4)], _CELL_SE[(3, 4)], rtol=1e-6)
 
     def test_aggregated_att_simple(self):
         """Simple ATT = weighted avg of post-treatment cells using csdid weights."""
@@ -104,10 +104,11 @@ class TestStaggeredDiDWithCovariates:
         npt.assert_allclose(self.oe_r.att, simple_gt, rtol=1e-6)
 
     def test_aggregated_se(self):
-        w = self._W
-        se = self._SE
-        simple_se = np.sqrt(np.average(se ** 2, weights=w))
-        npt.assert_allclose(self.oe_r.att_se, simple_se, rtol=0.2)
+        # csdid's aggregated SE uses the full-sample IF rescaling (weighted
+        # average of per-entity RIFs across post-treatment cells), NOT the
+        # naive sqrt(weighted avg per-cell se^2). Validated value = 0.41781627.
+        _AGG_SE = 0.41781627
+        npt.assert_allclose(self.oe_r.att_se, _AGG_SE, rtol=1e-6)
 
     def test_cell_count(self):
         assert len(self.oe_r.att_group_time) == 2  # 2 post-treatment cells
@@ -162,11 +163,11 @@ class TestStaggeredDiDWithCovariatesUnbalanced:
 
     def test_unbalanced_cell_se_g3_t3(self):
         gt = _oe_se_gt(self.oe_r)
-        npt.assert_allclose(gt[(3, 3)], 0.7054067384885818, rtol=0.6)
+        npt.assert_allclose(gt[(3, 3)], 0.7054067384885818, rtol=1e-6)
 
     def test_unbalanced_cell_se_g3_t4(self):
         gt = _oe_se_gt(self.oe_r)
-        npt.assert_allclose(gt[(3, 4)], 0.609847150360171, rtol=0.6)
+        npt.assert_allclose(gt[(3, 4)], 0.609847150360171, rtol=1e-6)
 
     def test_unbalanced_aggregated_att(self):
         w = self._W[:2]  # post-treatment weights only
