@@ -492,7 +492,7 @@ def staggered_did(
                         try:
                             res = _cell_dripw(sub, y, entity, time, treatment,
                                               gco, t, pre, covariates, cluster,
-                                              boot_entities_unique)
+                                              entities_unique)
                             if np.isfinite(res["att"]):
                                 boot_rows.append({"att": res["att"], "n_treat": res["n_treat"]})
                         except Exception:

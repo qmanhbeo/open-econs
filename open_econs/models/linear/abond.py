@@ -177,7 +177,7 @@ def _estimate_gmm(
     if onestepnonrobust:
         b = b1
         pV_pre = V1
-        pA_pre = A1
+        pA_pre: np.ndarray = A1
         pe = e1
         pV = V1
     else:
