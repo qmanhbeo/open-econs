@@ -468,7 +468,11 @@ def abond(
         W[k, k + 1] = H_off[k]
         W[k + 1, k] = H_off[k]
 
-    est = _estimate_gmm(Y, X, Z, eq_entity, step, robust=robust, W=W)
+    est = _estimate_gmm(
+        Y, X, Z, eq_entity, step, robust=robust, W=W,
+        sig2_scale=0.5,                 # Arellano-Bond first-difference 1/2 normalization
+        small_sample_correction=True,   # xtabond2 Mata finite-sample multipliers
+    )
 
     coef_names = [f"L{lag}.{y_name}" for lag in range(1, lags + 1)] + x_cols
     coefficients = pd.Series(est["b"], index=coef_names)
