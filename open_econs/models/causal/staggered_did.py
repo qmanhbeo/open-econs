@@ -319,6 +319,25 @@ def staggered_did(
     no small-sample correction).  The overall pooled SE aggregates the
     per-entity RIFs across post-treatment cells with equal weight
     (``1/K``) and applies the same full-sample IF variance.
+
+    csdid parity (aggregated SE).  The aggregated ATT and its SE are validated
+    against Callaway & Sant'Anna's own aggregation, NOT against Stata's
+    ``csdid_estat simple`` command.  Concretely the OE aggregated SE equals
+    what ``csdid`` itself produces from its saved influence functions —
+    ``csdid y x z, saverif(rif)`` followed by ``csdid_stats simple`` — and
+    what the ``did`` R package computes in ``aggte(type="simple")``
+    (``getSE`` = ``sqrt(mean(if²)/n)`` = ``sqrt(Σ_i if_i² / N²)``).  Both give
+    the same value as OE (balanced fixture 0.41781627, unbalanced 0.62720813).
+    WARNING: Stata's ``csdid_estat simple`` is buggy in the installed csdid
+    version (v1.6/v1.58).  It posts the raw per-(g,t) VCoV and prints element
+    [1,1] of it — i.e. the *first, pre-treatment* cell's SE (0.7479047
+    balanced, 0.47824472 unbalanced) — as the "simple" ATT SE, which is not an
+    aggregation SE at all.  Do NOT use ``csdid_estat simple`` output as a
+    reference for the aggregated SE; use ``csdid_stats`` (or the ``did`` R
+    package) instead.  csdid's ``csdid_estat simple`` delta-method code
+    (``(r1,r2)*e(V_attgt)*(r1,r2)'``) is a different, non-canonical variance
+    estimator that the ``did`` package does not implement and that differs from
+    the influence-function aggregation above.
     """
     if method is None:
         method = "dripw" if (covariates is not None and len(covariates) > 0) else "reg"
