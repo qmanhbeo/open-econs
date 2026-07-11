@@ -382,17 +382,40 @@ might fit.
     All 18 staggered‑DiD Stata‑parity tests pass at the **unchanged** tolerances
     (no loosening). `TestStaggeredDiDNoCovariates` untouched; the
     `read_stata()` live‑conversion remains deferred to the DR rewrite.
-- [ ] **CS2021 doubly‑robust (DR) estimator rewrite** — full influence‑function‑based
-  implementation of Callaway & Sant'Anna (2021) for `staggered_did()`:
-  - Per‑cell logit PS + OLS outcome regression + centered‑IF cluster‑robust SEs
-  - Proper influence‑function SE methodology (closes the rtol=0.2/0.6 SE gap in
-    the current test — **root‑caused 2026‑07‑10**: .do sample‑alignment changed
-    ATT/SE only at float‑noise level, so the gap is the `makerif2` full‑sample IF
-    rescaling vs OE's per‑cell IF, *not* sample mismatch; only csdid weights moved)
-  - `.do` files filtered to exact Python‑side entity subsets (apples‑to‑apples)
-    — **done** (entity<20 balanced, entity<23 unbalanced; see v0.7.0)
-  - `test_stata_staggered_did.py` converted to live `read_stata()` comparison
-    (see v0.6.9 deferred‑item action details in session handoff)
+ - [x] **v0.7.x — CS2021 doubly‑robust (DR) estimator IF rewrite** *(done)*
+   - **Formula sourced & validated from R `DRDID`** — `drdid_panel` (the `trad`
+     method, which is `csdid`'s default `dripw`; confirmed via `csdid.ado`
+     "change default to dripw from drimp").  The exact influence function was
+     transcribed and validated to machine precision against `csdid`'s own saved
+     per‑entity RIF (`staggered_did_rif_save.dta`): per‑cell IF corr 1.00000
+     (max centered diff ~1e-6) for all 4 cells; per‑cell SE matches exactly
+     (cell (3,3) → 0.4652265, cell (3,4) → 0.4941999); aggregated SE matches
+     exactly (0.41781627).
+   - **Influence function** (per entity, per cell):
+     `att_inf_func = inf_treat - inf_control`, with
+     `inf_treat = (dr_att_treat - w_treat·eta_treat - asy_lin_rep_wols·M1)/mw_treat`
+     and `inf_control = (dr_att_cont - w_cont·eta_cont + asy_lin_rep_ps·M2
+     - asy_lin_rep_wols·M3)/mw_cont`.  The `asy_lin_rep_ps·M2` (PS‑estimation)
+     and `asy_lin_rep_wols·M3` (OLS‑estimation) corrections were the missing
+     terms in the old plug‑in IF — `inf_cont_2` exists only on the control side,
+     which is why treated units previously matched (corr 0.9985) but control
+     units did not (corr 0.0019).
+   - **Per‑cell SE**: `V = Σ_i (RIF_i - mean(RIF))² / N²`, `N` = full‑sample
+     entity count, no `n/(n-1)` correction.  Stored `RIF` is shifted so
+     `mean(RIF) = ATT(g,t)`.
+   - **Aggregated SE** (the other half of the old gap): full‑sample weighted
+     average of per‑entity RIFs across post‑treatment cells with equal weight
+     `1/K`, then `V = Σ_i (agg - mean)² / N²` → 0.41781627 (was `sqrt(mean se²)`
+     = 0.4799, which was wrong).
+   - `method="reg"` keeps the prior 2×2 OLS cluster‑SE path (no per‑entity RIF).
+   - Parity now holds at **rtol=1e-6** (was 0.2 balanced / 0.6 unbalanced):
+     balanced per‑cell SEs and aggregated SE exact; unbalanced per‑cell SEs also
+     exact (~1e-8).  All 18 staggered‑DiD Stata‑parity tests pass.
+   - References: Sant'Anna & Zhao (2020); R `DRDID` package
+     (`github.com/pedrohcgs/DRDID`, `R/drdid_panel.R`).
+ - [ ] `test_stata_staggered_did.py` converted to live `read_stata()` comparison
+     (still deferred — separate task, not bundled with the IF rewrite)
+ - [ ] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
 - [ ] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
 - [ ] McCrary density test for manipulation at the cutoff
 - [ ] Built-in RD plot (binned scatter + fitted lines either side of cutoff)
