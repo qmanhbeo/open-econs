@@ -73,7 +73,7 @@ class TestGmmExactlyIdentifiedParity:
     def test_coefficients_match_iv(self, exactly_identified):
         df = exactly_identified
         iv = oe.iv("y ~ 1 | x ~ z", data=df, cov_type="robust")
-        for step in ("onestep", "twostep"):
+        for step in ("one-step", "two-step"):
             r = oe.gmm("y ~ 1 | x ~ z", data=df, step=step, cov_type="robust")
             # point estimate is step-invariant and equals 2SLS
             assert np.allclose(r.coefficients.values, iv.coefficients.values, atol=1e-8)
@@ -82,7 +82,7 @@ class TestGmmExactlyIdentifiedParity:
         df = exactly_identified
         iv = oe.iv("y ~ 1 | x ~ z", data=df, cov_type="robust")
         # generic-default identity-weight GMM robust SE == 2SLS robust SE
-        for step in ("onestep", "twostep"):
+        for step in ("one-step", "two-step"):
             r = oe.gmm("y ~ 1 | x ~ z", data=df, step=step, cov_type="robust")
             assert np.allclose(
                 r.std_errors.values, iv.std_errors.values, rtol=1e-8, atol=1e-10
@@ -90,7 +90,7 @@ class TestGmmExactlyIdentifiedParity:
 
     def test_hansen_j_undefined_when_exactly_identified(self, exactly_identified):
         df = exactly_identified
-        r = oe.gmm("y ~ 1 | x ~ z", data=df, step="twostep", cov_type="robust")
+        r = oe.gmm("y ~ 1 | x ~ z", data=df, step="two-step", cov_type="robust")
         assert r.hansen_j_dof == 0
         assert np.isnan(r.hansen_j_pvalue)
 
@@ -101,8 +101,8 @@ class TestGmmOveridentified:
     def test_twostep_reweights_away_from_2sls(self, overidentified):
         df = overidentified
         iv = oe.iv("y ~ 1 | x ~ z1 + z2", data=df, cov_type="robust")
-        one = oe.gmm("y ~ 1 | x ~ z1 + z2", data=df, step="onestep", cov_type="robust")
-        two = oe.gmm("y ~ 1 | x ~ z1 + z2", data=df, step="twostep", cov_type="robust")
+        one = oe.gmm("y ~ 1 | x ~ z1 + z2", data=df, step="one-step", cov_type="robust")
+        two = oe.gmm("y ~ 1 | x ~ z1 + z2", data=df, step="two-step", cov_type="robust")
 
         # one-step identity-weight GMM IS 2SLS; two-step is the efficient reweight
         assert np.allclose(one.coefficients.values, iv.coefficients.values, atol=1e-8)
@@ -128,14 +128,14 @@ class TestGmmOveridentified:
             u_valid = rng.normal(0, 1, n)
             y_v = 1.0 + 1.0 * x + u_valid
             df_v = pd.DataFrame({"y": y_v, "x": x, "z1": z1, "z2": z2})
-            p_v = oe.gmm(formula, data=df_v, step="twostep", cov_type="robust").hansen_j_pvalue
+            p_v = oe.gmm(formula, data=df_v, step="two-step", cov_type="robust").hansen_j_pvalue
             if p_v < alpha:
                 rej_valid += 1
             # invalid: second instrument is correlated with the error
             u_invalid = 0.8 * z2 + rng.normal(0, 1, n)
             y_i = 1.0 + 1.0 * x + u_invalid
             df_i = pd.DataFrame({"y": y_i, "x": x, "z1": z1, "z2": z2})
-            p_i = oe.gmm(formula, data=df_i, step="twostep", cov_type="robust").hansen_j_pvalue
+            p_i = oe.gmm(formula, data=df_i, step="two-step", cov_type="robust").hansen_j_pvalue
             if p_i < alpha:
                 rej_invalid += 1
 
@@ -151,9 +151,9 @@ class TestGmmOveridentified:
 class TestGmmClusterVsRobust:
     def test_cluster_se_larger_than_robust(self, clustered):
         df = clustered
-        robust = oe.gmm("y ~ 1 | x ~ z", data=df, step="twostep", cov_type="robust")
+        robust = oe.gmm("y ~ 1 | x ~ z", data=df, step="two-step", cov_type="robust")
         cluster = oe.gmm(
-            "y ~ 1 | x ~ z", data=df, step="twostep", cov_type="cluster", cluster="cid"
+            "y ~ 1 | x ~ z", data=df, step="two-step", cov_type="cluster", cluster="cid"
         )
         # coefficients are unchanged by the covariance choice
         assert np.allclose(cluster.coefficients.values, robust.coefficients.values, atol=1e-10)
@@ -177,7 +177,7 @@ class TestGmmClusterVsRobust:
 class TestGmmResultInterface:
     def test_tidy_summary_vcov_export(self, exactly_identified, tmp_path):
         df = exactly_identified
-        r = oe.gmm("y ~ 1 | x ~ z", data=df, step="twostep", cov_type="robust")
+        r = oe.gmm("y ~ 1 | x ~ z", data=df, step="two-step", cov_type="robust")
 
         t = r.tidy()
         assert list(t.columns) == [
@@ -201,6 +201,6 @@ class TestGmmResultInterface:
 
     def test_immutable(self, exactly_identified):
         df = exactly_identified
-        r = oe.gmm("y ~ 1 | x ~ z", data=df, step="twostep", cov_type="robust")
+        r = oe.gmm("y ~ 1 | x ~ z", data=df, step="two-step", cov_type="robust")
         with pytest.raises(AttributeError):
             r.coefficients = pd.Series([1.0, 2.0], index=["Intercept", "x"])
