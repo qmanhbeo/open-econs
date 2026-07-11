@@ -382,7 +382,7 @@ might fit.
     All 18 staggered‑DiD Stata‑parity tests pass at the **unchanged** tolerances
     (no loosening). `TestStaggeredDiDNoCovariates` untouched; the
     `read_stata()` live‑conversion remains deferred to the DR rewrite.
- - [x] **v0.7.x — CS2021 doubly‑robust (DR) estimator IF rewrite** *(done)*
+  - [x] **v0.7 — CS2021 doubly‑robust (DR) estimator IF rewrite** *(done)*
    - **Formula sourced & validated from R `DRDID`** — `drdid_panel` (the `trad`
      method, which is `csdid`'s default `dripw`; confirmed via `csdid.ado`
      "change default to dripw from drimp").  The exact influence function was
@@ -413,12 +413,11 @@ might fit.
      exact (~1e-8).  All 18 staggered‑DiD Stata‑parity tests pass.
    - References: Sant'Anna & Zhao (2020); R `DRDID` package
      (`github.com/pedrohcgs/DRDID`, `R/drdid_panel.R`).
- - [ ] `test_stata_staggered_did.py` converted to live `read_stata()` comparison
-     (still deferred — separate task, not bundled with the IF rewrite)
- - [ ] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
-- [ ] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
-- [ ] McCrary density test for manipulation at the cutoff
-- [ ] Built-in RD plot (binned scatter + fitted lines either side of cutoff)
+  - [ ] `test_stata_staggered_did.py` converted to live `read_stata()` comparison
+      (still deferred — separate task, not bundled with the IF rewrite)
+  - [ ] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
+  - [ ] McCrary density test for manipulation at the cutoff
+  - [ ] Built-in RD plot (binned scatter + fitted lines either side of cutoff)
 
 #### v0.8 — Matching & Balance
 - [ ] `psm()` — propensity score matching (nearest-neighbor, caliper, kernel)
