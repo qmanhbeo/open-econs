@@ -195,3 +195,9 @@ Stata reference implementations used for parity testing:
 - ``csdid`` / ``drdid`` — Fernando Rios-Avila's Callaway-Sant'Anna staggered DiD (`csdid <https://github.com/friosavila/stpackages/tree/main/csdid>`_, `drdid <https://github.com/friosavila/stpackages/tree/main/drdid>`_).
 - ``oaxaca`` — Ben Jann's Oaxaca-Blinder decomposition (`source <https://github.com/benjann/oaxaca>`_).
 
+Methodology:
+
+- Callaway, B., & Sant'Anna, P. (2021). Difference-in-Differences with Multiple Time Periods. *Journal of Econometrics*, 225(2), 200–230. https://doi.org/10.1016/j.jeconom.2020.12.001
+- Sant'Anna, P. C., & Zhao, J. (2020). Doubly Robust Difference-in-Differences Estimators. *Journal of Econometrics*, 219(1), 101–122. https://doi.org/10.1016/j.jeconom.2020.06.003
+- ``DRDID`` (R) — Pedro H. C. Sant'Anna's doubly-robust DiD implementation (`github.com/pedrohcgs/DRDID <https://github.com/pedrohcgs/DRDID>`_, ``R/drdid_panel.R``). Basis for ``staggered_did()``'s ``dripw`` influence function (the ``trad`` method, ``csdid``'s default ``dripw``).
+

@@ -411,8 +411,8 @@ might fit.
    - Parity now holds at **rtol=1e-6** (was 0.2 balanced / 0.6 unbalanced):
      balanced per‑cell SEs and aggregated SE exact; unbalanced per‑cell SEs also
      exact (~1e-8).  All 18 staggered‑DiD Stata‑parity tests pass.
-   - References: Sant'Anna & Zhao (2020); R `DRDID` package
-     (`github.com/pedrohcgs/DRDID`, `R/drdid_panel.R`).
+    - References: see README "References" (Callaway & Sant'Anna 2021;
+      Sant'Anna & Zhao 2020; R `DRDID` package).
   - [ ] `test_stata_staggered_did.py` converted to live `read_stata()` comparison
       (still deferred — separate task, not bundled with the IF rewrite)
   - [ ] Bandwidth selection (Imbens-Kalyanaraman, Calonico-Cattaneo-Titiunik)
