@@ -227,6 +227,9 @@ might fit.
 - [x] `psm()` — 1:1 nearest-neighbor with replacement on logit PS (ATE).
   Validated vs Stata ``teffects psmatch``: ATE exact to 1e-7, SE exact to 1e-6
   across nn=2,5,10 (AI 2012 PS-estimation adjustment implemented).
+  **Deviations:** (a) with-replacement only — ``teffects psmatch`` has no
+  without-replacement option; without-replacement may be added later if needed.
+  (b) Default caliper (1.0) validated; tighter calipers not independently tested.
   See ``tests/test_psm.py``.
 - [ ] Kernel / smooth-weight matching on top of the PS engine
 - [ ] Coarsened exact matching

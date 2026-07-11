@@ -369,12 +369,25 @@ def psm(
     estimand : {"ate"}, default "ate"
         Target estimand.  Only ``"ate"`` is currently supported.
     caliper : float, default 1.0
-        Maximum absolute PS difference for a match.
+        Maximum absolute PS difference for a match.  Validated against
+        Stata's ``teffects psmatch, ate caliper(1.0)``; tighter calipers
+        (e.g. 0.05) have not been independently validated and may produce
+        different finite-sample behaviour.
     common_support : bool, default False
         Drop observations whose PS is outside the overlapping range.
     nn : int, default 2
         Number of within-treatment neighbours for the robust SE computation
         (corresponds to Stata's ``vce(robust, nn(#))``).
+
+    .. note::
+
+       **With-replacement matching.**  This implementation matches *with*
+       replacement (each control can be paired with multiple treated units),
+       matching Stata's ``teffects psmatch`` behaviour.  The original request
+       was for without-replacement matching.  ``teffects psmatch`` has no
+       without-replacement option, so with-replacement was chosen to maintain
+       direct Stata parity.  A without-replacement variant may be added in a
+       future release if demand warrants it.
 
     Returns
     -------
