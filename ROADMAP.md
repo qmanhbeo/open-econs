@@ -241,8 +241,14 @@ might fit.
   package on a 1000-obs fixture at the exact-match level (no tolerance).
   See ``tests/test_cem.py``.
 
-  **Pass 1 only** — no SE (Pass 2), no k2k / alternate coarsening /
-  balance diagnostics (Pass 3).
+  **Pass 1 only** — SE (Pass 2) assessed and deliberately skipped: no
+  CEM-specific SE formula exists (Stata's cem.ado, the Stata Journal paper,
+  and Iacus/King/Porro 2019 inference theory all confirm CEM is preprocessing
+  only — standard weighted-regression SEs are valid under stratified sampling).
+  OE's existing ``ols(weights=..., cov_type="HC3")`` already covers the use
+  case; a convenience ``estimate()`` wrapper would be scope-for-its-own-sake.
+  (Revisit if users request it post-release.)  k2k / alternate coarsening /
+  balance diagnostics remain as Pass 3.
 - [ ] Post-matching balance diagnostics reusing `ctx.balance()` from v0.5
 - [ ] Sensitivity analysis (Rosenbaum bounds)
 

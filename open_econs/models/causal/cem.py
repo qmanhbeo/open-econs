@@ -117,6 +117,23 @@ class CEMResult(BaseModel):
     """Result of a Coarsened Exact Matching procedure.
 
     Immutable result with ``.tidy()``, ``.summary()``, and ``.export()``.
+
+    Estimate the ATT via weighted regression on the matched subset::
+
+        >>> r = oe.cem(df, treatment="t", covariates=["x1", "x2"])
+        >>> m = r.matched.values.astype(bool)
+        >>> result = oe.ols("y ~ t", data=df.loc[m],
+        ...                 weights=r.weights.values[m], cov_type="HC3")
+        >>> result.tidy()
+
+    CEM is preprocessing only (it produces strata and weights, not treatment
+    effects or standard errors).  The standard downstream approach is a
+    weighted regression on the matched sample.  Because CEM strata contain
+    variable-sized treated/control counts (no paired structure), cluster-robust
+    SEs by stratum are **not** recommended; use HC3 robust SEs instead.  This
+    matches the convention documented in the ``MatchIt`` package's official
+    vignette (section "Matching without pairing").  The original Stata Journal
+    paper (Blackwell, Iacus, King, Porro 2009) offers no competing SE guidance.
     """
 
     def __init__(
@@ -274,6 +291,17 @@ def cem(
     >>> r = oe.cem(df, treatment="t", covariates=["x1", "x2"])
     >>> r.tidy()
     >>> r.summary()
+
+    Estimate the ATT from CEM output (weighted OLS on matched subset)::
+
+        >>> m = r.matched.values.astype(bool)
+        >>> result = oe.ols("y ~ t", data=df.loc[m],
+        ...                 weights=r.weights.values[m], cov_type="HC3")
+        >>> result.tidy()
+
+    Use ``cov_type="HC3"``, not cluster-by-stratum — CEM strata have
+    variable-sized treated/control counts (no paired structure), so
+    cluster-robust SEs are not standard practice here.
     """
     call = _capture_call(
         treatment=treatment, covariates=covariates, cutpoints=cutpoints,
