@@ -3,10 +3,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from formulaic import Formula
-from scipy.stats import chi2 as _chi2
 from scipy.stats import norm as _norm
 
 from open_econs.core.call_capture import capture_call as _capture_call
+from open_econs.models._gmm_core import estimate_gmm as _estimate_gmm
 
 
 def _build_noncollapsed_gmm_block(
@@ -100,169 +100,6 @@ def _build_h(entity_counts: dict, n_eq: int, eq_entity: np.ndarray) -> tuple[np.
     return diag, off
 
 
-def _estimate_gmm(
-    Y: np.ndarray,
-    X: np.ndarray,
-    Z: np.ndarray,
-    eq_entity: np.ndarray,
-    step: str,
-    robust: bool = False,
-) -> dict[str, Any]:
-    """Arellano-Bond difference GMM, mirroring xtabond2's Mata source (v3.7.2).
-
-    Implements one-step / two-step / robust / Windmeijer-corrected VCEs exactly
-    as the Mata code assembles them.  Key conventions:
-
-    * One-step weighting ``A1 = (Z'HZ)^{-1}`` with ``H = M'M`` (first-difference
-      operator, tridiagonal diag 2 / off -1).  Mata rescales ``A1, V1`` by
-      ``sig2`` (Mata 418-419).
-    * Two-step weighting ``A2 = S^{-1}`` with ``S = Σᵢ (Zᵢ'e1ᵢ)(Zᵢ'e1ᵢ)'`` built
-      per-entity from the ONE-step residuals ``e1`` (Mata 450-460).
-    * Same ``S`` is reused for ``A2`` (two-step weighting) and for the one-step
-      robust sandwich ``V1robust`` (Mata 462-464).
-    * Windmeijer two-step-robust VCE uses ``V2`` in two terms and the one-step
-      robust ``V1robust`` in the ``D*V1robust*D'`` term (Mata 522-523).
-    * Small-sample multiplier (Mata 562-565): one-step non-robust uses
-      ``wttot/(wttot-k)``; all other cases use
-      ``(NObs-1)/(NObs-k)·NGroups/(NGroups-1)``.
-    * ``m2VZXA = -2·V·(ZX'·A)`` is built from the *pre*-small-sample V/A
-      (Mata 549), while the V/sig2 fed into the AR test are the *post*-
-      correction values (Mata 614) — operand timing must be preserved.
-    """
-    n_eq = Y.shape[0]
-    N = float(len(np.unique(eq_entity)))
-    p = X.shape[1]
-    L = Z.shape[1]
-    from collections import Counter
-    entity_counts = dict(Counter(eq_entity.tolist()))
-
-    ZtX = Z.T @ X  # (L, p)  == ZX'
-    ZtY = Z.T @ Y  # (L,)
-
-    # --- One-step weighting A1 = (Z'HZ)^{-1} ---
-    H_diag, H_off = _build_h(entity_counts, n_eq, eq_entity)
-    ZtHZ = 2.0 * (Z.T @ Z)
-    ZH_off = Z[:-1] * H_off[:, None]
-    ZtHZ += ZH_off.T @ Z[1:]
-    ZtHZ += Z[1:].T @ ZH_off
-    try:
-        A1_raw = np.linalg.inv(ZtHZ)
-    except np.linalg.LinAlgError:
-        A1_raw = np.linalg.pinv(ZtHZ)
-    G1 = ZtX.T @ A1_raw @ ZtX
-    try:
-        V1_raw = np.linalg.inv(G1)
-    except np.linalg.LinAlgError:
-        V1_raw = np.linalg.pinv(G1)
-    b1 = V1_raw @ (ZtX.T @ A1_raw @ ZtY)
-    e1 = Y - X @ b1
-
-    wttot = float(n_eq)        # = NObs (no weights, difference GMM)
-    NGroups = float(N)
-    k = float(p)
-    sig2 = float(e1 @ e1) / 2.0 / wttot
-    # Mata 418-419: rescale A1, V1 by sig2 (one-step non-robust branch uses this)
-    A1 = A1_raw / sig2
-    V1 = V1_raw * sig2
-
-    onestepnonrobust = (step == "one-step") and (not robust)
-
-    # --- Per-entity S from ONE-step residuals (A2, V1robust, Hansen) ---
-    S = np.zeros((L, L))
-    for ent in np.unique(eq_entity):
-        mask = eq_entity == ent
-        ze = Z[mask].T @ e1[mask]
-        S += np.outer(ze, ze)
-
-    if onestepnonrobust:
-        b = b1
-        pV_pre = V1
-        pA_pre: np.ndarray = A1
-        pe = e1
-        pV = V1
-    else:
-        if robust:
-            VXZA1 = V1 @ ZtX.T @ A1             # V1 * (ZX' A1)
-            V1robust = VXZA1 @ S @ VXZA1.T
-        try:
-            A2 = np.linalg.inv(S)
-        except np.linalg.LinAlgError:
-            A2 = np.linalg.pinv(S)
-        G2 = ZtX.T @ A2 @ ZtX
-        try:
-            V2 = np.linalg.inv(G2)
-        except np.linalg.LinAlgError:
-            V2 = np.linalg.pinv(G2)
-        b2 = V2 @ (ZtX.T @ A2 @ ZtY)
-        e2 = Y - X @ b2
-        if step == "two-step":
-            sig2 = float(e2 @ e2) / 2.0 / wttot   # Mata 480: two-step sig2 from e2
-        A2Ze = A2 @ (Z.T @ e2)
-        if step == "one-step":
-            b = b1
-            pV_pre = V1
-            pA_pre = A1
-            pe = e1
-            pV = V1robust if robust else V1
-        else:  # two-step
-            b = b2
-            pV_pre = V2
-            pA_pre = A2
-            pe = e2
-            if robust:
-                # Windmeijer (2005) correction — Mata 510-523
-                VXZA2 = V2 @ ZtX.T @ A2
-                D = np.zeros((L, p))
-                for ent in np.unique(eq_entity):
-                    mask = eq_entity == ent
-                    ze = Z[mask].T @ e1[mask]           # (L,)  Z_i' e1_i (one-step)
-                    ZXi = Z[mask].T @ X[mask]           # (L, p)
-                    # Mata 518: term1 = scalar (Z_i'e1_i · A2Ze) * ZXi ;
-                    # term2 = outer(Z_i'e1_i, A2Ze'·ZXi) — per-row-varying scale.
-                    s1 = ze @ A2Ze                      # scalar
-                    term1 = s1 * ZXi                    # (L, p)
-                    term2 = np.outer(ze, A2Ze @ ZXi)    # (L, p)
-                    D += term1 + term2
-                D = VXZA2 @ D                           # -> (p, p)
-                V2robust = V2 + D @ V1robust @ D.T + 2.0 * D @ V2
-                pV = V2robust
-            else:
-                pV = V2
-
-    # --- Small-sample correction (Mata 562-565) ---
-    # NB: Mata multiplies V by the *branch-specific* multiplier but multiplies
-    # sig2 by `tmp = wttot/(wttot-k)` ALWAYS (line 565 uses `tmp`, not the
-    # branch multiplier).  Keep the two multipliers separate.
-    if onestepnonrobust:
-        small_mult = wttot / (wttot - k)
-    else:
-        small_mult = ((wttot - 1.0) / (wttot - k)) * (NGroups / (NGroups - 1.0))
-    V = pV * small_mult
-    sig2 = sig2 * (wttot / (wttot - k))
-
-    se = np.sqrt(np.maximum(np.diag(V), 0.0))
-
-    # --- Hansen J (A1 for one-step, A2 for two-step) ---
-    g_all = Z.T @ pe
-    A_used = A1 if onestepnonrobust else A2
-    dof_j = L - p
-    J = float(g_all @ A_used @ g_all)
-    p_j = float(1.0 - _chi2.cdf(J, dof_j)) if dof_j > 0 else float("nan")
-
-    # --- Windmeijer/AR prep: m2VZXA from PRE-small V/A (Mata 549) ---
-    m2VZXA = -2.0 * pV_pre @ (ZtX.T @ pA_pre)
-
-    # pV_ar is the pre-small V passed to _ARTests (Stata line 614).
-    # The reporting V and sig2 get the small multiplier; m2VZXA and pV_ar
-    # use the base (uncorrected) values.
-    return {
-        "b": b, "se": se, "e": pe, "Z": Z, "X": X, "Y": Y,
-        "sig2": sig2, "V": V,
-        "J": J, "dof_j": dof_j, "p_j": p_j,
-        "m2VZXA": m2VZXA, "pV": V, "pV_ar": pV,
-        "eq_entity": eq_entity, "n_eq": n_eq, "N": N, "p": p, "L": L,
-        "step": step, "robust": robust,
-    }
 
 
 def _build_H_ar(T: int, h: int = 3) -> np.ndarray:
@@ -620,7 +457,18 @@ def abond(
     Z = np.array(Z_list, dtype=float)
     eq_entity = np.array(eq_entity_list)
 
-    est = _estimate_gmm(Y, X, Z, eq_entity, step, robust=robust)
+    # One-step weighting W = first-difference block-diagonal operator H
+    # (Arellano-Bond specific).  Passed explicitly so abond()'s behavior is
+    # unchanged; the shared core treats it as an arbitrary weighting matrix.
+    from collections import Counter
+    entity_counts = dict(Counter(eq_entity.tolist()))
+    H_diag, H_off = _build_h(entity_counts, len(Y), eq_entity)
+    W = np.diag(H_diag)
+    for k in range(len(Y) - 1):
+        W[k, k + 1] = H_off[k]
+        W[k + 1, k] = H_off[k]
+
+    est = _estimate_gmm(Y, X, Z, eq_entity, step, robust=robust, W=W)
 
     coef_names = [f"L{lag}.{y_name}" for lag in range(1, lags + 1)] + x_cols
     coefficients = pd.Series(est["b"], index=coef_names)
