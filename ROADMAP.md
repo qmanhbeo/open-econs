@@ -247,8 +247,15 @@ might fit.
   only — standard weighted-regression SEs are valid under stratified sampling).
   OE's existing ``ols(weights=..., cov_type="HC3")`` already covers the use
   case; a convenience ``estimate()`` wrapper would be scope-for-its-own-sake.
-  (Revisit if users request it post-release.)  k2k / alternate coarsening /
-  balance diagnostics remain as Pass 3.
+  (Revisit if users request it post-release.)
+- [x] **Pass 3a — Alternate auto-coarsening**: added ``autocuts`` parameter
+  (``"sturges"``, ``"fd"``, ``"scott"``, ``"ss"``) to ``cem()``.  Formulas
+  verified against ``cem-mata.do`` (IQSS/cem-stata) and per-observation
+  strata/weights/matched validated against Stata 17 for all four methods on a
+  500-obs synthetic fixture.  FD includes Stata's MAD fallback when IQR=0.
+  See ``tests/stata/test_stata_cem_autocuts.py``.
+  k2k matching and L1 balance diagnostics remain as Pass 3 (investigated,
+  deliberately not built — see prior investigation report).
 - [x] Pass 1 — weighted balance diagnostics in ``ctx.balance()``:
       ``weights=`` parameter with SMD (unweighted pooled-SD denominator,
       Rosenbaum–Rubin convention), variance ratio (weighted group variances),
