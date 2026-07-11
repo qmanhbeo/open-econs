@@ -249,7 +249,15 @@ might fit.
   case; a convenience ``estimate()`` wrapper would be scope-for-its-own-sake.
   (Revisit if users request it post-release.)  k2k / alternate coarsening /
   balance diagnostics remain as Pass 3.
-- [ ] Post-matching balance diagnostics reusing `ctx.balance()` from v0.5
+- [x] Pass 1 — weighted balance diagnostics in ``ctx.balance()``:
+      ``weights=`` parameter with SMD (unweighted pooled-SD denominator,
+      Rosenbaum–Rubin convention), variance ratio (weighted group variances),
+      and WLS t-test (Stata ``[iw]`` convention).  Uniform-weight semantics
+      (no treated-weight override) — structurally identical to pstest for
+      OE's matching estimators where treated weight = 1 by construction.
+      Stata parity via ``pstest`` formula confirmed against ``balance_weighted.dta``.
+- [ ] Pass 2 — wire ``PSMResult.balance()`` and ``CEMResult.balance()`` to
+      ``ctx.balance(weights=)`` using each estimator's internal weight vector.
 - [ ] Sensitivity analysis (Rosenbaum bounds)
 
 #### v0.9 — Structural Foundations & Release Candidate
