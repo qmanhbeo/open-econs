@@ -7,6 +7,7 @@ from .models.linear.fe import fe
 from .models.linear.iv import iv
 from .models.linear.abond import abond
 from .models.linear.gmm import gmm, GMMResult
+from .models.nonlinear.nls import nls, NLSResult
 from .models.causal.did import did, event_study
 from .models.causal.balance import balance
 from .models.causal.staggered_did import staggered_did
@@ -23,5 +24,6 @@ __all__ = [
     "ols", "reg", "logit", "probit", "fe", "iv", "oaxaca",
     "did", "event_study", "balance", "abond", "staggered_did", "density_test", "cem",
     "psm", "rdd", "rosenbaum_bounds", "gmm", "GMMResult",
+    "nls", "NLSResult",
     "Context", "PanelContext", "__version__",
 ]

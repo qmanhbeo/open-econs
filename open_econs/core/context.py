@@ -60,6 +60,30 @@ class Context:
 
         return _probit(formula=formula, data=self._data, cov_type=cov_type)
 
+    def nls(
+        self,
+        formula: str,
+        start_values: dict[str, float],
+        *,
+        cov_type: str = "HC2",
+        cluster: str | list[str] | None = None,
+        max_lags: int | None = None,
+        time: str | None = None,
+        **solver_kwargs: Any,
+    ) -> Any:
+        from open_econs.models.nonlinear.nls import nls as _nls
+
+        return _nls(
+            formula=formula,
+            data=self._data,
+            start_values=start_values,
+            cov_type=cov_type,
+            cluster=cluster,
+            max_lags=max_lags,
+            time=time,
+            **solver_kwargs,
+        )
+
     def vif(self, formula: str) -> pd.Series:
         if "~" in formula:
             rhs = formula.split("~", 1)[1].strip()
