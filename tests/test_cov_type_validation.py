@@ -205,11 +205,29 @@ class TestGMM:
         assert r_r.cov_type == "robust"
         assert r_c.cov_type == "cluster"
 
-    def test_hac_not_supported_here(self):
+    def test_hac_requires_lags_and_time(self):
         df = _cross()
         with pytest.raises(ValueError) as e:
             oe.gmm("y ~ 1 | x ~ z", data=df, cov_type="HAC")
-        _assert_clear_error("gmm()", e.value)
+        assert "lags" in str(e.value)
+
+    def test_hac_requires_time(self):
+        df = _cross()
+        with pytest.raises(ValueError) as e:
+            oe.gmm("y ~ 1 | x ~ z", data=df, cov_type="HAC", lags=1)
+        assert "time" in str(e.value)
+
+    def test_hac_with_cluster_entity(self):
+        df = _cross()
+        r = oe.gmm("y ~ 1 | x ~ z", data=df, cov_type="HAC", lags=1, time="g", cluster="g")
+        assert r.cov_type == "HAC(1)"
+
+    def test_hac_alias_equals_HAC(self):
+        df = _cross()
+        r_upper = oe.gmm("y ~ 1 | x ~ z", data=df, cov_type="HAC", lags=1, time="g")
+        r_lower = oe.gmm("y ~ 1 | x ~ z", data=df, cov_type="hac", lags=1, time="g")
+        assert np.allclose(r_upper.coefficients.values, r_lower.coefficients.values)
+        assert r_lower.cov_type == "HAC(1)"
 
 
 # --------------------------------------------------------------------------- #

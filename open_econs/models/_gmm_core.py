@@ -24,6 +24,42 @@ import numpy as np
 from scipy.stats import chi2 as _chi2
 
 
+def _hac_S(
+    Z: np.ndarray,
+    e: np.ndarray,
+    eq_entity: np.ndarray,
+    max_lags: int,
+    time_labels: np.ndarray | None,
+    adjust: bool,
+) -> np.ndarray:
+    L = Z.shape[1]
+    n_tot = Z.shape[0]
+    S = np.zeros((L, L))
+    for ent in np.unique(eq_entity):
+        mask = eq_entity == ent
+        Z_e = Z[mask]
+        e_e = e[mask]
+        if time_labels is not None:
+            order = np.argsort(time_labels[mask], kind="stable")
+            Z_e = Z_e[order]
+            e_e = e_e[order]
+        moments = Z_e * e_e[:, None]
+        T_ent = moments.shape[0]
+        if T_ent == 0:
+            continue
+        S_ent = moments.T @ moments
+        for lag in range(1, min(max_lags, T_ent - 1) + 1):
+            w = 1.0 - lag / (max_lags + 1.0)
+            Gamma = np.zeros((L, L))
+            for t in range(lag, T_ent):
+                Gamma += np.outer(moments[t], moments[t - lag])
+            S_ent += w * (Gamma + Gamma.T)
+        S += S_ent
+    if adjust:
+        S *= n_tot / max(float(n_tot - Z.shape[1]), 1.0)
+    return S
+
+
 def estimate_gmm(
     Y: np.ndarray,
     X: np.ndarray,
@@ -34,6 +70,9 @@ def estimate_gmm(
     W: np.ndarray | None = None,
     sig2_scale: float = 1.0,
     small_sample_correction: bool = False,
+    time_labels: np.ndarray | None = None,
+    max_lags: int | None = None,
+    hac_adjust: bool = False,
 ) -> dict[str, Any]:
     """General two-step GMM estimator, mirroring xtabond2's Mata source (v3.7.2).
 
@@ -122,11 +161,14 @@ def estimate_gmm(
     onestepnonrobust = (step == "one-step") and (not robust)
 
     # --- Per-entity S from ONE-step residuals (A2, V1robust, Hansen) ---
-    S = np.zeros((L, L))
-    for ent in np.unique(eq_entity):
-        mask = eq_entity == ent
-        ze = Z[mask].T @ e1[mask]
-        S += np.outer(ze, ze)
+    if max_lags is not None and max_lags >= 0:
+        S = _hac_S(Z, e1, eq_entity, max_lags, time_labels, hac_adjust)
+    else:
+        S = np.zeros((L, L))
+        for ent in np.unique(eq_entity):
+            mask = eq_entity == ent
+            ze = Z[mask].T @ e1[mask]
+            S += np.outer(ze, ze)
 
     if onestepnonrobust:
         b = b1
