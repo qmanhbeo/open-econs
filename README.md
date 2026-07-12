@@ -2,30 +2,50 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/open-econs?color=blue)](https://pypi.org/project/open-econs/)
 [![Python versions](https://img.shields.io/pypi/pyversions/open-econs)](https://pypi.org/project/open-econs/)
+[![CI](https://github.com/qmanhbeo/open-econs/actions/workflows/ci.yml/badge.svg)](https://github.com/qmanhbeo/open-econs/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/github/license/qmanhbeo/open-econs)](https://github.com/qmanhbeo/open-econs/blob/main/LICENSE)
+[![Downloads](https://img.shields.io/pypi/dm/open-econs)](https://pypi.org/project/open-econs/)
 
-**The scikit-learn of empirical economics (or social sciences in general).**
+**Python econometrics with Stata/R parity.**
 
-A Python library that bridges the gap between traditional Stata/R econometrics
-workflows and modern, production-grade Python systems.  Every estimator follows
-the same interface — `summary`, `tidy`, `export` — so researchers and
-AI agents never have to learn a new API.
+open-econs brings familiar empirical economics methods from Stata and R into a
+unified Python workflow. Every estimator uses a consistent API, with numerical
+validation against established reference implementations.
 
-> **Current version (v0.8.0):** 142 Stata‑parity tests across all estimators
-> — 22 `.do` files with cached `.dta` fixtures, dual‑mode execution (live
-> Stata or CI fallback). **All 8 ABOND flavors** (collapsed/non‑collapsed ×
-> one/two‑step × robust/non‑robust) verified against `xtabond2` 3.7.2 at
-> rtol=1e‑6. **Event‑study** now uses t‑distribution inference
-> (`cov_kwds={"use_t": True}`), matching Stata's default. **Logit/probit
-> margins** match Stata at machine precision. **Test‑suite caching**
-> (`read_stata()` at module level) cuts full‑suite runtime from 235s → 94s
-> (2.5× speedup). All staggered‑DID, Oaxaca, RDD, IV, panel (FE/RE/FD/DK),
-> and HAC tests pass — Oaxaca at rtol=1e‑6, panel coefficients at
-> rtol=1e‑6, staggered‑DID ATT at rtol=1e‑6 (SE gap deferred to CS2021
-> doubly‑robust rewrite in v0.7).
+- 142+ Stata-parity tests verify coefficients and standard errors match
+  reference implementations at machine precision.
+- One consistent interface across all estimators: `.summary()`, `.tidy()`,
+  `.vcov()`, `.predict()`, `.export()`, `.to_latex()`.
+- Immutable, named pandas outputs — no raw arrays crossing the public API.
+
+## Installation
+
+```bash
+pip install open-econs                           # core: OLS, Oaxaca, FE, IV, Logit, Probit
+pip install open-econs[plot]                      # + matplotlib for .plot()
+pip install open-econs[nls]                       # + sympy for nls() (nonlinear least squares)
+pip install open-econs[dev,lint]                  # + development & linting tools
+pip install git+https://github.com/qmanhbeo/open-econs.git    # latest dev
+```
+
+Requires Python ≥ 3.10.
 
 ## Why open-econs?
 
-> Modern empirical research often uses Python for data engineering, Stata for estimation, LaTeX for tables, and custom scripts to glue everything together. open-econs lets you stay in one reproducible Python workflow without giving up familiar econometric methods.
+Empirical researchers often use Python for data cleaning, Stata for estimation,
+R for specialized methods, and LaTeX or custom scripts for output — a fragmented
+workflow that hurts reproducibility.
+
+open-econs keeps everything in one Python environment:
+
+- **Familiar estimators** — OLS, fixed effects, IV/2SLS, logit, probit,
+  difference-in-differences, event studies, RDD, panel models, matching
+- **Consistent API** — the same `.summary()` / `.tidy()` / `.vcov()` /
+  `.predict()` interface across every method
+- **Named pandas outputs** — coefficients, standard errors, and diagnostics
+  return as `pd.Series` or `pd.DataFrame` with clear labels
+- **Immutable results** — no accidental mutation after estimation
+- **Reproducible exports** — JSON, CSV, LaTeX, HTML from any result
 
 ```python
 import open_econs as oe
@@ -39,28 +59,39 @@ df = pd.DataFrame({
     "province":  ["A","A","B","B","C","C","A","B"],
 })
 
-# --- OLS with named coefficients and cluster-robust SEs ---
 r = oe.ols("income ~ education + age", data=df, cluster="province")
-print(r.coefficients)  # Clean pd.Series with named index 
-
-# --- Two-fold Oaxaca-Blinder Decomposition ---
-d = oe.oaxaca("income ~ education + age + female", data=df, by="female")
-print(d.explained)     # 16.00  (covariate-driven gap)
-print(d.unexplained)   #  4.00  (coefficient-driven gap)
-print(d.total_gap)     # 20.00  (female mean - male mean)
+print(r.tidy())
 ```
 
-## Installation
+## For Stata and R users
 
-```bash
-pip install open-econs                           # core: OLS, Oaxaca, FE, IV, Logit, Probit
-pip install open-econs[plot]                      # + matplotlib for .plot()
-pip install open-econs[nls]                       # + sympy for nls() (nonlinear least squares)
-pip install open-econs[dev,lint]                  # + development & linting tools
-pip install git+https://github.com/qmanhbeo/open-econs.git    # latest dev
-```
+If you know the Stata or R command, you already know the open-econs equivalent.
 
-Requires Python ≥ 3.10.
+### Stata
+
+| Stata                | open-econs                  |
+| -------------------- | --------------------------- |
+| `regress`            | `oe.ols()`                  |
+| `xtreg, fe`          | `oe.fe()`                   |
+| `ivregress 2sls`     | `oe.iv()`                   |
+| `logit` / `probit`   | `oe.logit()` / `oe.probit()`|
+| `oaxaca`             | `oe.oaxaca()`               |
+| `xtabond2`           | `oe.abond()`                |
+| `csdid`              | `oe.staggered_did()`        |
+| `rdrobust`           | `oe.rdd()`                  |
+| `teffects psmatch`   | `oe.psm()`                  |
+
+### R
+
+| R                    | open-econs                  |
+| -------------------- | --------------------------- |
+| `fixest` / `plm`     | `oe.fe()` / `oe.PanelContext()` |
+| `AER::ivreg`         | `oe.iv()`                   |
+| `did`                | `oe.staggered_did()`        |
+| `MatchIt`            | `oe.psm()`                  |
+
+See [docs/migrating_from_stata.md](docs/migrating_from_stata.md) for a
+detailed migration guide.
 
 ## Quick Start
 
@@ -76,95 +107,68 @@ df = pd.DataFrame({
     "province":  ["A","A","B","B","C","C","A","B"],
 })
 
-# --- OLS with named coefficients and cluster-robust SEs ---
+# --- OLS with cluster-robust SEs ---
 r = oe.ols("income ~ education + age", data=df, cluster="province")
-r.coefficients          # pd.Series with name index
-# Intercept   -32.82
-# education     8.97
-# age          -1.03
-
-r.tidy()              # coefficient table as DataFrame
-r.predict(df.head(2))# out-of-sample predictions
-# 0    31.28
-# 1    44.10
-
-print(r.summary())    # printable summary (also __repr__)
+r.coefficients          # pd.Series with named index
+r.tidy()                # coefficient table as DataFrame
+r.predict(df.head(2))   # out-of-sample predictions
+print(r.summary())      # printable summary
 
 # --- Logit / Probit ---
 r_logit = oe.logit("female ~ education + age", data=df)
-r_logit.tidy()        # coef, z, P>|z| table
-r_logit.margins()     # average marginal effects
-r_logit.predict(proba=False)  # binary class prediction
+r_logit.tidy()          # coef, z, P>|z| table
+r_logit.margins()       # average marginal effects
+r_logit.predict(proba=False)
 
 # --- Fixed effects ---
 r_fe = oe.fe("income ~ education + age", data=df, entity="province")
-r_fe.tidy()           # within-transformed coefficients
+r_fe.tidy()
 
 # --- IV / 2SLS ---
 r_iv = oe.iv("income ~ education | age", data=df)
-r_iv.tidy()           # 2SLS coefficients
-r_iv.first_stage()    # first-stage F-stat
+r_iv.tidy()             # 2SLS coefficients
+r_iv.first_stage()      # first-stage F-stat
+
+# --- Oaxaca-Blinder decomposition ---
+d = oe.oaxaca("income ~ education + age + female", data=df, by="female")
+d.explained             # covariate-driven gap
+d.unexplained           # coefficient-driven gap
+d.total_gap             # female mean - male mean
 
 # --- VIF diagnostics ---
 ctx = oe.Context(df)
-ctx.vif("income ~ education + age")  # VIF per variable
-
-# --- Oaxaca-Blinder decomposition ---
-# NOTE: the 'by' column must also appear on the RHS of the formula
-d = oe.oaxaca("income ~ education + age + female", data=df, by="female")
-d.explained          # 16.00  (covariate-driven gap)
-d.unexplained        #  4.00  (coefficient-driven gap)
-d.total_gap          # 20.00  (female mean - male mean)
-
-# Advanced: two-fold with different reference coefficients
-d_omega = oe.oaxaca("income ~ education + age + female", data=df, by="female",
-                     reference="omega")     # pooled without group dummy
-d_g1    = oe.oaxaca("income ~ education + age + female", data=df, by="female",
-                     reference="group1")    # Group 1 coefficients as reference
-d_cust  = oe.oaxaca("income ~ education + age + female", data=df, by="female",
-                     reference=0.7)         # custom weight (0–1)
-
-# Advanced: three-fold from Group 1 perspective
-d_rev = oe.oaxaca("income ~ education + age + female", data=df, by="female",
-                   decomposition_type="three-fold", reverse=True)
+ctx.vif("income ~ education + age")
 
 # --- Context remembers the dataset ---
-ctx.ols("income ~ education + age")            # same as oe.ols(..., data=df)
+ctx.ols("income ~ education + age")
 ctx.logit("female ~ education + age")
 ctx.probit("female ~ education + age")
-ctx.vif("education + age")
 
 # --- Immutability ---
 r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
 ```
 
-## Design Principles
-
-- **Every result is immutable** once `fit()` completes.
-- **All numeric artifacts are named** (`pd.Series`/`pd.DataFrame` with
-  variable-name indices).  No raw `numpy.ndarray` crosses the public API.
-- **Every error tells you what to fix.** Missing column → names the column,
-  lists what's available. Non-binary `by` → shows the values found.
-- **Consistent interface across estimators**: `summary()`, `tidy()`,
-  `export()`, `predict()` (where applicable).
-
-## Estimators
+## Supported Methods
 
 | Function | Description |
 |---|---|
-| `ols()` / `reg()` | OLS with HC1/robust/clustered SEs, **multi-way clustering** (`cluster=["a","b"]`), **Newey-West HAC** (`cov_type="HAC"`, `hac_adjust=True` for Stata-style df correction), WLS |
+| `ols()` / `reg()` | OLS with HC1/robust/clustered SEs, multi-way clustering, Newey-West HAC, WLS |
 | `fe()` | Fixed effects (one-way entity, two-way entity + time) |
 | `iv()` | Instrumental variables / 2SLS with first-stage F-stat |
 | `logit()` | Binary logit with `.margins()`, `.predict()` |
 | `probit()` | Binary probit (same API as logit) |
-| `oaxaca()` | Oaxaca-Blinder decomposition (two-fold, three-fold; reference types: pooled, omega, group1, group2, custom weight; reverse three-fold) |
-| `nls()` | Nonlinear least squares (Gauss-Newton via scipy). `formula="y ~ f(a, b, ...)"` with `start_values`; HC0–HC3 (`white_cov`), cluster, and Newey-West HAC (`time=`); analytic Jacobian via sympy with automatic numerical fallback; parity vs `curve_fit`, R `nls()`, Stata `nl` (requires `pip install open-econs[nls]`) |
-| `ctx.vif()` | Variance inflation factor / collinearity diagnostics |
-| `abond()` | Arellano-Bond dynamic panel (difference GMM), one/two-step Windmeijer SEs, Hansen J + AR(1)/AR(2). Collapsed one-step non-robust now matches Stata `xtabond2` to ~1e-7 |
-| `staggered_did()` | Callaway-Sant'Anna (2021) staggered / heterogeneous-timing DiD; doubly‑robust `dripw` or outcome‑regression `reg`; `covariates`, cell‑by‑cell Stata parity |
+| `oaxaca()` | Oaxaca-Blinder decomposition (two-fold, three-fold; multiple reference types) |
+| `nls()` | Nonlinear least squares (Gauss-Newton via scipy, analytic Jacobian) |
+| `abond()` | Arellano-Bond dynamic panel GMM (one/two-step, Windmeijer SEs, collapsed instruments) |
+| `staggered_did()` | Callaway-Sant'Anna (2021) staggered DiD (doubly-robust `dripw` or `reg`) |
 | `rdd()` | Sharp / fuzzy regression discontinuity (local linear, triangular kernel) |
-| `did()` / `event_study()` / `balance()` | Two-period DiD, event-study, balance tables |
-| `oe.PanelContext(...)` | `pooled/fitted/fe/re/diff/driscoll_kraay/hausman/abond` with remembered entity/time |
+| `did()` / `event_study()` | Two-period DiD, event-study with pre-trend diagnostics |
+| `psm()` | Propensity score matching (1:1 nearest-neighbor with replacement, AI 2012 SEs) |
+| `cem()` | Coarsened exact matching (auto or explicit cutpoints, multiple binning methods) |
+| `balance()` | Covariate balance diagnostics (SMD, variance ratio, weighted t-tests) |
+| `rosenbaum_bounds()` | Sensitivity analysis for matched pairs |
+| `PanelContext(...)` | Pooled/FE/RE/FD/Driscoll-Kraay/Hausman/ABond with remembered entity/time |
+| `Context(...)` | Dataset-scoped workflow with access to all above estimators |
 
 ## Result API
 
@@ -182,6 +186,50 @@ Every estimator returns an object with:
 | `.to_latex()` | LaTeX table string |
 | `.to_html()` | HTML table string |
 
+## Design Philosophy
+
+### Reproducibility first
+Immutable results prevent accidental mutation. All numeric artifacts are named
+`pd.Series` or `pd.DataFrame` with variable-name indices. Every result can be
+exported to JSON, CSV, LaTeX, or HTML.
+
+### Familiar econometrics
+Methods and defaults follow established practice from Stata and R. If you know
+`regress`, `xtreg`, or `ivregress`, you already know how to use the open-econs
+equivalent. Default standard errors (HC2) match modern Stata conventions.
+
+### One Python workflow
+Data processing, estimation, diagnostics, sensitivity analysis, and output
+generation live in the same environment. No more stitching together separate
+tools.
+
+## Methodology Documentation
+
+Every estimator includes a methodology specification covering:
+
+- Mathematical formulation
+- Assumptions
+- Estimation procedure
+- Inference (all covariance estimators with exact formulas)
+- Implementation details
+- Stata/R equivalents
+- Academic references
+
+See [methodology/](methodology/) for the full registry.
+
+## Comparison
+
+| Library | Strength |
+|---|---|
+| statsmodels | General statistical models |
+| linearmodels | Panel and IV estimation |
+| scikit-learn | Machine learning |
+| **open-econs** | Empirical economics workflows with Stata/R parity |
+
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for planned features and development milestones.
+
 ## Development
 
 ```bash
@@ -189,17 +237,6 @@ pip install -e ".[dev]"
 python -m pytest tests/
 ```
 
-## References
+## License
 
-Stata reference implementations used for parity testing:
-
-- ``xtabond2`` — David Roodman's Arellano-Bond dynamic panel GMM (`source <https://github.com/droodman/xtabond2/blob/master/xtabond2.ado>`_).
-- ``csdid`` / ``drdid`` — Fernando Rios-Avila's Callaway-Sant'Anna staggered DiD (`csdid <https://github.com/friosavila/stpackages/tree/main/csdid>`_, `drdid <https://github.com/friosavila/stpackages/tree/main/drdid>`_).
-- ``oaxaca`` — Ben Jann's Oaxaca-Blinder decomposition (`source <https://github.com/benjann/oaxaca>`_).
-
-Methodology:
-
-- Callaway, B., & Sant'Anna, P. (2021). Difference-in-Differences with Multiple Time Periods. *Journal of Econometrics*, 225(2), 200–230. https://doi.org/10.1016/j.jeconom.2020.12.001
-- Sant'Anna, P. C., & Zhao, J. (2020). Doubly Robust Difference-in-Differences Estimators. *Journal of Econometrics*, 219(1), 101–122. https://doi.org/10.1016/j.jeconom.2020.06.003
-- ``DRDID`` (R) — Pedro H. C. Sant'Anna's doubly-robust DiD implementation (`github.com/pedrohcgs/DRDID <https://github.com/pedrohcgs/DRDID>`_, ``R/drdid_panel.R``). Basis for ``staggered_did()``'s ``dripw`` influence function (the ``trad`` method, ``csdid``'s default ``dripw``).
-
+MIT
