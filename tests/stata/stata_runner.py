@@ -1,10 +1,18 @@
 """Dual-mode Stata runner for parity testing.
 
-Two modes:
-  1. **Live Stata** (STATA_EXE available): run the .do file, regenerate .dta.
-  2. **Fallback** (no Stata): read the committed .dta fixture directly.
+Three modes, controlled by whether StataMP is installed and by the
+``OE_REGENERATE_FIXTURES`` environment variable:
 
-In both cases a drift check verifies that the .do file has not been edited
+  1. **Read committed fixture (default):** StataMP not launched. The committed
+     ``.dta`` is read directly as ground truth. This is what happens on a normal
+     ``pytest`` run (the test is also deselected by the ``stata`` marker unless
+     ``-m "stata or r"`` is passed) and on CI.
+  2. **Regenerate fixture:** ``OE_REGENERATE_FIXTURES`` set truthy *and* StataMP
+     installed → run the ``.do`` file and overwrite the ``.dta``. Use only when a
+     ``.do`` script changed or right before a release.
+  3. **Fallback (no Stata):** StataMP absent → no-op, committed ``.dta`` used.
+
+In every mode a drift check verifies that the .do file has not been edited
 since the .dta was last regenerated.
 """
 
@@ -54,12 +62,22 @@ def _check_drift(label: str) -> None:
 
 
 def run_do(label: str) -> None:
-    """Run tests/stata/do/{label}.do via StataMP.
+    """Run tests/stata/do/{label}.do via StataMP to regenerate its .dta fixture.
 
-    If StataMP is not available, this is a no-op — the committed .dta is
-    assumed to be current (drift check will catch stale fixtures).
+    Regeneration is gated behind the ``OE_REGENERATE_FIXTURES`` environment
+    variable: StataMP is only launched when that variable is set to a truthy
+    value.  This keeps routine local test runs (and CI) free of any Stata
+    binary invocation — they read the committed .dta fixtures as ground truth
+    instead.  Set ``OE_REGENERATE_FIXTURES=1`` only when a .do script changed
+    or right before a release.
+
+    If StataMP is not available (or the gate is off), this is a no-op — the
+    committed .dta is assumed to be current (drift check will catch stale
+    fixtures).
     """
     if not stata_available():
+        return
+    if not os.environ.get("OE_REGENERATE_FIXTURES"):
         return
 
     do_path = DO_DIR / f"{label}.do"
