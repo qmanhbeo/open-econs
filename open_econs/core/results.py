@@ -563,3 +563,270 @@ class OaxacaResult(BaseModel):
         )
         tbl = self.tidy().to_string(index=False)
         return header + tbl + "\n======================================================================\n"
+
+
+class MultinomialResult(BaseModel):
+    """Result of a multinomial logit (MNLogit) regression.
+
+    Immutable result with the uniform interface (``.tidy()``, ``.summary()``,
+    ``.export()``, ``.vcov()``, ``.to_latex()`` / ``.to_html()``).  Adds
+    ``.margins()`` (average marginal effects per outcome category) and
+    ``.predict()`` (fitted per-category probabilities).
+
+    Shape conventions (deliberately different from the binary ``BinaryResult``):
+
+    * ``coefficients`` / ``std_errors`` / ``z_stats`` / ``p_values`` are
+      ``(category, variable)`` :class:`~pandas.DataFrame` objects: rows are the
+      **non-baseline** outcome categories, columns are the regressors.  This is
+      the natural layout because a multinomial logit is one logistic regression
+      *per non-baseline outcome* (exactly how Stata prints ``mlogit`` equation
+      blocks), and it keeps each outcome's coefficients inspectable on their
+      own.
+    * ``conf_int`` is a :class:`~pandas.DataFrame` with a ``(category, variable)``
+      :class:`~pandas.MultiIndex` and ``lower`` / ``upper`` columns.
+    * ``.vcov()`` returns the full ``(p*(K-1), p*(K-1))`` covariance matrix with a
+      ``(category, variable)`` :class:`~pandas.MultiIndex` (category-major,
+      matching ``coefficients.values.flatten()``).
+    * ``.predict()`` returns an ``(n, K)`` :class:`~pandas.DataFrame` of per-category
+      probabilities (columns = all outcome labels).
+    * ``.margins()`` returns a ``dict`` keyed by outcome-category label, each
+      value a tidy ``pd.DataFrame`` of average marginal effects for that outcome
+      (the baseline category's AME is the negative row-sum of the others — a real
+      identity of multinomial AMEs, verified numerically at fit time).
+    """
+
+    def __init__(
+        self,
+        *,
+        formula: str,
+        rhs_formula: str,
+        nobs: int,
+        df_resid: int,
+        df_model: int,
+        cov_type: str,
+        categories: list,
+        base_category: Any,
+        non_base_categories: list,
+        variable_names: list[str],
+        coefficients: pd.DataFrame,
+        std_errors: pd.DataFrame,
+        z_stats: pd.DataFrame,
+        p_values: pd.DataFrame,
+        conf_int: pd.DataFrame,
+        llf: float,
+        aic: float,
+        bic: float,
+        pseudo_r2: float,
+        fitted: pd.DataFrame,
+        call: dict[str, Any],
+        _fit: Any = None,
+    ) -> None:
+        self.formula = formula
+        self.rhs_formula = rhs_formula
+        self.data_shape = (nobs, coefficients.size)
+        self.cov_type = cov_type
+        self.call = call
+        self.timestamp = datetime.now()
+        self.package_version = __version__
+
+        self.nobs = nobs
+        self.df_resid = df_resid
+        self.df_model = df_model
+        self.categories = list(categories)
+        self.base_category = base_category
+        self.non_base_categories = list(non_base_categories)
+        self.variable_names = list(variable_names)
+        self.coefficients = coefficients
+        self.std_errors = std_errors
+        self.z_stats = z_stats
+        self.p_values = p_values
+        self.conf_int = conf_int
+        self.llf = llf
+        self.aic = aic
+        self.bic = bic
+        self.pseudo_r2 = pseudo_r2
+        self.fitted_values = fitted if fitted is not None else pd.DataFrame()
+        self._fit = _fit
+
+        self._freeze()
+
+    # ── helpers ──────────────────────────────────────────────────────
+
+    def _tidy_frame(
+        self,
+        coef: pd.DataFrame,
+        se: pd.DataFrame,
+        z: pd.DataFrame,
+        p: pd.DataFrame,
+        ci: pd.DataFrame,
+    ) -> pd.DataFrame:
+        rows = []
+        for cat in coef.index:
+            for var in coef.columns:
+                rows.append(
+                    {
+                        "Outcome": cat,
+                        "Variable": var,
+                        "Coef": coef.loc[cat, var],
+                        "Std Err": se.loc[cat, var],
+                        "z": z.loc[cat, var],
+                        "P>|z|": p.loc[cat, var],
+                        "0.025": ci.loc[(cat, var), "lower"],
+                        "0.975": ci.loc[(cat, var), "upper"],
+                    }
+                )
+        df = pd.DataFrame(rows)
+        df.index.name = None
+        return df
+
+    # ── abstract interface ───────────────────────────────────────────
+
+    def tidy(self) -> pd.DataFrame:
+        return self._tidy_frame(
+            self.coefficients, self.std_errors, self.z_stats,
+            self.p_values, self.conf_int,
+        )
+
+    def summary(self) -> str:
+        llf_str = f"{self.llf:.3f}" if self.llf is not None and not self._isnan(self.llf) else "N/A"
+        aic_str = f"{self.aic:.2f}" if self.aic is not None and not self._isnan(self.aic) else "N/A"
+        bic_str = f"{self.bic:.2f}" if self.bic is not None and not self._isnan(self.bic) else "N/A"
+        header = (
+            f"                  Multinomial Logit Regression Results                  \n"
+            f"======================================================================\n"
+            f"Dep. Variable:               {self.formula.split('~')[0].strip()}\n"
+            f"Model:                       MNLogit (multinomial logit)\n"
+            f"No. Observations:            {self.nobs}\n"
+            f"Df Residuals:                {self.df_resid}\n"
+            f"Df Model:                    {self.df_model}\n"
+            f"Base Outcome:                {self.base_category}\n"
+            f"Outcomes (non-base):         {', '.join(str(c) for c in self.non_base_categories)}\n"
+            f"Pseudo R-squared:          {self.pseudo_r2:.6f}\n"
+            f"Log-Likelihood:              {llf_str}\n"
+            f"AIC:                         {aic_str}\n"
+            f"BIC:                         {bic_str}\n"
+            f"Covariance Type:             {self.cov_type}\n"
+            f"======================================================================\n"
+        )
+        tbl = self.tidy().to_string(index=False)
+        return header + tbl + "\n======================================================================\n"
+
+    # ── optional stubs (reused) ──────────────────────────────────────
+
+    def vcov(self) -> pd.DataFrame:
+        if self._fit is None:
+            raise RuntimeError("vcov() requires a fitted statsmodels result.")
+        cov = np.asarray(self._fit.cov_params(), dtype=float)
+        idx = pd.MultiIndex.from_product(
+            [self.non_base_categories, self.variable_names]
+        )
+        return pd.DataFrame(cov, index=idx, columns=idx)
+
+    def predict(self, newdata: pd.DataFrame | None = None, proba: bool = True) -> pd.DataFrame:
+        if newdata is None:
+            if not proba:
+                raise ValueError(
+                    "MultinomialResult.predict() with proba=False is unsupported: "
+                    "there is no single 'predicted class' Series contract; pass "
+                    "proba=True to get the (n, K) probability DataFrame."
+                )
+            return self.fitted_values
+        if self._fit is None:
+            raise RuntimeError("predict(newdata=...) requires a fitted statsmodels result.")
+        from formulaic import Formula
+        matrices = Formula(self.rhs_formula).get_model_matrix(newdata, na_action="drop")
+        XX = matrices.rhs if hasattr(matrices, "rhs") else matrices
+        proba_arr = self._fit.predict(XX.values)
+        return pd.DataFrame(
+            proba_arr,
+            index=XX.index,
+            columns=[str(c) for c in self.categories],
+        )
+
+    def margins(self) -> dict:
+        """Average marginal effects per outcome category.
+
+        Returns a ``dict`` mapping each outcome-category label to a tidy
+        ``pd.DataFrame`` (columns: ``Variable``, ``dy/dx``, ``Std Err``, ``z``,
+        ``P>|z|``, ``0.025``, ``0.975``).  The baseline category's AME is **also
+        included** (it is part of ``statsmodels`` ``get_margeff``'s output, which
+        returns a ``(n_regressors, K)`` array — regressors (minus the constant) by
+        *all* outcome categories, including the base).
+
+        .. note::
+           This method deliberately returns a ``dict`` of DataFrames rather than
+           the library's usual single tidy DataFrame.  This is an intentional
+           exception to the project's single-DataFrame convention, made because
+           multinomial AMEs are inherently structured **per outcome category**:
+           there are ``K`` separate outcome-specific effect sets (one per
+           category), not a single shared set of effects.  Returning a dict keeps
+           each outcome's AMEs keyed by category label and avoids collapsing ``K``
+           distinct effect vectors into an ambiguous one-frame layout.
+
+        As an internal consistency check, the baseline category's AME equals the
+        negative sum of the other categories' AMEs — a real identity of
+        multinomial AMEs (they sum to zero across categories for each regressor).
+        This identity is asserted in the parity tests rather than assumed.
+
+        The underlying engine is ``statsmodels`` ``MNLogitResults.get_margeff``,
+        which propagates the fit's own covariance type (robust / clustered).
+
+        .. warning::
+           ``.margins()`` has only been validated for models with a constant
+           (intercept) and plain numeric regressors.  It is **not yet validated
+           for categorical-regressor expansion or no-intercept specifications**;
+           ``get_margeff``'s regressor layout can change shape in those cases and
+           the shape assertion below will fire rather than silently misaligning
+           columns.
+        """
+        if self._fit is None:
+            raise RuntimeError("margins() requires a fitted statsmodels result.")
+
+        me = self._fit.get_margeff(at="overall")
+        margeff = np.asarray(me.margeff, dtype=float)        # (n_reg, K) reg x outcome
+        margeff_se = np.asarray(me.margeff_se, dtype=float)  # (n_reg, K)
+        margeff_t = np.asarray(me.tvalues, dtype=float)      # (n_reg, K)
+        margeff_p = np.asarray(me.pvalues, dtype=float)      # (n_reg, K)
+        margeff_ci = np.asarray(me.conf_int(), dtype=float)  # (n_reg, 2, K)
+
+        # get_margeff drops the constant; its regressor order matches the model's
+        # exog names minus the intercept.
+        reg_names = [v for v in self.variable_names if v != "Intercept"]
+        if len(reg_names) == 0:
+            reg_names = list(self.variable_names)
+        K = len(self.categories)
+        expected_shape = (len(reg_names), K)
+        if margeff.shape != expected_shape:
+            raise RuntimeError(
+                f"get_margeff shape {margeff.shape} does not match expected "
+                f"regressor/category count {expected_shape} (regressors = "
+                f"{len(reg_names)} exog minus intercept, categories = {K}) — "
+                f"statsmodels version mismatch or unsupported model structure "
+                f"(e.g. categorical-regressor expansion or no-intercept "
+                f"specification), which margins() does not yet validate."
+            )
+
+        result: dict = {}
+        for k in range(K):
+            cat = self.categories[k]
+            rows = []
+            for j, v in enumerate(reg_names):
+                rows.append(
+                    {
+                        "Variable": v,
+                        "dy/dx": float(margeff[j, k]),
+                        "Std Err": float(margeff_se[j, k]),
+                        "z": float(margeff_t[j, k]),
+                        "P>|z|": float(margeff_p[j, k]),
+                        "0.025": float(margeff_ci[j, 0, k]),
+                        "0.975": float(margeff_ci[j, 1, k]),
+                    }
+                )
+            result[cat] = pd.DataFrame(rows)
+        return result
+
+    def _isnan(self, v: float) -> bool:
+        try:
+            return np.isnan(v)
+        except (TypeError, ValueError):
+            return True
