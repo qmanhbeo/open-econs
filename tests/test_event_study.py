@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.testing as npt
 import pandas as pd
 import pytest
 
@@ -79,3 +80,108 @@ class TestEventStudy:
             r.plot()
         except ImportError:
             pytest.skip("matplotlib not installed")
+
+
+@pytest.fixture
+def df_event_panel() -> pd.DataFrame:
+    np.random.seed(11)
+    n_entities = 60
+    n_periods = 10
+    n = n_entities * n_periods
+    treated = np.repeat(np.random.binomial(1, 0.5, n_entities), n_periods).astype(float)
+    time = np.tile(np.arange(n_periods), n_entities).astype(float)
+    post = np.where(time >= 5, 1.0, 0.0)
+    x = np.random.normal(0, 1, n)
+    y = 1.0 + 0.8 * treated * post + 0.3 * x + np.random.normal(0, 0.5, n)
+    df = pd.DataFrame({
+        "y": y, "x": x, "treated": treated,
+        "post": post, "time": time,
+    })
+    event_time = np.where(df["treated"] == 1, df["post"] - 1, np.nan)
+    df["treated_event_time"] = np.where(df["treated"] == 1, event_time, np.nan)
+    return df
+
+
+class TestEventStudyHAC:
+    def test_hac_se_differs_from_nonrobust(self, df_event_panel):
+        r_hac = oe.event_study(
+            "y ~ treated * post", data=df_event_panel,
+            treatment="treated", post="post",
+            cov_type="HAC", lags=2, time="time",
+        )
+        r_nonr = oe.event_study(
+            "y ~ treated * post", data=df_event_panel,
+            treatment="treated", post="post",
+            cov_type="nonrobust",
+        )
+        assert not np.allclose(r_hac.std_errors, r_nonr.std_errors, rtol=1e-10)
+
+    def test_hac_matches_ols_hac_internal(self, df_event_panel):
+        r_es = oe.event_study(
+            "y ~ treated * post + x", data=df_event_panel,
+            treatment="treated", post="post",
+            cov_type="HAC", lags=2, time="time",
+        )
+        assert r_es.cov_type == "HAC(2)"
+        assert not np.isnan(r_es.std_errors).any()
+
+        r_nonr = oe.event_study(
+            "y ~ treated * post + x", data=df_event_panel,
+            treatment="treated", post="post",
+            cov_type="nonrobust",
+        )
+        assert not np.allclose(r_es.std_errors, r_nonr.std_errors, rtol=1e-10)
+
+    def test_hac_requires_lags(self, df_event_panel):
+        with pytest.raises(ValueError, match="lags"):
+            oe.event_study(
+                "y ~ treated * post", data=df_event_panel,
+                treatment="treated", post="post",
+                cov_type="HAC", lags=None, time="time",
+            )
+
+    def test_hac_requires_time(self, df_event_panel):
+        with pytest.raises(ValueError, match="time"):
+            oe.event_study(
+                "y ~ treated * post", data=df_event_panel,
+                treatment="treated", post="post",
+                cov_type="HAC", lags=2, time=None,
+            )
+
+    def test_hac_cov_label(self, df_event_panel):
+        r = oe.event_study(
+            "y ~ treated * post", data=df_event_panel,
+            treatment="treated", post="post",
+            cov_type="HAC", lags=2, time="time",
+        )
+        assert r.cov_type == "HAC(2)"
+
+    def test_hac_alias_lowercase(self, df_event_panel):
+        r1 = oe.event_study(
+            "y ~ treated * post", data=df_event_panel,
+            treatment="treated", post="post",
+            cov_type="HAC", lags=2, time="time",
+        )
+        r2 = oe.event_study(
+            "y ~ treated * post", data=df_event_panel,
+            treatment="treated", post="post",
+            cov_type="hac", lags=2, time="time",
+        )
+        npt.assert_allclose(r1.std_errors.values, r2.std_errors.values, rtol=1e-12)
+
+    def test_hac_preserves_event_coefficients(self, df_event_panel):
+        r_hac = oe.event_study(
+            "y ~ treated * post", data=df_event_panel,
+            treatment="treated", post="post",
+            cov_type="HAC", lags=2, time="time",
+        )
+        r_nonr = oe.event_study(
+            "y ~ treated * post", data=df_event_panel,
+            treatment="treated", post="post",
+            cov_type="nonrobust",
+        )
+        npt.assert_allclose(
+            r_hac.event_coefficients["coef"].values,
+            r_nonr.event_coefficients["coef"].values,
+            rtol=1e-12,
+        )

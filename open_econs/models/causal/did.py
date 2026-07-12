@@ -134,13 +134,17 @@ def did(
     post: str,
     cluster: str | None = None,
     cov_type: str = "HC2",
+    lags: int | None = None,
+    time: str | None = None,
+    hac_adjust: bool = False,
 ) -> DiDResult:
     """Two-period difference-in-differences (interactive fixed-effects) estimator.
 
     Estimates the canonical DiD specification with a treatment x post
     interaction term.  The coefficient on ``treatment:post`` is the average
-    treatment effect on the treated (ATT).  Supports heteroskedasticity-robust
-    or cluster-robust standard errors and arbitrary additional controls.
+    treatment effect on the treated (ATT).  Supports heteroskedasticity-robust,
+    cluster-robust, or Newey-West HAC standard errors and arbitrary additional
+    controls.
 
     Parameters
     ----------
@@ -156,8 +160,17 @@ def did(
     cluster : str, optional
         Column to cluster standard errors by (e.g. unit or group id).
     cov_type : str, default "HC2"
-        Statsmodels covariance type (``"HC0"``, ``"HC1"``, ``"HC2"``,
-        ``"HC3"``, or ``"nonrobust"``).  Ignored when ``cluster`` is given.
+        Covariance type: ``"nonrobust"``, ``"HC0"``, ``"HC1"``, ``"HC2"``,
+        ``"HC3"``, or ``"HAC"``.  ``"robust"`` aliases to ``"HC2"`` and
+        ``"hac"`` (any case) aliases to ``"HAC"``.  Ignored when ``cluster``
+        is given.
+    lags : int, optional
+        Number of Newey-West lags (required when ``cov_type="HAC"``).
+    time : str, optional
+        Column name for the time-period index used by HAC period-aggregation.
+        Required when ``cov_type="HAC"``.
+    hac_adjust : bool, default False
+        Apply the ``N / (N - K)`` finite-sample correction to HAC variances.
 
     Returns
     -------
@@ -170,11 +183,14 @@ def did(
         post=post,
         cluster=cluster,
         cov_type=cov_type,
+        lags=lags,
+        time=time,
+        hac_adjust=hac_adjust,
     )
 
     cov_type = validate_cov_type(
         cov_type,
-        accepted={"nonrobust", "HC0", "HC1", "HC2", "HC3"},
+        accepted={"nonrobust", "HC0", "HC1", "HC2", "HC3", "HAC"},
         aliases={"robust": "HC2"},
         estimator="did()",
     )
@@ -231,35 +247,65 @@ def did(
 
     import statsmodels.api as sm
 
-    kwargs: dict[str, Any] = {}
-    if cluster is not None:
+    use_hac = cov_type == "HAC"
+
+    if use_hac:
+        if lags is None:
+            raise ValueError(
+                "Newey-West HAC requires `lags` (e.g. lags=1)."
+            )
+        if time is None:
+            raise ValueError(
+                "Newey-West HAC requires `time` (the time dimension used "
+                "as the Newey-West period index)."
+            )
+        from open_econs.core.cov import newey_west_cov, _as_int_labels
+        fitted = sm.OLS(y_arr, X_arr).fit(cov_type="nonrobust")
+        time_labels = _as_int_labels(data.loc[XX.index, time].values)
+        V_cov = newey_west_cov(
+            X_arr, np.asarray(fitted.resid), max_lags=lags,
+            cluster=time_labels, adjust=hac_adjust,
+        )
+        se_arr = np.sqrt(np.maximum(np.diag(V_cov), 0.0))
+        display_cov = f"HAC({lags})"
+    elif cluster is not None:
         if cluster not in data.columns:
             raise errors.missing_column_error(cluster, data.columns.tolist())
-        kwargs["cov_type"] = "cluster"
-        kwargs["cov_kwds"] = {"groups": data.loc[XX.index, cluster].values}
+        fitted = sm.OLS(y_arr, X_arr).fit(
+            cov_type="cluster",
+            cov_kwds={"groups": data.loc[XX.index, cluster].values},
+        )
+        se_arr = fitted.bse
+        display_cov = cluster
     else:
-        kwargs["cov_type"] = cov_type
-
-    fitted = sm.OLS(y_arr, X_arr).fit(**kwargs)
-
-    did_idx = list(XX.columns).index(did_term)
-    did_coef = float(fitted.params[did_idx])
-    did_se = float(fitted.bse[did_idx])
-    did_t = float(fitted.tvalues[did_idx])
-    did_p = float(fitted.pvalues[did_idx])
+        fitted = sm.OLS(y_arr, X_arr).fit(cov_type=cov_type)
+        se_arr = fitted.bse
+        display_cov = cov_type
 
     coef_arr = fitted.params
-    se_arr = fitted.bse
-    t_arr = fitted.tvalues
-    p_arr = fitted.pvalues
-    conf_arr = fitted.conf_int()
+
+    if use_hac:
+        t_arr = np.where(se_arr > 0, coef_arr / se_arr, np.nan)
+        from scipy.stats import norm as _norm
+        p_arr = 2.0 * (1.0 - _norm.cdf(np.abs(t_arr)))
+        conf_arr = np.column_stack(
+            [coef_arr - 1.96 * se_arr, coef_arr + 1.96 * se_arr]
+        )
+    else:
+        t_arr = fitted.tvalues
+        p_arr = fitted.pvalues
+        conf_arr = fitted.conf_int()
+
+    did_idx = list(XX.columns).index(did_term)
+    did_coef = float(coef_arr[did_idx])
+    did_se = float(se_arr[did_idx])
+    did_t = float(t_arr[did_idx])
+    did_p = float(p_arr[did_idx])
 
     conf_int = pd.DataFrame(
         {"lower": conf_arr[:, 0], "upper": conf_arr[:, 1]},
         index=XX.columns,
     )
-
-    display_cov = cluster if cluster else cov_type
 
     return DiDResult(
         formula=formula,
@@ -412,6 +458,9 @@ def event_study(
     cluster: str | None = None,
     cov_type: str = "HC2",
     omitted_period: int = -1,
+    lags: int | None = None,
+    time: str | None = None,
+    hac_adjust: bool = False,
 ) -> EventStudyResult:
     """Event-study (relative-time) difference-in-differences estimator.
 
@@ -420,7 +469,7 @@ def event_study(
     The data must contain a column ``"{treatment}_event_time"`` whose values
     are periods relative to treatment (e.g. -2, -1, 0, 1, 2), with
     ``omitted_period`` (default -1, the period just before treatment) used as
-    the normalization baseline.
+    the normalization baseline.  Supports Newey-West HAC standard errors.
 
     Parameters
     ----------
@@ -436,9 +485,19 @@ def event_study(
     cluster : str, optional
         Column to cluster standard errors by.
     cov_type : str, default "HC2"
-        Statsmodels covariance type (ignored when ``cluster`` is given).
+        Covariance type: ``"nonrobust"``, ``"HC0"``, ``"HC1"``, ``"HC2"``,
+        ``"HC3"``, or ``"HAC"``.  ``"robust"`` aliases to ``"HC2"`` and
+        ``"hac"`` (any case) aliases to ``"HAC"``.  Ignored when ``cluster``
+        is given.
     omitted_period : int, default -1
         Relative period held out as the baseline in the event-study graph.
+    lags : int, optional
+        Number of Newey-West lags (required when ``cov_type="HAC"``).
+    time : str, optional
+        Column name for the time-period index used by HAC period-aggregation.
+        Required when ``cov_type="HAC"``.
+    hac_adjust : bool, default False
+        Apply the ``N / (N - K)`` finite-sample correction to HAC variances.
 
     Returns
     -------
@@ -453,11 +512,14 @@ def event_study(
         cluster=cluster,
         cov_type=cov_type,
         omitted_period=omitted_period,
+        lags=lags,
+        time=time,
+        hac_adjust=hac_adjust,
     )
 
     cov_type = validate_cov_type(
         cov_type,
-        accepted={"nonrobust", "HC0", "HC1", "HC2", "HC3"},
+        accepted={"nonrobust", "HC0", "HC1", "HC2", "HC3", "HAC"},
         aliases={"robust": "HC2"},
         estimator="event_study()",
     )
@@ -535,24 +597,56 @@ def event_study(
 
     import statsmodels.api as sm
 
-    kwargs: dict[str, Any] = {}
-    cov_kwds: dict[str, Any] = {"use_t": True}
-    if cluster is not None:
+    use_hac = cov_type == "HAC"
+
+    if use_hac:
+        if lags is None:
+            raise ValueError(
+                "Newey-West HAC requires `lags` (e.g. lags=1)."
+            )
+        if time is None:
+            raise ValueError(
+                "Newey-West HAC requires `time` (the time dimension used "
+                "as the Newey-West period index)."
+            )
+        from open_econs.core.cov import newey_west_cov, _as_int_labels
+        fitted = sm.OLS(y_arr, X_arr).fit(cov_type="nonrobust")
+        time_labels = _as_int_labels(data.loc[XX.index, time].values)
+        V_cov = newey_west_cov(
+            X_arr, np.asarray(fitted.resid), max_lags=lags,
+            cluster=time_labels, adjust=hac_adjust,
+        )
+        se_arr = np.sqrt(np.maximum(np.diag(V_cov), 0.0))
+        display_cov = f"HAC({lags})"
+    elif cluster is not None:
         if cluster not in data.columns:
             raise errors.missing_column_error(cluster, data.columns.tolist())
-        kwargs["cov_type"] = "cluster"
-        cov_kwds["groups"] = data.loc[XX.index, cluster].values
+        fitted = sm.OLS(y_arr, X_arr).fit(
+            cov_type="cluster",
+            cov_kwds={"groups": data.loc[XX.index, cluster].values, "use_t": True},
+        )
+        se_arr = fitted.bse
+        display_cov = cluster
     else:
-        kwargs["cov_type"] = cov_type
-    kwargs["cov_kwds"] = cov_kwds
-
-    fitted = sm.OLS(y_arr, X_arr).fit(**kwargs)
+        fitted = sm.OLS(y_arr, X_arr).fit(
+            cov_type=cov_type, cov_kwds={"use_t": True},
+        )
+        se_arr = fitted.bse
+        display_cov = cov_type
 
     coef_arr = fitted.params
-    se_arr = fitted.bse
-    t_arr = fitted.tvalues
-    p_arr = fitted.pvalues
-    conf_arr = fitted.conf_int()
+
+    if use_hac:
+        t_arr = np.where(se_arr > 0, coef_arr / se_arr, np.nan)
+        from scipy.stats import norm as _norm
+        p_arr = 2.0 * (1.0 - _norm.cdf(np.abs(t_arr)))
+        conf_arr = np.column_stack(
+            [coef_arr - 1.96 * se_arr, coef_arr + 1.96 * se_arr]
+        )
+    else:
+        t_arr = fitted.tvalues
+        p_arr = fitted.pvalues
+        conf_arr = fitted.conf_int()
 
     conf_int = pd.DataFrame(
         {"lower": conf_arr[:, 0], "upper": conf_arr[:, 1]},
@@ -571,7 +665,7 @@ def event_study(
             period = float("nan")
         event_periods.append(period)
         idx = list(XX.columns).index(c)
-        event_coefs.append(float(fitted.params[idx]))
+        event_coefs.append(float(coef_arr[idx]))
         lower, upper = conf_arr[idx]
         event_lower.append(float(lower))
         event_upper.append(float(upper))
@@ -582,8 +676,6 @@ def event_study(
         "ci_lower": event_lower,
         "ci_upper": event_upper,
     }).sort_values("period").reset_index(drop=True)
-
-    display_cov = cluster if cluster else cov_type
 
     return EventStudyResult(
         formula=formula,
