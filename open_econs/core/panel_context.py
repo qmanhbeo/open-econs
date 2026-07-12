@@ -87,12 +87,24 @@ class PanelContext:
 
     @staticmethod
     def _ensure_intercept(formula: str) -> str:
-        """Return *formula* with an explicit intercept unless one is suppressed."""
+        """Return *formula* with an explicit intercept unless one is suppressed.
+
+        Intercept detection splits the RHS into formula terms on the ``+``/``-``
+        operators and looks for the literal tokens ``1`` (intercept present) and
+        ``0`` (intercept suppressed).  This avoids the previous substring bug in
+        which a regressor name containing a digit -- e.g. ``x1`` in
+        ``"y ~ x1 + x2"`` -- was mistaken for the intercept term ``1`` and the
+        intercept was silently dropped.
+        """
+        import re
+
         lhs, rhs = formula.split("~", 1)
         rhs = rhs.strip()
-        if rhs.startswith("0") or "0 +" in rhs or "~0" in formula:
-            return formula
-        if rhs.startswith("1") or "1 +" in rhs:
+        # A term is the intercept indicator only when it is exactly "1" (intercept
+        # present) or "0" (intercept suppressed) as a standalone token; digits
+        # embedded in identifiers (x1, year2020, lag1, ...) are ignored.
+        terms = [t.strip() for t in re.split(r"\s*[+\-]\s*", rhs)]
+        if "1" in terms or "0" in terms:
             return formula
         return f"{lhs.strip()} ~ 1 + {rhs}"
 
