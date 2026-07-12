@@ -134,6 +134,9 @@ def gmm(
     step: str = "two-step",
     cov_type: str = "robust",
     cluster: str | None = None,
+    lags: int | None = None,
+    time: str | None = None,
+    hac_adjust: bool = False,
 ) -> GMMResult:
     """Estimate a linear-in-parameters GMM regression.
 
@@ -152,14 +155,37 @@ def gmm(
         GMM step.  The one-step estimator with identity weighting is identical
         to 2SLS; the two-step estimator uses the efficient
         ``S = Σ (Zᵢ'eᵢ)(Zᵢ'eᵢ)'`` weighting.
-    cov_type : {"robust", "cluster"}, default "robust"
+    cov_type : {"robust", "cluster", "HAC"}, default "robust"
         Covariance estimator.  ``"robust"`` is the heteroskedasticity-robust
         (White) sandwich -- this library's ``cov_type="robust"`` convention, not
         Stata's ``wmatrix()`` naming.  ``"cluster"`` clusters the sandwich by
-        the variable named in *cluster*.
+        the variable named in *cluster*.  ``"HAC"`` uses Newey-West (1987)
+        autocorrelation-robust standard errors and, in two-step GMM, a
+        HAC-weighted efficient weighting matrix (Hansen 1982, Newey & West
+        1994).  Requires ``lags`` and ``time`` parameters.  ``"cluster"`` takes
+        precedence over ``"HAC"`` (if both ``cluster`` and ``cov_type="HAC"``
+        are given, cluster-robust SEs are used).
     cluster : str, optional
         Column name of the cluster/group variable.  Required when
-        ``cov_type="cluster"``; ignored otherwise.
+        ``cov_type="cluster"``; ignored otherwise.  When ``cov_type="HAC"``,
+        *cluster* names the entity grouping for the per-entity time-series HAC
+        computation (the Newey-West estimator is computed within each entity
+        cluster and accumulated).  If omitted when ``cov_type="HAC"``, each
+        observation is treated as its own entity (HAC across the
+        full time-ordered sample).
+    lags : int, optional
+        Number of Newey-West lags (bandwidth).  Required when
+        ``cov_type="HAC"``.
+    time : str, optional
+        Column name of the time variable (used for time ordering within each
+        entity when determining the HAC autocorrelation structure).  Required
+        when ``cov_type="HAC"``.
+    hac_adjust : bool, default False
+        If True, apply the ``N/(N-K)`` degrees-of-freedom correction to the
+        HAC long-run variance matrix ``S`` (analogous to the adjustment
+        applied to ``newey_west_cov`` in OLS contexts).  For exactly-identified
+        GMM this produces the same SEs as ``ols()``/``iv()`` with
+        ``hac_adjust=True``.
 
     Returns
     -------
@@ -180,7 +206,7 @@ def gmm(
         raise ValueError("step must be 'one-step' or 'two-step'.")
     cov_type = validate_cov_type(
         cov_type,
-        accepted={"robust", "cluster"},
+        accepted={"robust", "cluster", "HAC"},
         estimator="gmm()",
     )
     if cov_type == "cluster":
@@ -188,11 +214,19 @@ def gmm(
             raise ValueError("cluster= must be provided when cov_type='cluster'.")
         if cluster not in data.columns:
             raise errors.cluster_column_error(cluster, data.columns.tolist())
-    elif cluster is not None:
+    elif cluster is not None and cov_type != "HAC":
         raise ValueError("cluster= is only used when cov_type='cluster'.")
+    if cov_type == "HAC":
+        if lags is None:
+            raise ValueError("lags= must be provided when cov_type='HAC'.")
+        if time is None:
+            raise ValueError("time= must be provided when cov_type='HAC'.")
+        if time not in data.columns:
+            raise errors.missing_column_error(time, data.columns.tolist())
 
     call = _capture_call(
         formula=formula, step=step, cov_type=cov_type, cluster=cluster,
+        lags=lags, time=time, hac_adjust=hac_adjust,
     )
 
     parsed = _parse_iv_formula(formula, data)
@@ -216,19 +250,40 @@ def gmm(
         )
     Z = np.column_stack(z_parts)
 
-    if cov_type == "cluster":
-        eq_entity = data.loc[parsed["index"], cluster].values
-        robust = True
-    else:
-        eq_entity = np.arange(n)
-        robust = True
-
     # Public step spelling now matches the core's hyphenated spelling.
     core_step = step
 
+    hac_time_labels: np.ndarray | None = None
+    hac_max_lags: int | None = None
+    use_hac_adjust = False
+    if cov_type == "HAC":
+        hac_time_labels = data.loc[parsed["index"], time].values
+        hac_max_lags = lags
+        use_hac_adjust = hac_adjust
+        # Use cluster groups as entity dimension for per-entity HAC if provided
+        if cluster is not None:
+            if cluster not in data.columns:
+                raise errors.cluster_column_error(cluster, data.columns.tolist())
+            eq_entity = data.loc[parsed["index"], cluster].values
+        else:
+            eq_entity = np.arange(n)
+    elif cov_type == "cluster":
+        eq_entity = data.loc[parsed["index"], cluster].values
+    else:
+        eq_entity = np.arange(n)
+
+    robust = True
+
     # Generic defaults (sig2_scale=1.0, small_sample_correction=False) are used;
     # the AB-specific conventions are intentionally not exposed here.
-    est = _estimate_gmm(Y, X, Z, eq_entity, core_step, robust=robust)
+    est = _estimate_gmm(
+        Y, X, Z, eq_entity, core_step, robust=robust,
+        time_labels=hac_time_labels, max_lags=hac_max_lags,
+        hac_adjust=use_hac_adjust,
+    )
+
+    if cov_type == "HAC":
+        cov_type = f"HAC({lags})"
 
     coefficients = pd.Series(est["b"], index=coef_names)
     std_errors = pd.Series(est["se"], index=coef_names)

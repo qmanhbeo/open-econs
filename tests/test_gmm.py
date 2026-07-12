@@ -168,11 +168,66 @@ class TestGmmClusterVsRobust:
 
     def test_cluster_arg_unused_with_robust_raises(self, clustered):
         df = clustered
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="cluster= is only used when cov_type='cluster'"):
             oe.gmm("y ~ 1 | x ~ z", data=df, cov_type="robust", cluster="cid")
 
 
-# ── 4. result-class interface ──────────────────────────────────────────────
+# ── 4. GMM HAC parity ───────────────────────────────────────────────────
+
+class TestGmmHAC:
+    """HAC-robust GMM: internal-consistency and cross-step parity."""
+
+    def test_hac_se_differs_from_robust(self, clustered):
+        df = clustered
+        robust = oe.gmm("y ~ 1 | x ~ z", data=df, cov_type="robust")
+        hac = oe.gmm("y ~ 1 | x ~ z", data=df, cov_type="HAC",
+                      lags=2, time="z", cluster="cid")
+        assert not np.allclose(robust.std_errors.values, hac.std_errors.values, rtol=1e-8)
+
+    def test_hac_one_step_two_step_identical_se(self, clustered):
+        df = clustered
+        one = oe.gmm("y ~ 1 | x ~ z", data=df, step="one-step",
+                      cov_type="HAC", lags=2, time="z", cluster="cid")
+        two = oe.gmm("y ~ 1 | x ~ z", data=df, step="two-step",
+                      cov_type="HAC", lags=2, time="z", cluster="cid")
+        assert np.allclose(one.coefficients.values, two.coefficients.values, atol=1e-10)
+        assert np.allclose(one.std_errors.values, two.std_errors.values, rtol=1e-8)
+
+    def test_hac_adjust_vs_no_adjust(self, clustered):
+        df = clustered
+        r_no = oe.gmm("y ~ 1 | x ~ z", data=df, step="one-step",
+                       cov_type="HAC", lags=1, time="z", cluster="cid", hac_adjust=False)
+        r_adj = oe.gmm("y ~ 1 | x ~ z", data=df, step="one-step",
+                        cov_type="HAC", lags=1, time="z", cluster="cid", hac_adjust=True)
+        for coef in r_no.coefficients.index:
+            assert r_adj.std_errors[coef] > r_no.std_errors[coef]
+
+    def test_hac_cov_label(self, clustered):
+        df = clustered
+        r = oe.gmm("y ~ 1 | x ~ z", data=df, cov_type="HAC", lags=3, time="z", cluster="cid")
+        assert r.cov_type == "HAC(3)"
+
+    def test_hac_summary_mentions_hac(self, clustered):
+        df = clustered
+        r = oe.gmm("y ~ 1 | x ~ z", data=df, cov_type="HAC", lags=2, time="z", cluster="cid")
+        assert "HAC" in r.summary()
+
+    def test_hac_vcov_consistent_with_se(self, clustered):
+        df = clustered
+        r = oe.gmm("y ~ 1 | x ~ z", data=df, cov_type="HAC", lags=2, time="z", cluster="cid")
+        v = r.vcov()
+        assert np.allclose(np.diag(v), r.std_errors.values ** 2)
+
+    def test_hac_different_lags_give_different_se(self, clustered):
+        df = clustered
+        r1 = oe.gmm("y ~ 1 | x ~ z", data=df, cov_type="HAC",
+                     lags=1, time="z", cluster="cid")
+        r3 = oe.gmm("y ~ 1 | x ~ z", data=df, cov_type="HAC",
+                     lags=3, time="z", cluster="cid")
+        assert not np.allclose(r1.std_errors.values, r3.std_errors.values, rtol=1e-8)
+
+
+# ── 5. result-class interface ──────────────────────────────────────────────
 
 class TestGmmResultInterface:
     def test_tidy_summary_vcov_export(self, exactly_identified, tmp_path):
