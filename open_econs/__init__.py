@@ -3,6 +3,7 @@ from .models.linear.ols import ols
 from .models.decomposition.oaxaca import oaxaca
 from .models.discrete.logit import logit
 from .models.discrete.probit import probit
+from .models.discrete.mlogit import mlogit
 from .models.linear.fe import fe
 from .models.linear.iv import iv
 from .models.linear.abond import abond
@@ -21,7 +22,7 @@ from .core.panel_context import PanelContext
 reg = ols
 
 __all__ = [
-    "ols", "reg", "logit", "probit", "fe", "iv", "oaxaca",
+    "ols", "reg", "logit", "probit", "mlogit", "fe", "iv", "oaxaca",
     "did", "event_study", "balance", "abond", "staggered_did", "density_test", "cem",
     "psm", "rdd", "rosenbaum_bounds", "gmm", "GMMResult",
     "nls", "NLSResult",
