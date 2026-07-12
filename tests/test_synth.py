@@ -11,11 +11,13 @@ Structure:
   shift.  This is the independent correctness check (no R / Stata involved): the
   recovered donor weights must match the known weights and the gap path must
   match the injected effect.
-* **Gated parity vs R ``Synth`` (primary reference)** -- builds identical data,
-  runs the real ``dataprep`` + ``synth`` through ``Rscript.exe``, and compares
-  ``W``, ``V``, pre-treatment MSPE, and the gap path.  Reports actual
-  max-absolute diffs (per the task's parity protocol).  Skips cleanly when R is
-  unavailable (as on CI).
+* **CI-safe parity vs R ``Synth`` (primary reference)** -- reads the committed
+  ``.json`` fixture produced by ``tests/r/do/synth_parity_*.R`` (run via
+  ``read_r``) and compares ``W``, ``V``, pre-treatment MSPE, and the gap path,
+  reporting actual max-absolute diffs.  The fixture is regenerated only when
+  ``OE_REGENERATE_FIXTURES`` is set and R is installed, so the test runs on CI
+  (and every default ``pytest`` run) against the committed fixture with no R
+  binary and no skip.
 * **Gated parity vs Stata ``synth`` (secondary reference)** -- same comparison;
   expected to diverge from both engines because Stata uses its own optimizer.
   Reported honestly, not forced to match.  Skips cleanly when Stata is
@@ -28,7 +30,6 @@ are valid on Windows without backslash escaping.
 
 from __future__ import annotations
 
-import json
 import subprocess
 import tempfile
 from pathlib import Path
@@ -39,14 +40,43 @@ import pytest
 
 from open_econs.models.causal.synth import synth
 from open_econs.core.results import SynthResult
+from .r.r_runner import read_r, R_FIXTURES_DIR
 
-# ── external-binary gating (mirrors tests/test_nls.py) ────────────
-RSCRIPT_EXE = "C:/Program Files/R/R-4.6.1/bin/Rscript.exe"
+# ── external-binary gating (Stata only; R parity now reads committed ──
+# fixtures via tests/r/r_runner.read_r, so no R binary is required to run
+# the R-marked tests).
 STATA_EXE = "C:/Program Files/Stata17/StataMP-64.exe"
-R_AVAILABLE = Path(RSCRIPT_EXE).is_file()
 STATA_AVAILABLE = Path(STATA_EXE).is_file()
 
 TEMP = Path(tempfile.gettempdir())
+
+
+def _panel_from_csv(csv_path, predictors=None) -> dict:
+    """Reconstruct a panel dict from a committed input CSV.
+
+    The CSV is the ground-truth input shared by the Python fit AND the R
+    ``.R`` script (see ``tests/r/``): it is generated once from the real data
+    builder and committed, so both sides read identical data and there is no
+    cross-engine RNG-sync assumption.  Only per-test-constant metadata
+    (pre/post periods, predictors) is supplied here; the panel itself comes
+    solely from the committed file.
+    """
+    df = pd.read_csv(csv_path)
+    units = list(dict.fromkeys(df["unit"].tolist()))
+    treated = "t"
+    donors = sorted([u for u in units if u != treated], key=lambda u: int(u[1:]))
+    times = sorted(df["time"].unique().tolist())
+    return {
+        "df": df,
+        "donors": donors,
+        "treated": treated,
+        "times": times,
+        "pre_period": 1994,
+        "post_period": 1995,
+        "w_true": np.array([0.4, 0.35, 0.25]),
+        "shift": 4.0,
+        "predictors": predictors,
+    }
 
 
 def _cov_mismatch(df, weights, predictors, pre_period, treated, donors):
@@ -377,90 +407,17 @@ def test_synth_ground_truth_recovery():
     assert abs(post_gap - p["shift"]) < 1e-2
 
 
-# ── gated parity vs R Synth (primary) ────────────────────────────
-_R_SCRIPT = r"""
-library(Synth)
-library(jsonlite)
-args <- commandArgs(trailingOnly = TRUE)
-csv <- args[1]
-mode <- args[2]
-pre_last <- as.integer(args[3])
-post_first <- as.integer(args[4])
-out_json <- args[5]
-df <- read.csv(csv)
-# Synth's dataprep requires a NUMERIC unit variable; keep the original string
-# names for the solution.w rownames via unit.names.variable.
-df$unit_num <- as.numeric(factor(df$unit))
-treated_num <- df$unit_num[df$unit == "t"][1]
-donors_num <- sort(unique(df$unit_num[df$unit != "t"]))
-times_all <- sort(unique(df$time))
-pre_times <- times_all[times_all <= pre_last]
-post_times <- times_all[times_all >= post_first]
-analysis <- sort(unique(c(pre_times, post_times)))
-# Explicit predictors are every "x<digits>" column present in the panel.  This
-# makes the script work for both the well-determined (x1..x12) and the
-# rank-deficient (x1, x2) explicit fixtures without hardcoding the count.
-preds <- sort(names(df)[grep("^x[0-9]+$", names(df))])
-if (mode == "default") {
-   sp <- lapply(pre_times, function(t) list("y", t, "mean"))
-   dp <- dataprep(foo = df, dependent = "y", predictors = NULL,
-     special.predictors = sp, predictors.op = "mean",
-     unit.variable = "unit_num", unit.names.variable = "unit", time.variable = "time",
-     treatment.identifier = treated_num, controls.identifier = donors_num,
-     time.predictors.prior = pre_times, time.optimize.ssr = pre_times,
-     time.plot = analysis)
- } else {
-   dp <- dataprep(foo = df, dependent = "y", predictors = preds,
-     predictors.op = "mean", special.predictors = NULL,
-     unit.variable = "unit_num", unit.names.variable = "unit", time.variable = "time",
-     treatment.identifier = treated_num, controls.identifier = donors_num,
-     time.predictors.prior = pre_times, time.optimize.ssr = pre_times,
-     time.plot = analysis)
- }
-so <- synth(dp)
-w <- as.numeric(so$solution.w)
-# solution.w rownames are the numeric unit codes; map them back to the
-# original donor string names via the unit_num <-> unit lookup.
-lut <- unique(df[, c("unit_num", "unit")])
-lut_names <- as.character(lut$unit)
-names(lut_names) <- as.character(lut$unit_num)
-w_names <- as.character(lut_names[as.character(rownames(so$solution.w))])
-v <- as.numeric(so$solution.v)
-v_names <- names(so$solution.v)
-tw <- as.numeric(rownames(dp$Y1plot))
-treated_path <- as.numeric(dp$Y1plot[, 1])
-synthetic_path <- as.numeric(dp$Y0plot %*% so$solution.w)
-gap_path <- treated_path - synthetic_path
-out <- list(
-  w = w, w_names = w_names,
-  v = v, v_names = if (is.null(v_names)) rep("y", length(v)) else v_names,
-  loss_v = as.numeric(so$loss.v),
-  times = tw, treated = treated_path, synthetic = synthetic_path, gap = gap_path
-)
-write_json(out, out_json, auto_unbox = TRUE, digits = 15)
-"""
-
-
-def _run_r_parity(p: dict, mode: str):
-    csv = TEMP / "synth_parity_panel.csv"
-    p["df"].to_csv(csv, index=False)
-    r_json = TEMP / "synth_parity_r.json"
-    r_script = TEMP / "synth_parity_r.R"
-    r_script.write_text(_R_SCRIPT)
-    proc = subprocess.run(
-        [RSCRIPT_EXE, str(r_script), str(csv), mode,
-         str(p["pre_period"]), str(p["post_period"]), str(r_json)],
-        capture_output=True, text=True, timeout=300,
-    )
-    assert proc.returncode == 0, proc.stderr
-    return json.loads(r_json.read_text())
+# ── CI-safe parity vs R Synth (primary) ───────────────────────────
+# The R side is now a committed `.json` fixture produced by
+# tests/r/do/synth_parity_*.R and read through tests/r/r_runner.read_r.  No R
+# binary and no skip are required to run these tests on CI; regeneration is
+# gated behind OE_REGENERATE_FIXTURES and only happens on a machine with R.
 
 
 @pytest.mark.r
-@pytest.mark.skipif(not R_AVAILABLE, reason="R Synth not installed (off-PATH)")
 def test_synth_parity_r_default():
-    p = _make_panel()
-    rdata = _run_r_parity(p, "default")
+    p = _panel_from_csv(R_FIXTURES_DIR / "synth_parity_default_input.csv")
+    rdata = read_r("synth_parity_default")
     r = _fit(p)
 
     w_py = r.weights
@@ -501,7 +458,6 @@ def test_synth_parity_r_default():
 
 
 @pytest.mark.r
-@pytest.mark.skipif(not R_AVAILABLE, reason="R Synth not installed (off-PATH)")
 def test_synth_parity_r_explicit():
     """Well-determined explicit case (P=12 >= N=12): W must agree tightly.
 
@@ -510,8 +466,11 @@ def test_synth_parity_r_explicit():
     covariates (12) to make the inner QP's Hessian full rank.  The minimizer is
     then a single point, so R ``Synth`` and our engine recover the same ``W``.
     """
-    p = _make_panel_welldetermined()
-    rdata = _run_r_parity(p, "explicit")
+    p = _panel_from_csv(
+        R_FIXTURES_DIR / "synth_parity_explicit_input.csv",
+        predictors=[f"x{k+1}" for k in range(12)],
+    )
+    rdata = read_r("synth_parity_explicit")
     r = _fit(p, predictors=p["predictors"])
 
     w_py = r.weights
@@ -559,7 +518,6 @@ def test_synth_parity_r_explicit():
 
 
 @pytest.mark.r
-@pytest.mark.skipif(not R_AVAILABLE, reason="R Synth not installed (off-PATH)")
 def test_synth_rank_deficient_qp_same_objective_different_w():
     """P=2 < N=12: inner QP is rank-deficient -> same objective, different W.
 
@@ -572,8 +530,11 @@ def test_synth_rank_deficient_qp_same_objective_different_w():
     agree across solvers while the *objective value* (near-zero mismatch) does.
     Documented explicitly rather than silently dropped (roadmap standard #7).
     """
-    p = _make_panel_underdetermined()
-    rdata = _run_r_parity(p, "explicit")
+    p = _panel_from_csv(
+        R_FIXTURES_DIR / "synth_parity_underdetermined_input.csv",
+        predictors=["x1", "x2"],
+    )
+    rdata = read_r("synth_parity_underdetermined")
     r = _fit(p, predictors=p["predictors"])
 
     w_py = r.weights
