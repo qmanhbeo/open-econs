@@ -28,6 +28,9 @@ pip install open-econs[dev,lint]                  # + development & linting tool
 pip install git+https://github.com/qmanhbeo/open-econs.git    # latest dev
 ```
 
+See [TESTING.md](TESTING.md) for the tiered test suite (default / parity /
+fixture-regeneration modes) and the `stata`/`r` markers.
+
 Requires Python ≥ 3.10.
 
 ## Why open-econs?
