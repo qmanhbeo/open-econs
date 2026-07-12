@@ -75,6 +75,7 @@ If you know the Stata or R command, you already know the open-econs equivalent.
 | `xtreg, fe`          | `oe.fe()`                   |
 | `ivregress 2sls`     | `oe.iv()`                   |
 | `logit` / `probit`   | `oe.logit()` / `oe.probit()`|
+| `mlogit`             | `oe.mlogit()` (multinomial logit) |
 | `oaxaca`             | `oe.oaxaca()`               |
 | `xtabond2`           | `oe.abond()`                |
 | `csdid`              | `oe.staggered_did()`        |
@@ -157,6 +158,7 @@ r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
 | `iv()` | Instrumental variables / 2SLS with first-stage F-stat |
 | `logit()` | Binary logit with `.margins()`, `.predict()` |
 | `probit()` | Binary probit (same API as logit) |
+| `mlogit()` | Multinomial logit (MNLogit) with per-outcome `.margins()` (dict), `.predict()`, robust/cluster SEs |
 | `oaxaca()` | Oaxaca-Blinder decomposition (two-fold, three-fold; multiple reference types) |
 | `nls()` | Nonlinear least squares (Gauss-Newton via scipy, analytic Jacobian) |
 | `abond()` | Arellano-Bond dynamic panel GMM (one/two-step, Windmeijer SEs, collapsed instruments) |
