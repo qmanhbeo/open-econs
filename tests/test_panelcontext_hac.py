@@ -18,9 +18,8 @@ from open_econs.core.cov import _as_int_labels, newey_west_cov
 
 
 def _make_panel(n: int = 15, t: int = 10, seed: int = 42) -> pd.DataFrame:
-    # NOTE: regressor names avoid a digit immediately before " + " (e.g. "x1")
-    # because PanelContext._ensure_intercept has a latent bug matching the "1 +"
-    # substring inside a variable name; "x"/"z" keep the intended intercept.
+    # Regressor names x/z are arbitrary; the _ensure_intercept substring bug
+    # (matching "1 +" inside x1-style names) is fixed in panel_context.py.
     rng = np.random.default_rng(seed)
     ids = np.repeat(np.arange(n), t)
     times = np.tile(np.arange(t), n)
