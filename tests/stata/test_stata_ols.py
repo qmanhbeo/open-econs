@@ -66,12 +66,38 @@ class TestOLSCluster:
 
 
 class TestOLSHAC:
+    """Default HAC (``hac_adjust=False``) implements the original Newey-West
+    (1987) long-run variance WITHOUT Stata's small-sample ``N/(N-K)`` df
+    correction.
+
+    Stata's ``newey`` applies ``sqrt(N/(N-K))`` unconditionally, so the two SE
+    sets differ by exactly that factor. We verify the relationship analytically
+    (standing rule #5 / #11) rather than papering over it with a loose blanket
+    tolerance. N and K are taken from the fitted model (N=200, K=3 for this
+    fixture), identical to what Stata uses, so the scaled comparison is an exact
+    identity up to floating-point noise.
+    """
+
     def test_se(self, df_ols):
         df = df_ols.copy()
         df["time"] = range(len(df))
         oe_r = oe.ols("y ~ x1 + x2", data=df, cov_type="HAC", lags=2, time="time")
-        npt.assert_allclose(oe_r.std_errors.values,
-                            [S_HAC["se_int"], S_HAC["se_x1"], S_HAC["se_x2"]], rtol=1e-2)
+        se = oe_r.std_errors.values
+        stata_se = [S_HAC["se_int"], S_HAC["se_x1"], S_HAC["se_x2"]]
+
+        # Stata's df correction on the SE scale is exactly sqrt(N/(N-K)).
+        # Multiplying the uncorrected SE by it must reproduce Stata's SE to
+        # float precision (this is the principled replacement for rtol=1e-2).
+        n_k = np.sqrt(oe_r.nobs / (oe_r.nobs - len(oe_r.coefficients)))
+        npt.assert_allclose(se * n_k, stata_se, rtol=1e-6)
+
+        # Direct uncorrected-vs-Stata comparison. By construction
+        # stata_se = uncorrected_se * n_k, so the relative discrepancy is exactly
+        # `1 - 1/n_k`. A tolerance of that value plus the empirically measured
+        # float-noise floor of the identity above (~2e-8) is fully justified: it
+        # guards against accidentally dropping or over-applying the correction.
+        rel_gap = 1.0 - 1.0 / n_k
+        npt.assert_allclose(se, stata_se, rtol=rel_gap + 1e-7)
 
 
 class TestOLSHACAdjust:

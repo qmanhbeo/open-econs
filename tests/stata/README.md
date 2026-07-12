@@ -178,7 +178,7 @@ routines, not algorithmic discrepancies.  Use these floors:
 | Estimator family | Tolerance | Why |
 |-----------------|-----------|-----|
 | OLS, Logit, Probit, IV, DiD, FE, FD | `rtol=1e-7` | Same algorithm, cross-platform float noise floor |
-| HAC (default) | `rtol=1e-2` | Stata's ``newey`` applies ``N/(N-K)`` df correction (borrowed from HC1; no HAC-specific justification); OE matches original Newey-West (1987) formula without correction. |
+| HAC (default) | direct `rtol≈0.00753`; scaled `rtol=1e-6` | Stata's ``newey`` applies ``sqrt(N/(N-K))`` df correction; OE matches original Newey-West (1987) formula without correction. The direct gap is exactly ``1 - sqrt((N-K)/N)`` for N=200,K=3 (≈0.00753) — a principled, not loose, tolerance. ``TestOLSHAC`` additionally asserts ``uncorrected_se * sqrt(N/(N-K)) ≈ Stata SE`` at ``rtol=1e-6`` to pin the relationship. |
 | Abond, RDD, Staggered DiD, Oaxaca | Absolute thresholds | Fundamentally different algorithms |
 | Logit/Probit margins | `rtol=0.8` | MEM (oe) vs AME (Stata) — different by definition |
 | HAC (``hac_adjust=True``) | `rtol=1e-7` | ``hac_adjust=True`` applies N/(N-K) correction matching Stata unconditionally. |
