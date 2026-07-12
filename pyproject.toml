@@ -44,13 +44,16 @@ warn_unused_ignores = true
 ignore = ["E501"]
 
 [tool.pytest.ini_options]
-# Default run excludes Stata/R-backed parity tests so routine local iteration is
-# fast and never launches a Stata/R binary. Use `pytest -m "stata or r"` to run
-# them (reading committed fixtures). See TESTING.md.
-addopts = "-m \"not stata and not r\" --ignore=tests/stata/do/archive"
+# Default run now executes the full suite, including the Stata/R-backed parity
+# tests, all of which read committed fixtures only (run_do() is gated behind
+# OE_REGENERATE_FIXTURES, so no Stata/R binary is ever launched in a default
+# run). The `-m "not stata and not r"` expression is kept available as an
+# explicit opt-in fast mode for quick local iteration; the `stata`/`r` markers
+# themselves remain defined. See TESTING.md.
+addopts = "--ignore=tests/stata/do/archive"
 markers = [
-    "stata: marks tests that compare against Stata-generated .dta fixtures (require Stata to regenerate; skipped by default)",
-    "r: marks tests that compare against R-generated output via Rscript (require R; skipped by default)",
+    "stata: marks tests that compare against Stata-generated .dta fixtures (require Stata to regenerate; excluded by default historically, now run in the default suite against committed fixtures)",
+    "r: marks tests that compare against R-generated output via Rscript (require R; excluded by default historically, now run in the default suite against committed fixtures)",
 ]
 
 [build-system]

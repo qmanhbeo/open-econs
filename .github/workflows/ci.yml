@@ -31,15 +31,12 @@ jobs:
       - name: Type-check with mypy
         run: mypy open_econs/ --ignore-missing-imports
 
-      # Default suite: excludes Stata/R-backed parity tests (the `-m "not stata
-      # and not r"` addopts in pyproject.toml), so no Stata/R binary is needed.
-      - name: Run default test suite (no Stata/R binaries)
+      # Full suite: the default `pytest tests/` run now executes everything
+      # (607 tests), including the Stata/R-backed parity tests. All parity tests
+      # read committed .dta fixtures only — `run_do()` is gated behind
+      # OE_REGENERATE_FIXTURES, so no Stata/R binary is launched on CI (which has
+      # none installed anyway). A drift check inside the parity tests fails the
+      # build if any .do file is newer than its committed .dta. The `-m "not
+      # stata and not r"` opt-in fast mode remains available for local use.
+      - name: Run full test suite (committed-fixture fallback, no Stata/R binaries)
         run: python -m pytest tests/ --cov=open_econs --cov-report=term-missing -v --tb=short
-
-      # Parity suite: explicitly selects the `stata`/`r` tests (this overrides the
-      # default addopts). On CI there is no StataMP/R, so committed .dta fixtures
-      # are read directly (fallback mode) and binary-gated tests skip cleanly. A
-      # drift check fails the build if any .do file is newer than its .dta.
-      # Combined with the default run this preserves the full pre-change test set.
-      - name: Run Stata/R parity tests (committed-fixture fallback)
-        run: python -m pytest -m "stata or r" tests/ -v --tb=short
