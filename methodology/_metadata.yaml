@@ -68,6 +68,10 @@ estimators:
 
   abond:
     name: Arellano-Bond
+    aliases:
+      - difference GMM
+      - Arellano-Bond GMM
+      - dynamic panel GMM
     category: linear
     api:
       - oe.abond()
@@ -82,6 +86,12 @@ estimators:
       - plm::pgmm
     status: mature
     tier: 1
+    references:
+      - arellano_bond1991
+      - arellano_bover1995
+      - blundell_bond1998
+      - windmeijer2005
+      - roodman2009
     methodology: methodology/linear/arellano_bond.md
 
   staggered_did:
