@@ -320,14 +320,15 @@ promise with a date on it.
 The estimator library grows outward from the causal-inference core into the
 adjacent methods empirical economists actually reach for:
 - **v1.1** — Quantile regression; heteroskedasticity- and outlier-robust regression (MM-estimators)
-- **v1.2** — Spatial econometrics: spatial lag/error models, Moran's I diagnostics
-- **v1.3** — ML-assisted causal inference: double/debiased ML (Chernozhukov et al.), causal forests, targeted maximum likelihood
-- **v1.4** — Network econometrics: peer effects, network formation models
-- **v1.5** — Structural discrete choice: BLP demand estimation, dynamic discrete choice (Rust-style)
-- **v1.6** — Bayesian econometrics: Bayesian VAR, hierarchical models, MCMC-backed inference as an `inference="bayesian"` path on existing estimators
-- **v1.7** — High-dimensional methods: LASSO/post-double-selection for inference with many controls
-- **v1.8** — Complex survey design: weighting, stratification, replicate-weight variance estimation
-- **v1.9** — Text-as-data: dictionary methods, embeddings-based regressors, econometrically-valid LLM-derived features (with measurement-error caveats explicit)
+- **v1.2** — Dynamic panel breadth: Blundell-Bond system GMM, extending the existing `abond()`/GMM-core foundation *(new — this is a genuine addition, not just a reorder: the project has Arellano-Bond difference GMM but not system GMM, which is the natural next ask for anyone doing dynamic panel work, so it fills a real gap)*
+- **v1.3** — Complex survey design: weighting, stratification, replicate-weight variance estimation *(up from v1.8: enormous practical pull from anyone working with household survey data; currently a large unaddressed gap)*
+- **v1.4** — High-dimensional methods: LASSO/post-double-selection for inference with many controls *(up from v1.7: increasingly a default expectation in applied inference, not a specialist tool)*
+- **v1.5** — Spatial econometrics: spatial lag/error models, Moran's I diagnostics *(down one from v1.2)*
+- **v1.6** — ML-assisted causal inference: double/debiased ML (Chernozhukov et al.), causal forests, targeted maximum likelihood *(down from v1.3)*
+- **v1.7** — Network econometrics: peer effects, network formation models *(down from v1.4)*
+- **v1.8** — Structural discrete choice: BLP demand estimation, dynamic discrete choice (Rust-style) *(down from v1.5: narrower IO/labor-structural audience, high effort per estimator)*
+- **v1.9** — Bayesian econometrics: Bayesian VAR, hierarchical models, MCMC-backed inference as an `inference="bayesian"` path on existing estimators *(down from v1.6: architecturally closer to a v2.0-style infrastructure question than a standalone estimator ship; keep in v1.x for now but may migrate toward the v2.0 plugin-architecture discussion later)*
+- **v1.10** — Text-as-data: dictionary methods, embeddings-based regressors, econometrically-valid LLM-derived features (with measurement-error caveats explicit) *(last: lowest migration-pull, separate dependency universe)*
 
 Design constraint carried through all of v1.x: **every new estimator ships
 with a parity test against an existing reference implementation before merge.**
