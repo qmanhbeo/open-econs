@@ -283,8 +283,10 @@ might fit.
       Hodges-Lehmann, no CIs, no CEM).
 
 #### v0.9 — Structural Foundations & Release Candidate
-- [ ] `gmm()` — general GMM estimation framework other estimators can build on
-- [ ] Nonlinear least squares
+- [x] `gmm()` — general GMM estimation framework other estimators can build on
+  - Shipped as a generic linear GMM framework, extracted from and validated against `abond()`'s solver (byte-identical pre/post extraction), with AB-specific conventions (`sig2_scale`, `small_sample_correction`) decoupled into explicit parameters; public API reuses `iv()`'s formula grammar, validated against `iv()`/2SLS on exactly-identified systems and Hansen J size/power via Monte Carlo; wired into `PanelContext` as a thin cluster-defaulting delegate.
+- [x] `nls()` — nonlinear least squares
+  - Shipped as a nonlinear least squares estimator using `scipy.optimize.least_squares` with sympy-based analytic Jacobian (numerical fallback when analytic differentiation fails, flagged not silent); new `white_cov()` added to `core/cov.py` for HC0-HC3; validated against `curve_fit`, R's `nls()`, and Stata's `nl` (all three converging to the same SE); `sympy` shipped as an optional `[nls]` extra, not a hard dependency.
 - [x] `mlogit()` — multinomial logit (shipped, see v0.8)
 - [ ] `nlogit()` — nested logit *(deferred: recon complete, documented in `docs/nlogit-recon.md`. Blockers: R `mlogit` can't run full Stata-equivalent spec (nest-level covariates cause singularity on `webuse restaurant`); no validated fixture with τ∈(0,1); analytic gradient ~200 lines of recursive tree traversal needs domain-expert implementation.)*
 - [x] `synth()` — synthetic control (Abadie-Diamond-Hainmueller) — **core point estimator shipped** (v0.9)
