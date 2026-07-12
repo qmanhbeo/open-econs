@@ -50,6 +50,7 @@ from open_econs._version import __version__
 from open_econs.core.base import BaseModel
 from open_econs.core.call_capture import capture_call as _capture_call
 from open_econs.core.cov import white_cov
+from open_econs.core.cov_type import validate_cov_type
 
 
 class NLSResult(BaseModel):
@@ -262,11 +263,11 @@ def nls(
             "nls() requires the `sympy` package (pip install open-econs[nls])."
         )
 
-    valid = {"nonrobust", "HC0", "HC1", "HC2", "HC3", "cluster", "HAC"}
-    if cov_type not in valid:
-        raise ValueError(
-            f"cov_type must be one of {sorted(valid)}, got {cov_type!r}."
-        )
+    cov_type = validate_cov_type(
+        cov_type,
+        accepted={"nonrobust", "HC0", "HC1", "HC2", "HC3", "cluster", "HAC"},
+        estimator="nls()",
+    )
 
     # ── covariance / cluster / HAC argument validation ──────────────
     if cov_type == "cluster":

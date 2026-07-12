@@ -8,6 +8,7 @@ from open_econs._version import __version__
 from open_econs.core.call_capture import capture_call as _capture_call
 from open_econs._internal import errors
 from open_econs.core.base import BaseModel
+from open_econs.core.cov_type import validate_cov_type
 
 
 _IV_COV_MAP = {
@@ -205,6 +206,12 @@ def iv(
     >>> r.cragg_donald_stat
     """
     call = _capture_call(formula=formula, cov_type=cov_type)
+
+    cov_type = validate_cov_type(
+        cov_type,
+        accepted=set(_IV_COV_MAP.keys()),
+        estimator="iv()",
+    )
 
     parsed = _parse_iv_formula(formula, data)
     y_arr = parsed["y"]
