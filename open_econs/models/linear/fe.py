@@ -15,6 +15,8 @@ def fe(
     time: str | None = None,
     cluster: str | None = None,
     cov_type: str = "HC2",
+    lags: int | None = None,
+    hac_adjust: bool = False,
 ) -> OLSResult:
     """Estimate a linear fixed-effects (within) model.
 
@@ -34,9 +36,43 @@ def fe(
         two-way fixed effects are used (entity and time dummies absorbed
         via iterative demeaning for unbalanced panels).
     cluster : str, optional
-        Column name for cluster-robust standard errors.
+        Column name for cluster-robust standard errors. Takes precedence over
+        ``cov_type="HAC"`` (cluster-robust is used when both are given).
     cov_type : str, default "HC2"
-        Covariance estimator type. Used when *cluster* is not set.
+        Covariance estimator type. Used when *cluster* is not set. Common
+        choices: ``"HC0"``–``"HC3"``, ``"nonrobust"``. Set ``cov_type="HAC"``
+        to use Newey-West (1987) panel-HAC standard errors: the score
+        contributions ``x_it * e_it`` are aggregated *within each time period*
+        across entities, then a Bartlett-kernel long-run variance is applied
+        *across* time periods (the Arellano / Driscoll-Kraay convention,
+        matching statsmodels ``cov_nw_groupsum`` and Stata ``xtscc``). This
+        requires *time* (which doubles as the time fixed-effects dimension —
+        passing it incurs two-way FE) and *lags*.
+    lags : int, optional
+        Number of lags for Newey-West HAC (required when ``cov_type="HAC"``).
+    hac_adjust : bool, default False
+        Degrees-of-freedom correction for Newey-West HAC standard errors.
+
+        When ``True``, the HAC variance is multiplied by ``N / (N - K)``
+        (N = observations, K = number of regressors, intercept dropped). This
+        is the N/(N-K) correction borrowed from White's HC1 and applied
+        unconditionally by Stata's ``newey``. The original Newey & West (1987)
+        paper does **not** include this correction.
+
+        **Implementation comparison:**
+        ================================ =================== ==============
+        Implementation                    Applies N/(N-K)?    Default
+        ================================ =================== ==============
+        Newey & West (1987)               No                  —
+        **Open-econs** (current)          **No**              **``False``**
+        Statsmodels ``cov_nw_groupsum``   No                  ``use_correction=0``
+        R ``sandwich::NeweyWest()``       No                  ``adjust=FALSE``
+        Stata ``newey``                   Yes                 Always (no opt-out)
+        MATLAB ``hac``                    Yes                 Default
+        ================================ =================== ==============
+
+        Set ``hac_adjust=True`` for SEs that match Stata. Leave ``False``
+        (default) for the original NW1987 formula.
 
     Returns
     -------
@@ -54,6 +90,7 @@ def fe(
     """
     call = _capture_call(
         formula=formula, entity=entity, time=time, cluster=cluster, cov_type=cov_type,
+        lags=lags, hac_adjust=hac_adjust,
     )
 
     if entity is None and time is None:
@@ -130,6 +167,11 @@ def fe(
 
     import statsmodels.api as sm
 
+    # V_cov / se_arr are computed explicitly for the HAC path; for cluster and
+    # plain covariance types they are taken from the statsmodels fit below.
+    V_cov = None
+    se_arr = None
+
     if cluster is not None:
         if cluster not in data.columns:
             raise errors.cluster_column_error(cluster, data.columns.tolist())
@@ -141,9 +183,34 @@ def fe(
         )
         cov_label = f"cluster({cluster})"
     else:
-        X_df = pd.DataFrame(X_arr, columns=kept_columns)
-        fitted = sm.OLS(y_arr, X_df).fit(cov_type=cov_type)
-        cov_label = cov_type
+        use_hac = cov_type == "HAC"
+        if use_hac:
+            if lags is None:
+                raise ValueError("Newey-West HAC requires `lags` (e.g. lags=1).")
+            if time is None:
+                raise ValueError(
+                    "FE Newey-West HAC requires `time` (the time fixed-effects "
+                    "dimension is used as the Newey-West period index)."
+                )
+            from open_econs.core.cov import newey_west_cov, _as_int_labels
+
+            X_df = pd.DataFrame(X_arr, columns=kept_columns)
+            fitted = sm.OLS(y_arr, X_df).fit(cov_type="nonrobust")
+            time_labels = _as_int_labels(data.loc[XX.index, time].values)
+            # Period-aggregation Newey-West (Arellano / Driscoll-Kraay): aggregate
+            # score contributions within each time period, then Bartlett-kernel
+            # HAC across periods.  cluster=time_labels is the within-panel HAC
+            # convention (matches statsmodels cov_nw_groupsum).
+            V_cov = newey_west_cov(
+                X_arr, np.asarray(fitted.resid), max_lags=lags, cluster=time_labels,
+                adjust=hac_adjust,
+            )
+            se_arr = np.sqrt(np.maximum(np.diag(V_cov), 0.0))
+            cov_label = f"HAC({lags})"
+        else:
+            X_df = pd.DataFrame(X_arr, columns=kept_columns)
+            fitted = sm.OLS(y_arr, X_df).fit(cov_type=cov_type)
+            cov_label = cov_type
 
     n = int(fitted.nobs)
     k = X_arr.shape[1]  # number of regressors
@@ -151,7 +218,10 @@ def fe(
     df_model_adj = int(fitted.df_model)
 
     coef_arr = np.asarray(fitted.params)
-    se_arr = np.asarray(fitted.bse)
+    if se_arr is None:
+        se_arr = np.asarray(fitted.bse)
+    if V_cov is None:
+        V_cov = np.asarray(fitted.cov_params())
     t_arr = np.asarray(fitted.tvalues)
     p_arr = np.asarray(fitted.pvalues)
     conf_arr = np.asarray(fitted.conf_int())
@@ -172,11 +242,11 @@ def fe(
         crit = _stats.t.ppf(0.975, df_resid_adj)
         conf_arr = np.column_stack([coef_arr - crit * se_arr, coef_arr + crit * se_arr])
         # Store the df-scaled covariance so vcov() is consistent with
-        # the reported standard errors.  The raw statsmodels covariance
-        # uses sigma2 = SSR/(N-k); Stata uses SSR/(N-g-k).  The ratio
-        # is df_old/df_resid_adj, applied element-wise.
+        # the reported standard errors.  The raw covariance (HAC or
+        # statsmodels) uses sigma2 = SSR/(N-k); Stata uses SSR/(N-g-k).
+        # The ratio is df_old/df_resid_adj, applied element-wise.
         _cov = pd.DataFrame(
-            np.asarray(fitted.cov_params()) * (df_old / df_resid_adj),
+            V_cov * (df_old / df_resid_adj),
             index=kept_columns,
             columns=kept_columns,
         )
