@@ -166,6 +166,9 @@ def iv(
     formula: str,
     data: pd.DataFrame,
     cov_type: str = "robust",
+    lags: int | None = None,
+    time: str | None = None,
+    hac_adjust: bool = False,
 ) -> IVResult:
     """Estimate an IV-2SLS regression.
 
@@ -190,6 +193,19 @@ def iv(
         ``"nonrobust"`` -> ``"unadjusted"``, ``"HC1"`` -> ``"robust"``
         with debiased=True, ``"HC0"/"HC2"/"HC3"`` -> ``"robust"``.
 
+        Set ``cov_type="HAC"`` to use Newey-West (1987) heteroskedasticity-
+        and autocorrelation-robust standard errors with a Bartlett kernel;
+        the number of lags is given by *lags* and the time ordering by *time*.
+    lags : int, optional
+        Number of lags for Newey-West HAC (required when ``cov_type="HAC"``).
+    time : str, optional
+        Column with the time index used to order observations for Newey-West
+        HAC.  Observations are sorted by this column before fitting.
+    hac_adjust : bool, default False
+        Degrees-of-freedom correction for Newey-West HAC standard errors.
+        When ``True``, the HAC variance is multiplied by ``N / (N - K)``,
+        matching Stata's ``ivregress`` default behavior.
+
     Returns
     -------
     IVResult
@@ -205,13 +221,24 @@ def iv(
     >>> r.first_stage()
     >>> r.cragg_donald_stat
     """
-    call = _capture_call(formula=formula, cov_type=cov_type)
+    call = _capture_call(
+        formula=formula, cov_type=cov_type, lags=lags, time=time,
+        hac_adjust=hac_adjust,
+    )
 
     cov_type = validate_cov_type(
         cov_type,
-        accepted=set(_IV_COV_MAP.keys()),
+        accepted=set(_IV_COV_MAP.keys()) | {"HAC"},
         estimator="iv()",
     )
+
+    if cov_type == "HAC":
+        if lags is None:
+            raise ValueError(
+                "Newey-West HAC requires `lags` (e.g. lags=1)."
+            )
+        if time is not None:
+            data = data.sort_values(time)
 
     parsed = _parse_iv_formula(formula, data)
     y_arr = parsed["y"]
@@ -238,10 +265,19 @@ def iv(
 
     from linearmodels.iv import IV2SLS as LM_IV2SLS
     try:
-        fitted = LM_IV2SLS(y_arr, X_exog, X_endog, Z_arr).fit(
-            cov_type=_IV_COV_MAP.get(cov_type, "robust"),
-            debiased=_IV_DEBIAS_MAP.get(cov_type, False),
-        )
+        if cov_type == "HAC":
+            fitted = LM_IV2SLS(y_arr, X_exog, X_endog, Z_arr).fit(
+                cov_type="kernel",
+                debiased=hac_adjust,
+                bandwidth=lags,
+            )
+            cov_label = f"HAC({lags})"
+        else:
+            fitted = LM_IV2SLS(y_arr, X_exog, X_endog, Z_arr).fit(
+                cov_type=_IV_COV_MAP.get(cov_type, "robust"),
+                debiased=_IV_DEBIAS_MAP.get(cov_type, False),
+            )
+            cov_label = cov_type
     except Exception as e:
         raise RuntimeError(f"IV2SLS estimation failed: {e}") from e
 
@@ -290,7 +326,7 @@ def iv(
         nobs=int(fitted.nobs),
         df_resid=int(fitted.df_resid),
         df_model=int(fitted.df_model),
-        cov_type=cov_type,
+        cov_type=cov_label,
         coefficients=pd.Series(coef_arr, index=coef_names),
         std_errors=pd.Series(se_arr, index=coef_names),
         z_stats=pd.Series(z_arr, index=coef_names),

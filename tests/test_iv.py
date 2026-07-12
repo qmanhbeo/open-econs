@@ -102,3 +102,59 @@ class TestIV:
         path = tmp_path / "iv_result.json"
         r.export(str(path))
         assert path.exists()
+
+
+class TestIVHAC:
+    """Just-identified IV HAC must reduce to OLS HAC (projection is identity)."""
+
+    @pytest.fixture
+    def df_hac(self) -> pd.DataFrame:
+        np.random.seed(42)
+        T = 200
+        t = np.arange(T)
+        # AR(1) regressor with time-trend outcome so HAC matters
+        x = 0.8 * np.random.randn(T)
+        x[0] = np.random.randn()
+        for i in range(1, T):
+            x[i] += 0.6 * x[i - 1]
+        z = x.copy()  # just-identified: instrument = regressor
+        y = 0.5 + 0.3 * x + 0.1 * np.sin(t * 0.3) + np.random.randn(T) * 0.8
+        return pd.DataFrame({"y": y, "x": x, "z": z, "time": t})
+
+    def test_just_identified_matches_ols(self, df_hac):
+        r_iv = oe.iv("y ~ 1 | x ~ z", data=df_hac, cov_type="HAC", lags=2, time="time")
+        r_ols = oe.ols("y ~ x", data=df_hac, cov_type="HAC", lags=2, time="time")
+        # iv() names coefficients 'exog'/'endog', ols() names 'Intercept'/'x'
+        np.testing.assert_allclose(
+            r_iv.std_errors.values, r_ols.std_errors.values,
+            atol=1e-12, rtol=1e-10,
+        )
+
+    def test_just_identified_hac_adjust(self, df_hac):
+        r_iv = oe.iv("y ~ 1 | x ~ z", data=df_hac, cov_type="HAC", lags=2,
+                      time="time", hac_adjust=True)
+        r_ols = oe.ols("y ~ x", data=df_hac, cov_type="HAC", lags=2,
+                       time="time", hac_adjust=True)
+        np.testing.assert_allclose(
+            r_iv.std_errors.values, r_ols.std_errors.values,
+            atol=1e-12, rtol=1e-10,
+        )
+
+    def test_no_time_ok(self, df_hac):
+        r = oe.iv("y ~ 1 | x ~ z", data=df_hac, cov_type="HAC", lags=1)
+        assert r.cov_type == "HAC(1)"
+        assert r.std_errors is not None
+
+    def test_vcov_consistent_with_se(self, df_hac):
+        r = oe.iv("y ~ 1 | x ~ z", data=df_hac, cov_type="HAC", lags=2)
+        v = r.vcov()
+        from_se = np.sqrt(np.diag(v.values))
+        pd.testing.assert_series_equal(
+            pd.Series(from_se, index=r.std_errors.index),
+            r.std_errors,
+            atol=1e-14, rtol=1e-14,
+        )
+
+    def test_summary_mentions_hac(self, df_hac):
+        r = oe.iv("y ~ 1 | x ~ z", data=df_hac, cov_type="HAC", lags=3)
+        assert "HAC(3)" in r.summary()

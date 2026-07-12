@@ -166,11 +166,26 @@ class TestIV:
         assert r_k.cov_type == "kernel"
         assert r_hc.cov_type == "HC2"
 
-    def test_hac_not_supported_here(self):
+    def test_hac_supported_with_lags(self):
+        df = _cross()
+        r = oe.iv("y ~ 1 | x ~ z", data=df, cov_type="HAC", lags=1)
+        assert r.cov_type == "HAC(1)"
+
+    def test_hac_requires_lags(self):
         df = _cross()
         with pytest.raises(ValueError) as e:
-            oe.iv("y ~ 1 | x ~ z", data=df, cov_type="hac")
-        _assert_clear_error("iv()", e.value)
+            oe.iv("y ~ 1 | x ~ z", data=df, cov_type="HAC")
+        assert "lags" in str(e.value)
+
+    def test_hac_alias_same_as_HAC(self):
+        df = _cross()
+        r = oe.iv("y ~ 1 | x ~ z", data=df, cov_type="hac", lags=2)
+        assert r.cov_type == "HAC(2)"
+
+    def test_hac_no_time_ok(self):
+        df = _cross()
+        r = oe.iv("y ~ 1 | x ~ z", data=df, cov_type="HAC", lags=1)
+        assert r.cov_type == "HAC(1)"  # time not required
 
 
 # --------------------------------------------------------------------------- #
