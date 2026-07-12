@@ -80,12 +80,39 @@ OE_REGENERATE_FIXTURES=1 pytest -m "stata or r"
 - The `OE_REGENERATE_FIXTURES` environment variable (any truthy value) opt-*in*
   gate lets `tests/stata/stata_runner.py:run_do()` actually launch StataMP and
   overwrite the `.dta` fixtures from their `.do` scripts.
-- Only needed when you changed a `.do` (or R) script, or right before a
-  release. R-backed tests invoke `Rscript` directly (their outputs land in
-  temp dirs, not in the repo).
+- For **Stata**, `run_do()` launches StataMP and overwrites the committed
+  `.dta` fixtures; for **R**, `run_r()` launches `Rscript` and overwrites the
+  committed `tests/r/fixtures/<label>.json` fixtures (and, if the panel shape
+  changed, the `<label>_input.csv`).  R outputs are **committed to the repo**,
+  not written to temp dirs — they are the shared ground truth both the Python
+  test and the `.R` script read (see `tests/r/README.md`).
+- Only needed when you changed a `.do` (or `.R`) script, or right before a
+  release.
 - After regenerating, **revert any fixture you did not intend to change**
-  (`git checkout -- tests/stata/do/*.dta`) so regenerated fixtures are never
-  left uncommitted. Commit the `.do` and its regenerated `.dta` together.
+  (`git checkout -- tests/stata/do/*.dta tests/r/fixtures/*.json`) so regenerated
+  fixtures are never left uncommitted. Commit the `.do`/`.R` and its regenerated
+  fixture together.
+
+## R parity fixtures (`tests/r/`)
+
+The R-backed tests (`@pytest.mark.r`) follow the same dual-mode pattern as the
+Stata suite, but with a twist: the **input panel is a single committed CSV
+shared by both sides**. `tests/r/fixtures/<label>_input.csv` is read by the
+Python test (`_panel_from_csv`) *and* by the `.R` script (`argv[1]`), so there
+is no cross-engine RNG-sync assumption; the expected output
+`tests/r/fixtures/<label>.json` is written by the `.R` script (`argv[2]`) during
+regeneration and read by the Python test via `read_r(<label>)`. Both modes apply
+the same `>` drift check (`.R` newer than `.json` ⇒ `STALE FIXTURE`).
+
+Key maintainer notes (full detail in `tests/r/README.md`):
+
+- Regeneration is gated behind `OE_REGENERATE_FIXTURES` and requires
+  `R_EXE` (default `C:\Program Files\R\R-4.6.1\bin\Rscript.exe`) to point at a
+  valid Rscript; otherwise the committed `.json` is read and no R is launched.
+- R fixtures are **committed to the repo**, not written to temp dirs.
+- The `synth` placebo-space test's `median_ratio` guard is `< 3.0` (not `< 1.0`)
+  by design — it reflects the documented nonconvex-`V` / rank-deficient-donor
+  divergence, not a `time`-dtype bug.  See `tests/r/README.md` for the trace.
 
 ## CI
 

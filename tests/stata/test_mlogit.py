@@ -8,11 +8,6 @@ Stata's default base is the *most frequent* category while statsmodels/R use the
 
 from __future__ import annotations
 
-import os
-import shutil
-import subprocess
-import tempfile
-
 import numpy as np
 import numpy.testing as npt
 import pandas as pd
@@ -21,6 +16,7 @@ import pytest
 import open_econs as oe
 
 from .stata_runner import FIXTURES_DIR, read_stata
+from ..r.r_runner import read_r
 
 S = read_stata("mlogit_basic")
 
@@ -31,14 +27,6 @@ def _suffix(v: str) -> str:
 
 def _load_df() -> pd.DataFrame:
     return pd.read_csv(FIXTURES_DIR / "df_mlogit.csv")
-
-
-def _rscript_exe() -> str | None:
-    p = os.environ.get("R_SCRIPT") or shutil.which("Rscript")
-    if p and os.path.isfile(p):
-        return p
-    cand = r"C:\Program Files\R\R-4.5.2\bin\Rscript.exe"
-    return cand if os.path.isfile(cand) else None
 
 
 @pytest.mark.stata
@@ -168,7 +156,8 @@ class TestMlogitPredict:
 
 @pytest.mark.r
 class TestMlogitR:
-    """R nnet::multinom cross-check (coefficients only). Skipped if R is absent."""
+    """R nnet::multinom cross-check (coefficients only). CI-safe via the
+    committed fixture in tests/r/fixtures/mlogit.json (no R binary, no skip)."""
 
     @pytest.fixture(autouse=True)
     def _run(self):
@@ -176,33 +165,18 @@ class TestMlogitR:
         self.oe = oe.mlogit("y ~ x1 + x2", data=self.df, base=1)
 
     def test_r_coefficients(self):
-        rscript = _rscript_exe()
-        if rscript is None:
-            pytest.skip("Rscript not available")
-        with tempfile.TemporaryDirectory() as td:
-            out_csv = os.path.join(td, "r_coef.csv").replace("\\", "/")
-            r_script = os.path.join(td, "mlogit_r.R")
-            in_csv = str(FIXTURES_DIR / "df_mlogit.csv").replace("\\", "/")
-            code = (
-                'suppressMessages(library(nnet))\n'
-                f'd <- read.csv("{in_csv}")\n'
-                'd$y <- factor(d$y, levels = c(1, 2, 3))\n'
-                'fit <- multinom(y ~ x1 + x2, data = d, trace = FALSE, maxit = 500)\n'
-                f'write.csv(as.matrix(coef(fit)), "{out_csv}", row.names = TRUE)\n'
-            )
-            with open(r_script, "w") as fh:
-                fh.write(code)
-            res = subprocess.run([rscript, r_script], capture_output=True, text=True)
-            if res.returncode != 0:
-                raise RuntimeError(f"Rscript failed:\nSTDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}")
-            cf = pd.read_csv(out_csv, index_col=0)
-            cf.index = cf.index.astype(str)
+        # CI-safe: reads the committed fixture produced by
+        # tests/r/do/mlogit.R via read_r.  The .R script reads the same
+        # committed input (tests/r/fixtures/mlogit_input.csv, a copy of the
+        # Stata df_mlogit.csv), so both engines fit identical data.  No R
+        # binary and no skip are required on CI.
+        rdata = read_r("mlogit")
         maxd = 0.0
         for cat in [2, 3]:
             b = self.oe.coefficients.loc[cat]
             for v in ["Intercept", "x1", "x2"]:
                 rv = "(Intercept)" if v == "Intercept" else v
-                d = abs(b[v] - cf.loc[str(cat), rv])
+                d = abs(b[v] - rdata["coef"][str(cat)][rv])
                 maxd = max(maxd, d)
         # R nnet uses a different optimizer; coefficients match to ~1e-4.
         assert maxd < 1e-3, f"R coefficient max diff {maxd}"

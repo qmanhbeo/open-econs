@@ -6,10 +6,11 @@ Three layers of checks:
    on two textbook nonlinear models (exponential decay and a CES production
    function).  curve_fit is the canonical reference for NLS; we assert real
    max-absolute differences on coefficients *and* iid standard errors.
-2. **Secondary parity (gated):** against R's ``nls()`` and Stata's ``nl``.
-   Both are skipped gracefully when the binary is unavailable; R's
-   sandwich-based robust SE is skipped with a *documented* reason (the
-   ``sandwich`` package is not installed on this machine), never fabricated.
+2. **Secondary parity:** against R's ``nls()`` (iid, committed-fixture --
+   CI-safe, see ``tests/r/``) and Stata's ``nl`` (gated on Stata being
+   installed).  R's sandwich-based robust SE is skipped with a *documented*
+   reason (the ``sandwich`` package is not installed on this machine, see
+   ``test_r_robust_skipped_by_design``), never fabricated.
 3. **Contract / interface tests:** cluster-vs-robust sanity, result-class
    surface (``tidy``/``summary``/``vcov``/``export``/immutability), convergence
    fields, the ``jacobian_method`` flag, error cases (parameter/data
@@ -29,20 +30,22 @@ from scipy.optimize import curve_fit
 
 import open_econs as oe
 from open_econs.models.nonlinear.nls import NLSResult
+from .r.r_runner import read_r, R_FIXTURES_DIR
 
-# ── external-binary gates (re-confirmed fresh each session) ───────────────
+# ── external-binary gates ─────────────────────────────────────────────────
 # Stata: confirmed present at this path on the dev machine (prior recon that
 # claimed Stata was absent only checked PATH / STATA_EXE and missed the
-# default install location).
+# default install location).  The Stata ``nl`` parity test is still gated on
+# Stata being installed (skips gracefully when absent).
 STATA_EXE = os.environ.get(
     "STATA_EXE", r"C:\Program Files\Stata17\StataMP-64.exe"
 )
 STATA_AVAILABLE = Path(STATA_EXE).is_file()
 
-# R: confirmed present (off-PATH); the `sandwich` package is NOT installed, so
-# the robust-via-sandwich comparison is intentionally skipped.
-RSCRIPT_EXE = r"C:\Program Files\R\R-4.5.2\bin\Rscript.exe"
-R_AVAILABLE = Path(RSCRIPT_EXE).is_file()
+# R nls() iid parity now reads a committed fixture (tests/r/fixtures/nls_iid.json)
+# via read_r, so it runs on CI with no R binary and no skip.  The `sandwich`
+# package is NOT installed, so the robust-via-sandwich comparison remains
+# intentionally skipped (test_r_robust_skipped_by_design asserts that fact).
 R_SANDWICH_AVAILABLE = False  # verified: requireNamespace('sandwich') == FALSE
 
 
@@ -147,50 +150,24 @@ class TestCurveFitParity:
 
 class TestRnlsParity:
     @pytest.mark.r
-    def test_r_nls_iid(self, exp_data, tmp_path):
-        if not R_AVAILABLE:
-            pytest.skip(f"Rscript not found at {RSCRIPT_EXE}")
-
-        df = exp_data
-        d = tmp_path / "nls_r"
-        d.mkdir(parents=True, exist_ok=True)
-        csv_in = d / "r_data.csv"
-        csv_out = d / "r_out.csv"
-        df.to_csv(csv_in, index=False)
-
-        # Generate the R script with Python file-writing (never a shell heredoc
-        # for R either -- backslashes in Windows paths become R unicode escapes).
-        rd = str(d).replace("\\", "/")
-        r_script = (
-            'df <- read.csv("__D__/r_data.csv")\n'
-            'fit <- nls(y ~ a*exp(-b*x)+c, data=df, start=list(a=1,b=1,c=0))\n'
-            'cf <- coef(fit)\n'
-            'se <- sqrt(diag(vcov(fit)))\n'
-            'out <- data.frame(name=names(cf), coef=as.numeric(cf), se=as.numeric(se))\n'
-            'write.csv(out, "__D__/r_out.csv", row.names=FALSE)\n'
-        ).replace("__D__", rd)
-        r_file = d / "r_fit.R"
-        r_file.write_text(r_script, encoding="utf-8")
-
-        proc = subprocess.run(
-            [RSCRIPT_EXE, str(r_file)],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            cwd=str(d),
-        )
-        if proc.returncode != 0 or not csv_out.exists():
-            pytest.skip(f"R nls() run failed/unavailable: {proc.stderr[-300:]}")
-
-        out = pd.read_csv(csv_out)
-        r_coef = dict(zip(out["name"], out["coef"]))
-        r_se = dict(zip(out["name"], out["se"]))
+    def test_r_nls_iid(self):
+        # CI-safe: reads the committed fixture produced by
+        # tests/r/do/nls_iid.R via read_r.  The input CSV
+        # (tests/r/fixtures/nls_iid_input.csv) is the same file the .R script
+        # reads, so both engines fit identical data.
+        df = pd.read_csv(R_FIXTURES_DIR / "nls_iid_input.csv")
+        rdata = read_r("nls_iid")
 
         r_oe = oe.nls("y ~ a*exp(-b*x)+c", df, {"a": 1.0, "b": 1.0, "c": 0.0},
                       cov_type="nonrobust")
+        maxd = 0.0
         for name in ("a", "b", "c"):
-            assert abs(r_coef[name] - float(r_oe.coefficients[name])) < 1e-4, name
-            assert abs(r_se[name] - float(r_oe.std_errors[name])) < 1e-5, name
+            d_coef = abs(rdata["coef"][name] - float(r_oe.coefficients[name]))
+            d_se = abs(rdata["se"][name] - float(r_oe.std_errors[name]))
+            maxd = max(maxd, d_coef, d_se)
+            assert d_coef < 1e-4, f"coef {name} diverged from R: {d_coef}"
+            assert d_se < 1e-5, f"se {name} diverged from R: {d_se}"
+        print(f"[R nls parity] max|coef|/|se| diff vs R = {maxd:.2e}")
 
     def test_r_robust_skipped_by_design(self):
         # The sandwich-based robust comparison is intentionally NOT run: the
