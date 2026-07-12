@@ -29,6 +29,14 @@ class PanelContext:
     ``balance``, ``gmm``) that forward the context's data and, where relevant,
     default ``cluster`` to the context's entity column.
 
+    Panel HAC standard errors are exposed under two alias names that mean the
+    same thing: ``"kernel"`` (the historical linearmodels spelling, used by
+    :meth:`driscoll_kraay`) and ``"HAC"`` (this project's preferred spelling,
+    matching ``ols``/``fe``/``nls``).  Both invoke the same period-aggregation
+    Bartlett-kernel Newey-West estimator and produce identical results; see
+    :meth:`driscoll_kraay` for the details and the equivalence proof in
+    ``tests/test_panelcontext_hac.py``.
+
     Parameters
     ----------
     data : pd.DataFrame
@@ -133,17 +141,66 @@ class PanelContext:
             formula=formula, data=self._data, cov_type=sm_cov, cluster=use_cluster,
         )
 
-    def driscoll_kraay(self, formula: str) -> Any:
-        """Pooled OLS with Driscoll-Kraay (spatial/time-series-robust) SEs."""
+    def driscoll_kraay(
+        self,
+        formula: str,
+        cov_type: str = "kernel",
+        lags: int | None = None,
+        kernel: str | None = None,
+    ) -> Any:
+        """Pooled OLS with Driscoll-Kraay (panel HAC / Newey-West) SEs.
+
+        ``cov_type`` accepts ``"kernel"`` (the historical linearmodels name) or
+        ``"HAC"`` (this project's preferred name, matching ``ols``/``fe``/``nls``).
+        Both spellings invoke the same linearmodels Driscoll-Kraay estimator and
+        therefore produce identical results. ``"HAC"`` is the recommended spelling
+        going forward; ``"kernel"`` is retained for backward compatibility.
+
+        The Driscoll-Kraay estimator is a period-aggregation (Arellano /
+        Driscoll-Kraay) Bartlett-kernel Newey-West long-run variance: the score
+        contributions ``x_it * e_it`` are summed *within* each time period across
+        entities, then a Bartlett-kernel HAC is applied *across* periods. This is
+        the same convention implemented by
+        :func:`open_econs.core.cov.newey_west_cov` (verified to agree to machine
+        precision; see ``tests/test_panelcontext_hac.py``), so ``"HAC"`` here is
+        genuinely the same computation as the project's own panel HAC -- not a
+        second, divergent implementation.
+
+        Parameters
+        ----------
+        cov_type : {"kernel", "HAC"}, default "kernel"
+            Which name to use for the panel-HAC estimator. Both are aliases.
+        lags : int, optional
+            HAC bandwidth (maximum lag). Maps to linearmodels' ``bandwidth``.
+            If omitted, linearmodels' rule-of-thumb ``floor(4 * (T / 100) ** (2 / 9))``
+            is used, where ``T`` is the number of time periods. (Note: the
+            project's own :func:`newey_west_cov` requires an explicit ``max_lags``
+            and does not apply this default.)
+        kernel : str, optional
+            Kernel name forwarded to linearmodels -- ``"newey-west"``/``"bartlett"``,
+            ``"quadratic-spectral"``/``"qs"``/``"andrews"``, or ``"parzen"``/``"gallant"``.
+            Defaults to the Bartlett / Newey-West kernel.
+        """
         from linearmodels.panel import PooledOLS
 
+        if cov_type not in ("kernel", "HAC"):
+            raise ValueError(
+                f"driscoll_kraay cov_type must be 'kernel' or 'HAC' (got {cov_type!r}). "
+                "Both name the same period-aggregation Newey-West estimator; 'HAC' is preferred."
+            )
         pdf = self._panel_index(require=True)
         re_formula = self._ensure_intercept(formula)
         call = self._capture(
             formula=formula, method="driscoll_kraay",
             entity=self._entity, time=self._time,
+            cov_type=cov_type, lags=lags, kernel=kernel,
         )
-        fit = PooledOLS.from_formula(re_formula, pdf).fit(cov_type="kernel")
+        cov_config: dict[str, Any] = {"cov_type": "kernel"}
+        if lags is not None:
+            cov_config["bandwidth"] = int(lags)
+        if kernel is not None:
+            cov_config["kernel"] = kernel
+        fit = PooledOLS.from_formula(re_formula, pdf).fit(**cov_config)
         return _panel_ols_result(
             OLSResult, formula, self._rhs(re_formula), fit, "driscoll-kraay", call,
         )
