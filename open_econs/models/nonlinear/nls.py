@@ -31,13 +31,19 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import least_squares
 from scipy.stats import norm as _norm
-from sympy import diff as _sym_diff
-from sympy import lambdify as _sym_lambdify
-from sympy.parsing.sympy_parser import (
-    convert_xor,
-    parse_expr,
-    standard_transformations,
-)
+
+try:
+    from sympy import diff as _sym_diff
+    from sympy import lambdify as _sym_lambdify
+    from sympy.parsing.sympy_parser import (
+        convert_xor,
+        parse_expr,
+        standard_transformations,
+    )
+
+    _HAVE_SYMPY = True
+except ImportError:
+    _HAVE_SYMPY = False
 
 from open_econs._internal import errors
 from open_econs._version import __version__
@@ -251,6 +257,11 @@ def nls(
     model falls back to ``least_squares``'s numerical Jacobian and the result
     records ``jacobian_method="numerical"`` (never silent).
     """
+    if not _HAVE_SYMPY:
+        raise ImportError(
+            "nls() requires the `sympy` package (pip install open-econs[nls])."
+        )
+
     valid = {"nonrobust", "HC0", "HC1", "HC2", "HC3", "cluster", "HAC"}
     if cov_type not in valid:
         raise ValueError(

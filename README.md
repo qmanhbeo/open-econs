@@ -55,6 +55,7 @@ print(d.total_gap)     # 20.00  (female mean - male mean)
 ```bash
 pip install open-econs                           # core: OLS, Oaxaca, FE, IV, Logit, Probit
 pip install open-econs[plot]                      # + matplotlib for .plot()
+pip install open-econs[nls]                       # + sympy for nls() (nonlinear least squares)
 pip install open-econs[dev,lint]                  # + development & linting tools
 pip install git+https://github.com/qmanhbeo/open-econs.git    # latest dev
 ```
@@ -157,7 +158,7 @@ r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
 | `logit()` | Binary logit with `.margins()`, `.predict()` |
 | `probit()` | Binary probit (same API as logit) |
 | `oaxaca()` | Oaxaca-Blinder decomposition (two-fold, three-fold; reference types: pooled, omega, group1, group2, custom weight; reverse three-fold) |
-| `nls()` | Nonlinear least squares (Gauss-Newton via scipy). `formula="y ~ f(a, b, ...)"` with `start_values`; HC0–HC3 (`white_cov`), cluster, and Newey-West HAC (`time=`); analytic Jacobian via sympy with automatic numerical fallback; parity vs `curve_fit`, R `nls()`, Stata `nl` |
+| `nls()` | Nonlinear least squares (Gauss-Newton via scipy). `formula="y ~ f(a, b, ...)"` with `start_values`; HC0–HC3 (`white_cov`), cluster, and Newey-West HAC (`time=`); analytic Jacobian via sympy with automatic numerical fallback; parity vs `curve_fit`, R `nls()`, Stata `nl` (requires `pip install open-econs[nls]`) |
 | `ctx.vif()` | Variance inflation factor / collinearity diagnostics |
 | `abond()` | Arellano-Bond dynamic panel (difference GMM), one/two-step Windmeijer SEs, Hansen J + AR(1)/AR(2). Collapsed one-step non-robust now matches Stata `xtabond2` to ~1e-7 |
 | `staggered_did()` | Callaway-Sant'Anna (2021) staggered / heterogeneous-timing DiD; doubly‑robust `dripw` or outcome‑regression `reg`; `covariates`, cell‑by‑cell Stata parity |
