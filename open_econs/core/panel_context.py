@@ -13,6 +13,7 @@ from open_econs.core.panel_results import (
     _re_result_from_fit,
 )
 from open_econs.core.results import OLSResult
+from open_econs.core.cov_type import validate_cov_type
 
 
 _UNSET = object()  # sentinel to distinguish "not passed" from explicit None
@@ -134,6 +135,12 @@ class PanelContext:
         for a pooled specification.  Pass ``cluster`` to override, or
         ``cov_type="nonrobust"`` with ``cluster=None`` for iid errors.
         """
+        cov_type = validate_cov_type(
+            cov_type,
+            accepted={"unadjusted", "nonrobust", "HC0", "HC1", "HC2", "HC3"},
+            estimator="PanelContext.pooled()",
+        )
+
         from open_econs.models.linear.ols import ols as _ols
 
         ent = entity if entity is not None else self._entity
@@ -195,11 +202,11 @@ class PanelContext:
         """
         from linearmodels.panel import PooledOLS
 
-        if cov_type not in ("kernel", "HAC"):
-            raise ValueError(
-                f"driscoll_kraay cov_type must be 'kernel' or 'HAC' (got {cov_type!r}). "
-                "Both name the same period-aggregation Newey-West estimator; 'HAC' is preferred."
-            )
+        cov_type = validate_cov_type(
+            cov_type,
+            accepted={"kernel", "HAC"},
+            estimator="PanelContext.driscoll_kraay()",
+        )
         pdf = self._panel_index(require=True)
         re_formula = self._ensure_intercept(formula)
         call = self._capture(
@@ -246,6 +253,11 @@ class PanelContext:
         cov_type: str = "unadjusted",
     ) -> RandomEffectsResult:
         """Random-effects (GLS) estimator with Swamy-Arora variance components."""
+        cov_type = validate_cov_type(
+            cov_type,
+            accepted={"unadjusted", "robust", "kernel", "clustered"},
+            estimator="PanelContext.re()",
+        )
         from linearmodels.panel import RandomEffects
 
         pdf = self._panel_index(require=True)

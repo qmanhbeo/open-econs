@@ -6,6 +6,7 @@ import pandas as pd
 from open_econs.core.call_capture import capture_call as _capture_call
 from open_econs._internal import errors
 from open_econs.core.results import OLSResult
+from open_econs.core.cov_type import validate_cov_type
 
 
 def fe(
@@ -91,6 +92,12 @@ def fe(
     call = _capture_call(
         formula=formula, entity=entity, time=time, cluster=cluster, cov_type=cov_type,
         lags=lags, hac_adjust=hac_adjust,
+    )
+
+    cov_type = validate_cov_type(
+        cov_type,
+        accepted={"nonrobust", "HC0", "HC1", "HC2", "HC3", "HAC"},
+        estimator="fe()",
     )
 
     if entity is None and time is None:

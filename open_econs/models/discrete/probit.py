@@ -5,6 +5,7 @@ import statsmodels.api as sm
 from open_econs.core.call_capture import capture_call as _capture_call
 from open_econs._internal import errors
 from open_econs.core.results import BinaryResult
+from open_econs.core.cov_type import validate_cov_type
 
 
 def probit(
@@ -36,6 +37,13 @@ def probit(
     >>> r.margins()
     """
     call = _capture_call(formula=formula, cov_type=cov_type, model_type="probit")
+
+    cov_type = validate_cov_type(
+        cov_type,
+        accepted={"nonrobust", "HC0", "HC1", "HC2", "HC3"},
+        estimator="probit()",
+    )
+
     rhs_formula = formula.split("~", 1)[1].strip()
 
     from formulaic import Formula

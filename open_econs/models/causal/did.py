@@ -10,6 +10,7 @@ from open_econs._version import __version__
 from open_econs.core.call_capture import capture_call as _capture_call
 from open_econs._internal import errors
 from open_econs.core.base import BaseModel
+from open_econs.core.cov_type import validate_cov_type
 
 
 class DiDResult(BaseModel):
@@ -171,6 +172,13 @@ def did(
         cov_type=cov_type,
     )
 
+    cov_type = validate_cov_type(
+        cov_type,
+        accepted={"nonrobust", "HC0", "HC1", "HC2", "HC3"},
+        aliases={"robust": "HC2"},
+        estimator="did()",
+    )
+
     from formulaic import Formula
 
     try:
@@ -230,15 +238,7 @@ def did(
         kwargs["cov_type"] = "cluster"
         kwargs["cov_kwds"] = {"groups": data.loc[XX.index, cluster].values}
     else:
-        cov_map = {
-            "nonrobust": "nonrobust",
-            "HC0": "HC0",
-            "HC1": "HC1",
-            "HC2": "HC2",
-            "HC3": "HC3",
-            "robust": "HC2",
-        }
-        kwargs["cov_type"] = cov_map.get(cov_type, "HC2")
+        kwargs["cov_type"] = cov_type
 
     fitted = sm.OLS(y_arr, X_arr).fit(**kwargs)
 
@@ -455,6 +455,13 @@ def event_study(
         omitted_period=omitted_period,
     )
 
+    cov_type = validate_cov_type(
+        cov_type,
+        accepted={"nonrobust", "HC0", "HC1", "HC2", "HC3"},
+        aliases={"robust": "HC2"},
+        estimator="event_study()",
+    )
+
     from formulaic import Formula
 
     dep_var = formula.split("~")[0].strip()
@@ -536,15 +543,7 @@ def event_study(
         kwargs["cov_type"] = "cluster"
         cov_kwds["groups"] = data.loc[XX.index, cluster].values
     else:
-        cov_map = {
-            "nonrobust": "nonrobust",
-            "HC0": "HC0",
-            "HC1": "HC1",
-            "HC2": "HC2",
-            "HC3": "HC3",
-            "robust": "HC2",
-        }
-        kwargs["cov_type"] = cov_map.get(cov_type, "HC2")
+        kwargs["cov_type"] = cov_type
     kwargs["cov_kwds"] = cov_kwds
 
     fitted = sm.OLS(y_arr, X_arr).fit(**kwargs)

@@ -7,6 +7,7 @@ import statsmodels.api as sm
 from open_econs.core.call_capture import capture_call as _capture_call
 from open_econs._internal import errors
 from open_econs.core.results import OLSResult
+from open_econs.core.cov_type import validate_cov_type
 
 
 def ols(
@@ -100,6 +101,12 @@ def ols(
     >>> result.tidy()
     >>> result.coefficients["education"]
     """
+    cov_type = validate_cov_type(
+        cov_type,
+        accepted={"nonrobust", "HC0", "HC1", "HC2", "HC3", "HAC"},
+        estimator="ols()",
+    )
+
     call = _capture_call(
         formula=formula, cluster=cluster, cov_type=cov_type, weights=weights,
         lags=lags, time=time, hac_adjust=hac_adjust,

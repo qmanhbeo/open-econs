@@ -8,6 +8,7 @@ from typing import Any
 from open_econs.core.call_capture import capture_call as _capture_call
 from open_econs._internal import errors
 from open_econs.core.results import MultinomialResult
+from open_econs.core.cov_type import validate_cov_type
 
 
 def mlogit(
@@ -73,6 +74,13 @@ def mlogit(
         formula=formula, base=base, cov_type=cov_type,
         cluster=cluster, model_type="mlogit",
     )
+
+    cov_type = validate_cov_type(
+        cov_type,
+        accepted={"nonrobust", "HC0", "HC1", "HC2", "HC3"},
+        estimator="mlogit()",
+    )
+
     rhs_formula = formula.split("~", 1)[1].strip()
     lhs_name = formula.split("~", 1)[0].strip()
 

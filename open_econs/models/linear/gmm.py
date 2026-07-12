@@ -26,6 +26,7 @@ from open_econs._version import __version__
 from open_econs._internal import errors
 from open_econs.core.base import BaseModel
 from open_econs.core.call_capture import capture_call as _capture_call
+from open_econs.core.cov_type import validate_cov_type
 from open_econs.models._gmm_core import estimate_gmm as _estimate_gmm
 from open_econs.models.linear.iv import _parse_iv_formula
 
@@ -177,8 +178,11 @@ def gmm(
     """
     if step not in ("one-step", "two-step"):
         raise ValueError("step must be 'one-step' or 'two-step'.")
-    if cov_type not in ("robust", "cluster"):
-        raise ValueError("cov_type must be 'robust' or 'cluster'.")
+    cov_type = validate_cov_type(
+        cov_type,
+        accepted={"robust", "cluster"},
+        estimator="gmm()",
+    )
     if cov_type == "cluster":
         if cluster is None:
             raise ValueError("cluster= must be provided when cov_type='cluster'.")
