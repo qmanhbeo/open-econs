@@ -140,6 +140,8 @@ This scaling is exact for nonrobust and HC1 covariance (where the SE is proporti
 
 **Cluster-robust SEs**: When `cluster="col"` is specified, statsmodels' cluster-robust covariance is used (single clustering only; multi-way clustering is not supported for FE).
 
+**Newey-West HAC SEs**: `cov_type="HAC"` with `lags` computes period-aggregation (Arellano / Driscoll-Kraay) heteroskedasticity- and autocorrelation-robust SEs. The score contributions `x_it · e_it` are summed *within each time period* across entities, then a Bartlett-kernel long-run variance is applied *across* periods. This requires `time` (which doubles as the time fixed-effects dimension, so HAC always incurs two-way FE) and `lags`. `hac_adjust=True` applies the `N/(N−K)` correction (Stata `newey` style); the default `False` is the original Newey & West (1987) formula. `cluster=` takes precedence over HAC. The same period-aggregation convention is shared with `ols()` and is validated against statsmodels `cov_nw_groupsum`.
+
 ### Default Behavior
 
 | API entry point | Default `cov_type` |
@@ -324,6 +326,7 @@ Available via `result.diagnostics()`. Note that these diagnostics apply to the *
 | `oe.fe("y ~ x1 + x2", data=df, entity="id", cluster="id")` | `xtreg y x1 x2, fe vce(cluster id)` | Cluster-robust FE SEs |
 | `oe.fe("y ~ x1 + x2", data=df, entity="id", cov_type="nonrobust")` | `xtreg y x1 x2, fe` | iid SEs matching Stata default |
 | `oe.fe("y ~ x1 + x2", data=df, entity="id", cov_type="HC1")` | `xtreg y x1 x2, fe vce(robust)` | HC1 robust SEs matching Stata |
+| `oe.fe("y ~ x1 + x2", data=df, entity="id", time="t", cov_type="HAC", lags=2)` | `xtscc y x1 x2, lag(2)` (Driscoll-Kraay) | Period-aggregation Newey-West; HAC requires `time` (doubles as time FE) |
 
 **Parameter mapping**: Stata's `xtreg y x1 x2, fe` estimates entity FE only. For two-way, Stata users include `i.time` in the regressor list or use `reghdfe`. open-econs uses the unified `entity=`/`time=` keyword interface. The within R² (`e(r2_w)`) is numerically identical between Stata and open-econs for both one-way and two-way FE.
 
@@ -334,6 +337,7 @@ Available via `result.diagnostics()`. Note that these diagnostics apply to the *
 | `oe.fe("y ~ x1 + x2", data=df, entity="id")` | `plm(y ~ x1 + x2, data=pdf, model="within", effect="individual")` | — |
 | `oe.fe("y ~ x1 + x2", data=df, entity="id", time="t")` | `plm(y ~ x1 + x2, data=pdf, model="within", effect="twoways")` | R² differs: plm uses two-way demeaned SST |
 | `oe.fe("y ~ x1 + x2", data=df, entity="id", time="t")` | `fixest::feols(y ~ x1 + x2 | id + t, data=df)` | Same iterative algorithm, same R² convention |
+| `oe.fe("y ~ x1 + x2", data=df, entity="id", time="t", cov_type="HAC", lags=2)` | `plm(y ~ x1 + x2, data=pdf, model="within", effect="twoways") %>% lmtest::coeftest(vcov=vcovNW(., lag=2))` | Period-aggregation Newey-West (Arellano) |
 
 ## API Examples
 
