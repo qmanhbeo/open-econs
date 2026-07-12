@@ -169,6 +169,7 @@ r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
 | `cem()` | Coarsened exact matching (auto or explicit cutpoints, multiple binning methods) |
 | `balance()` | Covariate balance diagnostics (SMD, variance ratio, weighted t-tests) |
 | `rosenbaum_bounds()` | Sensitivity analysis for matched pairs |
+| `synth()` | Synthetic control (Abadie-Diamond-Hainmueller) core point estimator: nested predictor-weight (V) + donor-weight (W) optimization, gap path, R/Stata parity |
 | `PanelContext(...)` | Pooled/FE/RE/FD/Driscoll-Kraay/Hausman/ABond with remembered entity/time |
 | `Context(...)` | Dataset-scoped workflow with access to all above estimators |
 
