@@ -16,6 +16,7 @@ from .models.causal.cem import cem
 from .models.causal.psm import psm
 from .models.causal.sensitivity import rosenbaum_bounds
 from .models.causal.rdd import density_test, rdd
+from .models.causal.synth import synth, SynthResult
 from .core.context import Context
 from .core.panel_context import PanelContext
 
@@ -26,5 +27,6 @@ __all__ = [
     "did", "event_study", "balance", "abond", "staggered_did", "density_test", "cem",
     "psm", "rdd", "rosenbaum_bounds", "gmm", "GMMResult",
     "nls", "NLSResult",
+    "synth", "SynthResult",
     "Context", "PanelContext", "__version__",
 ]
