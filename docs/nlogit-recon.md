@@ -3,7 +3,7 @@
 **Status:** Investigated, deliberately deferred (not built)  
 **Branch:** `feature/nlogit` (based on `db2dfe5` off `main`)  
 **Date:** 2026-07-12  
-**Linked roadmap entry:** `ROADMAP.md` line 288
+**Linked roadmap entry:** `ROADMAP.md` line 289 (nlogit, deferred)
 
 ---
 
