@@ -1,0 +1,303 @@
+# open-econs estimator registry
+# Machine-readable metadata for the methodology documentation layer.
+# Each estimator documents the public API, category, external equivalents,
+# documentation status, and links to its methodology page.
+
+estimators:
+  ols:
+    name: Ordinary Least Squares
+    aliases:
+      - linear regression
+      - ordinary least squares
+      - WLS
+    category: linear
+    api:
+      - oe.ols()
+      - oe.reg()
+    context_api:
+      - ctx.ols()
+    panel_api: []
+    panel_context_api: []
+    problem: conditional mean estimation
+    estimator: OLS
+    stata_equivalent:
+      - regress
+      - reg
+      - newey
+    r_equivalent:
+      - lm
+    status: mature
+    tier: 1
+    methodology: methodology/linear/ols.md
+
+  fe:
+    name: Fixed Effects
+    category: linear
+    api:
+      - oe.fe()
+    context_api:
+      - ctx.fe()
+      - PanelContext.fe()
+    problem: panel data with unobserved heterogeneity
+    estimator: within estimator
+    stata_equivalent:
+      - xtreg, fe
+      - reghdfe
+    r_equivalent:
+      - plm(model="within")
+    status: mature
+    tier: 1
+    methodology: methodology/linear/fixed_effects.md
+
+  iv:
+    name: Instrumental Variables / 2SLS
+    category: linear
+    api:
+      - oe.iv()
+    context_api:
+      - ctx.iv()
+    problem: endogenous regressors
+    estimator: two-stage least squares
+    stata_equivalent:
+      - ivregress 2sls
+    r_equivalent:
+      - AER::ivreg
+    status: mature
+    tier: 1
+    methodology: methodology/linear/iv_2sls.md
+
+  abond:
+    name: Arellano-Bond
+    category: linear
+    api:
+      - oe.abond()
+    context_api:
+      - ctx.abond()
+      - PanelContext.abond()
+    problem: dynamic panel data
+    estimator: difference GMM
+    stata_equivalent:
+      - xtabond2
+    r_equivalent:
+      - plm::pgmm
+    status: mature
+    tier: 1
+    methodology: methodology/linear/arellano_bond.md
+
+  staggered_did:
+    name: Staggered Difference-in-Differences
+    category: causal_inference
+    api:
+      - oe.staggered_did()
+    context_api: []
+    problem: treatment effects with staggered adoption
+    estimator: Callaway-Sant'Anna group-time ATT
+    stata_equivalent:
+      - csdid
+    r_equivalent:
+      - did
+    status: mature
+    tier: 1
+    methodology: methodology/causal_inference/staggered_did.md
+
+  did:
+    name: Two-Period Difference-in-Differences
+    category: causal_inference
+    api:
+      - oe.did()
+    context_api:
+      - ctx.did()
+    problem: treatment effects with binary treatment and post period
+    estimator: OLS interaction DiD
+    stata_equivalent:
+      - reg (interaction)
+    r_equivalent:
+      - lm(y ~ treated*post)
+    status: mature
+    tier: 2
+    methodology: methodology/causal_inference/did.md
+
+  event_study:
+    name: Event Study / Dynamic DiD
+    category: causal_inference
+    api:
+      - oe.event_study()
+    context_api:
+      - ctx.event_study()
+    problem: dynamic treatment effects
+    estimator: relative-time event-study dummies
+    stata_equivalent:
+      - reghdfe
+      - eventdd
+    r_equivalent:
+      - fixest
+    status: mature
+    tier: 2
+    methodology: methodology/causal_inference/event_study.md
+
+  psm:
+    name: Propensity Score Matching
+    category: causal_inference
+    api:
+      - oe.psm()
+    context_api: []
+    problem: causal inference with selection on observables
+    estimator: 1:1 nearest-neighbor matching with replacement
+    stata_equivalent:
+      - teffects psmatch
+    r_equivalent:
+      - MatchIt
+      - Matching
+    status: mature
+    tier: 2
+    methodology: methodology/causal_inference/psm.md
+
+  cem:
+    name: Coarsened Exact Matching
+    category: causal_inference
+    api:
+      - oe.cem()
+    context_api: []
+    problem: preprocessing for causal inference
+    estimator: coarsened exact matching
+    stata_equivalent:
+      - cem (SSC)
+    r_equivalent:
+      - cem
+    status: mature
+    tier: 2
+    methodology: methodology/causal_inference/cem.md
+
+  rdd:
+    name: Regression Discontinuity Design
+    category: causal_inference
+    api:
+      - oe.rdd()
+    context_api: []
+    problem: causal inference from a running variable threshold
+    estimator: local linear regression
+    stata_equivalent:
+      - rdrobust
+    r_equivalent:
+      - rdrobust
+    status: mature
+    tier: 2
+    methodology: methodology/causal_inference/rdd.md
+
+  oaxaca:
+    name: Oaxaca-Blinder Decomposition
+    category: decomposition
+    api:
+      - oe.oaxaca()
+    context_api:
+      - ctx.oaxaca()
+    problem: outcome gap decomposition between groups
+    estimator: Oaxaca-Blinder (two-fold / three-fold)
+    stata_equivalent:
+      - oaxaca (Ben Jann)
+    r_equivalent:
+      - oaxaca
+    status: mature
+    tier: 1
+    methodology: methodology/decomposition/oaxaca_blinder.md
+
+  logit:
+    name: Binary Logit
+    category: discrete
+    api:
+      - oe.logit()
+    context_api:
+      - ctx.logit()
+    problem: binary choice model
+    estimator: maximum likelihood logit
+    stata_equivalent:
+      - logit
+    r_equivalent:
+      - glm(family=binomial(link="logit"))
+    status: mature
+    tier: 1
+    methodology: methodology/discrete/logit_probit.md
+
+  probit:
+    name: Binary Probit
+    category: discrete
+    api:
+      - oe.probit()
+    context_api:
+      - ctx.probit()
+    problem: binary choice model
+    estimator: maximum likelihood probit
+    stata_equivalent:
+      - probit
+    r_equivalent:
+      - glm(family=binomial(link="probit"))
+    status: mature
+    tier: 1
+    methodology: methodology/discrete/logit_probit.md
+
+  gmm:
+    name: Linear GMM
+    category: linear
+    api:
+      - oe.gmm()
+    context_api:
+      - PanelContext.gmm()
+    problem: linear GMM estimation
+    estimator: linear GMM
+    stata_equivalent:
+      - gmm
+    r_equivalent:
+      - gmm::gmm
+    status: experimental
+    tier: 3
+    methodology: methodology/linear/gmm.md
+
+  nls:
+    name: Nonlinear Least Squares
+    category: nonlinear
+    api:
+      - oe.nls()
+    context_api:
+      - ctx.nls()
+    problem: nonlinear regression
+    estimator: Gauss-Newton NLS
+    stata_equivalent:
+      - nl
+    r_equivalent:
+      - nls()
+    status: experimental
+    tier: 3
+    methodology: methodology/nonlinear/nls.md
+
+  rosenbaum_bounds:
+    name: Rosenbaum Bounds
+    category: causal_inference
+    api:
+      - oe.rosenbaum_bounds()
+    context_api: []
+    problem: sensitivity analysis for matched pairs
+    estimator: Wilcoxon signed-rank sensitivity
+    stata_equivalent:
+      - rbounds
+    r_equivalent:
+      - rbounds
+    status: mature
+    tier: 3
+    methodology: methodology/causal_inference/rosenbaum_bounds.md
+
+  balance:
+    name: Covariate Balance
+    category: causal_inference
+    api:
+      - oe.balance()
+    context_api:
+      - ctx.balance()
+    problem: balance diagnostics for matching
+    estimator: SMD, variance ratio, t-tests
+    stata_equivalent:
+      - pstest
+    r_equivalent:
+      - MatchIt::summary()
+    status: mature
+    tier: 3
+    methodology: methodology/causal_inference/balance.md
