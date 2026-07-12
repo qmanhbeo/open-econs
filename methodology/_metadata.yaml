@@ -54,14 +54,14 @@ estimators:
     category: linear
     api:
       - oe.iv()
-    context_api:
-      - ctx.iv()
+    context_api: []
     problem: endogenous regressors
     estimator: two-stage least squares
     stata_equivalent:
       - ivregress 2sls
     r_equivalent:
       - AER::ivreg
+      - linearmodels IV2SLS
     status: mature
     tier: 1
     methodology: methodology/linear/iv_2sls.md
