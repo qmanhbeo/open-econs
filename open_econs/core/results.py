@@ -830,3 +830,200 @@ class MultinomialResult(BaseModel):
             return np.isnan(v)
         except (TypeError, ValueError):
             return True
+
+
+class SynthResult(BaseModel):
+    """Result of a synthetic control (Abadie-Diamond-Hainmueller) estimation.
+
+    Immutable result with the uniform interface (``.tidy()``, ``.summary()``,
+    ``.export()``, immutability). This is the **core point estimator only**:
+    it fits the donor weights ``W`` and predictor weights ``V`` and reports the
+    synthetic-counterfactual gap path. Placebo-in-space / placebo-in-time
+    inference, ``plot()``, and ``predict()`` are intentionally out of scope for
+    this pass and raise ``NotImplementedError`` if called.
+
+    Shape conventions (all public outputs are named pandas objects, never raw
+    numpy arrays):
+
+    * ``weights`` — ``pd.Series`` of fitted donor weights, indexed by donor
+      unit id (the coefficient-analog of the estimator).
+    * ``predictor_weights`` — ``pd.Series`` of fitted predictor weights ``V``,
+      indexed by predictor name (one per predictor used in the optimization).
+    * ``pre_mspe`` / ``post_mspe`` — pre- and post-treatment mean squared
+      prediction error of the outcome (the ADH fit-quality diagnostics).
+    * ``gap_path`` — ``pd.DataFrame`` indexed by time period, spanning both pre
+      and post periods, with columns ``treated``, ``synthetic``, and ``gap``.
+      Exposed so the later placebo pass can reuse the counterfactual directly.
+
+    Convergence diagnostics are surfaced straight from the nested
+    :func:`scipy.optimize.minimize` (SLSQP) ``OptimizeResult`` objects — ``V``
+    (outer predictor-weight loop) and ``W`` (inner donor-weight QP) — with no
+    invented fields.
+    """
+
+    def __init__(
+        self,
+        *,
+        formula: str,
+        outcome: str,
+        treated_unit: Any,
+        donor_pool: list,
+        entity: str,
+        time: str,
+        pre_period: Any,
+        post_period: Any,
+        weights: pd.Series,
+        predictor_weights: pd.Series,
+        predictor_names: list[str],
+        pre_mspe: float,
+        post_mspe: float,
+        gap_path: pd.DataFrame,
+        n_donors: int,
+        n_pre_periods: int,
+        n_post_periods: int,
+        v_success: bool,
+        v_loss: float,
+        v_nit: int,
+        v_nfev: int,
+        v_message: str,
+        w_success: bool,
+        w_loss: float,
+        w_nit: int,
+        w_nfev: int,
+        w_message: str,
+        call: dict[str, Any],
+    ) -> None:
+        self.formula = formula
+        self.data_shape = (len(weights) + 1, len(predictor_names))
+        self.cov_type = "synthetic control"
+        self.call = call
+        self.timestamp = datetime.now()
+        self.package_version = __version__
+
+        self.outcome = outcome
+        self.treated_unit = treated_unit
+        self.donor_pool = list(donor_pool)
+        self.entity = entity
+        self.time = time
+        self.pre_period = pre_period
+        self.post_period = post_period
+        self.weights = weights
+        self.predictor_weights = predictor_weights
+        self.predictor_names = list(predictor_names)
+        self.pre_mspe = float(pre_mspe)
+        self.post_mspe = float(post_mspe)
+        self.gap_path = gap_path
+        self.n_donors = int(n_donors)
+        self.n_pre_periods = int(n_pre_periods)
+        self.n_post_periods = int(n_post_periods)
+
+        # Convergence diagnostics straight from scipy.optimize.minimize.
+        self.v_success = bool(v_success)
+        self.v_loss = float(v_loss)
+        self.v_nit = int(v_nit)
+        self.v_nfev = int(v_nfev)
+        self.v_message = str(v_message)
+        self.w_success = bool(w_success)
+        self.w_loss = float(w_loss)
+        self.w_nit = int(w_nit)
+        self.w_nfev = int(w_nfev)
+        self.w_message = str(w_message)
+
+        self._freeze()
+
+    def tidy(self) -> pd.DataFrame:
+        """Donor weights table, one row per donor unit (R-broom style)."""
+        df = pd.DataFrame({
+            "Donor": self.weights.index,
+            "Weight": self.weights.values,
+        })
+        df.index.name = None
+        return df
+
+    def summary(self) -> str:
+        header = (
+            f"                 Synthetic Control (ADH) Results                       \n"
+            f"======================================================================\n"
+            f"Outcome:                    {self.outcome}\n"
+            f"Treated unit:               {self.treated_unit}\n"
+            f"Donor pool size:            {self.n_donors}\n"
+            f"Entity / Time columns:      {self.entity} / {self.time}\n"
+            f"Pre period (last):          {self.pre_period}  ({self.n_pre_periods} pre periods)\n"
+            f"Post period (first):        {self.post_period}  ({self.n_post_periods} post periods)\n"
+            f"Pre-treatment MSPE:         {self.pre_mspe:.6e}\n"
+            f"Post-treatment MSPE:        {self.post_mspe:.6e}\n"
+            f"----------------------------------------------------------------------\n"
+        )
+        w = self.weights.sort_values(ascending=False)
+        top_w = w.head(10)
+        wtbl = "\n".join(f"  {idx!s:<14} {val:8.4f}" for idx, val in top_w.items())
+        v = self.predictor_weights.sort_values(ascending=False)
+        top_v = v.head(10)
+        vtbl = "\n".join(f"  {idx!s:<22} {val:8.4f}" for idx, val in top_v.items())
+        conv = (
+            f"V-optim converged:         {self.v_success} "
+            f"(loss={self.v_loss:.6e}, nit={self.v_nit}, nfev={self.v_nfev})\n"
+            f"W-solve converged:          {self.w_success} "
+            f"(loss={self.w_loss:.6e}, nit={self.w_nit}, nfev={self.w_nfev})\n"
+        )
+        return (
+            header
+            + "Top donor weights:\n"
+            + wtbl
+            + "\n\nTop predictor weights:\n"
+            + vtbl
+            + "\n\n"
+            + conv
+            + "======================================================================\n"
+        )
+
+    def vcov(self) -> pd.DataFrame:
+        raise NotImplementedError(
+            "SynthResult.vcov() is not available in this pass: synthetic control "
+            "inference (placebo-in-space / placebo-in-time) is a separate, later "
+            "scoped task. The point-estimator result carries no covariance matrix."
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        d = super().to_dict()
+        d["outcome"] = self.outcome
+        d["treated_unit"] = self.treated_unit
+        d["donor_pool"] = list(self.donor_pool)
+        d["entity"] = self.entity
+        d["time"] = self.time
+        d["pre_period"] = self.pre_period
+        d["post_period"] = self.post_period
+        d["weights"] = {str(k): float(v) for k, v in self.weights.items()}
+        d["predictor_weights"] = {
+            str(k): float(v) for k, v in self.predictor_weights.items()
+        }
+        d["pre_mspe"] = self.pre_mspe
+        d["post_mspe"] = self.post_mspe
+        d["n_donors"] = self.n_donors
+        d["n_pre_periods"] = self.n_pre_periods
+        d["n_post_periods"] = self.n_post_periods
+        d["gap_path"] = {
+            str(t): {
+                "treated": float(self.gap_path.loc[t, "treated"]),
+                "synthetic": float(self.gap_path.loc[t, "synthetic"]),
+                "gap": float(self.gap_path.loc[t, "gap"]),
+            }
+            for t in self.gap_path.index
+        }
+        d["convergence"] = {
+            "v": {
+                "success": self.v_success,
+                "loss": self.v_loss,
+                "nit": self.v_nit,
+                "nfev": self.v_nfev,
+                "message": self.v_message,
+            },
+            "w": {
+                "success": self.w_success,
+                "loss": self.w_loss,
+                "nit": self.w_nit,
+                "nfev": self.w_nfev,
+                "message": self.w_message,
+            },
+        }
+        return d
