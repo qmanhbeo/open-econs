@@ -285,10 +285,11 @@ might fit.
 #### v0.9 — Structural Foundations & Release Candidate
 - [ ] `gmm()` — general GMM estimation framework other estimators can build on
 - [ ] Nonlinear least squares
-- [ ] Discrete choice groundwork (multinomial logit, nested logit)
+- [x] `mlogit()` — multinomial logit (shipped, see v0.8)
+- [ ] `nlogit()` — nested logit *(deferred: recon complete, documented in `docs/nlogit-recon.md`. Blockers: R `mlogit` can't run full Stata-equivalent spec (nest-level covariates cause singularity on `webuse restaurant`); no validated fixture with τ∈(0,1); analytic gradient ~200 lines of recursive tree traversal needs domain-expert implementation.)*
 - [x] `synth()` — synthetic control (Abadie-Diamond-Hainmueller) — **core point estimator shipped** (v0.9)
   - Shipped: nested V+W optimization (outer predictor weights via R `Synth`'s two-start equal/regression procedure; inner donor-weight QP, `W>=0` & `sum W=1`, via SLSQP), `SynthResult` exposing `weights` / `predictor_weights` / `pre_mspe` / `post_mspe` / `gap_path`, `custom.v` fixed-`V` support, and gated R `Synth` (primary) + Stata `synth` (secondary) parity tests that skip cleanly where R/Stata are absent (e.g. CI). Default predictors = outcome's own pre-treatment path (one per period); explicit predictors = user-supplied covariates aggregated by pre-window mean.
-  - Deferred (own future items, currently `NotImplementedError` by design): placebo-in-space / placebo-in-time inference; `plot()`; `predict()` out-of-sample counterfactual.
+  - Deferred (own future items, currently `NotImplementedError` by design): placebo-in-space / placebo-in-time inference; `plot()`; `predict()` out-of-sample counterfactual. (docs(nlogit): document recon findings and defer nested logit to future session)
 - [ ] Placebo-in-space and placebo-in-time inference
 - [ ] Newey-West HAC standard errors as a `cov_type` option across estimators
 - [ ] API freeze candidate — no more breaking signature changes without a deprecation cycle
