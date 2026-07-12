@@ -41,6 +41,7 @@ def _rscript_exe() -> str | None:
     return cand if os.path.isfile(cand) else None
 
 
+@pytest.mark.stata
 class TestMlogitCoefficients:
     @pytest.fixture(autouse=True)
     def _run(self):
@@ -71,6 +72,7 @@ class TestMlogitCoefficients:
         assert outcomes == {2, 3}
 
 
+@pytest.mark.stata
 class TestMlogitMargins:
     """Average marginal effects must match Stata's delta-method AMEs (rtol 1e-6)."""
 
@@ -100,6 +102,7 @@ class TestMlogitMargins:
         assert resid < 1e-8, f"baseline AME identity residual too large: {resid}"
 
 
+@pytest.mark.stata
 class TestMlogitSEs:
     """Robust (HC1) and cluster SEs vs Stata; cluster must exceed robust (real
     within-cluster correlation)."""
@@ -163,6 +166,7 @@ class TestMlogitPredict:
         npt.assert_allclose(pr.sum(axis=1).to_numpy(), 1.0, rtol=1e-9)
 
 
+@pytest.mark.r
 class TestMlogitR:
     """R nnet::multinom cross-check (coefficients only). Skipped if R is absent."""
 

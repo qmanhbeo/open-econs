@@ -53,6 +53,7 @@ def df():
 
 # ── Stata parity ─────────────────────────────────────────────
 
+@pytest.mark.stata
 @pytest.mark.skipif(
     not STATA_DTA.exists(),
     reason="cem_basic.dta not found. Run 'tests/stata/do/cem_basic.do' in Stata.",

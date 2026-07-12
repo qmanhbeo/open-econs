@@ -362,6 +362,7 @@ write_json(out, out_json, auto_unbox = TRUE, digits = 15)
 """
 
 
+@pytest.mark.r
 @pytest.mark.skipif(not R_AVAILABLE, reason="R Synth not installed (off-PATH)")
 def test_placebo_space_parity_r():
     p = _make_panel_welldetermined()

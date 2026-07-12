@@ -26,6 +26,8 @@ import pytest
 from open_econs.models.causal.cem import cem
 from .stata_runner import STATA_EXE, run_do
 
+pytestmark = pytest.mark.stata
+
 DO_DIR = Path(__file__).resolve().parent / "do"
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "df_cem_autocuts.csv"
 

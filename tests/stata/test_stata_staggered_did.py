@@ -18,6 +18,8 @@ import open_econs as oe
 
 from .stata_runner import FIXTURES_DIR, read_stata
 
+pytestmark = pytest.mark.stata
+
 RTOL = 1e-6
 
 # Load Stata ground truth once per module (cached), not per test method.

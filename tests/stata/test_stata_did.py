@@ -11,6 +11,8 @@ import open_econs as oe
 
 from .stata_runner import read_stata
 
+pytestmark = pytest.mark.stata
+
 S_DID_BASIC = read_stata("did_basic")
 S_DID_CLUSTER = read_stata("did_cluster")
 

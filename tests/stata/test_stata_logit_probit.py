@@ -11,6 +11,8 @@ import open_econs as oe
 
 from .stata_runner import read_stata
 
+pytestmark = pytest.mark.stata
+
 S_LOGIT_BASIC = read_stata("logit_basic")
 S_LOGIT_MARGINS = read_stata("logit_margins")
 S_PROBIT_BASIC = read_stata("probit_basic")

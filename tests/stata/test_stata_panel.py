@@ -13,6 +13,8 @@ import open_econs as oe
 
 from .stata_runner import read_stata
 
+pytestmark = pytest.mark.stata
+
 S_PANEL_FE = read_stata("panel_fe")
 S_PANEL_FE_TWOWAY = read_stata("panel_fe_twoway")
 S_PANEL_RE = read_stata("panel_re")

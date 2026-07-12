@@ -16,6 +16,8 @@ import open_econs as oe
 
 from .stata_runner import read_stata
 
+pytestmark = pytest.mark.stata
+
 S_RDD_SHARP = read_stata("rdd_sharp")
 S_RDD_FUZZY = read_stata("rdd_fuzzy")
 

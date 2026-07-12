@@ -11,6 +11,8 @@ import open_econs as oe
 
 from .stata_runner import read_stata
 
+pytestmark = pytest.mark.stata
+
 S_ES = read_stata("event_study")
 
 FIXTURE_CSV = "tests/stata/fixtures/df_event_study.csv"
