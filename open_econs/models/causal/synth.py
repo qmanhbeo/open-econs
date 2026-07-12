@@ -393,6 +393,7 @@ def synth(
         time=time,
         pre_period=pre_period,
         post_period=post_period,
+        predictors=None if predictors is None else list(predictors),
         weights=weights,
         predictor_weights=predictor_weights_series,
         predictor_names=predictor_names,

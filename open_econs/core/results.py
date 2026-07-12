@@ -1,6 +1,6 @@
 import warnings
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -10,6 +10,9 @@ from statsmodels.stats.stattools import durbin_watson as _durbin_watson
 
 from open_econs._version import __version__
 from open_econs.core.base import BaseModel
+
+if TYPE_CHECKING:
+    from open_econs.models.causal.placebo import PlaceboSpaceResult, PlaceboTimeResult
 
 
 def _ramsey_reset(
@@ -872,6 +875,7 @@ class SynthResult(BaseModel):
         time: str,
         pre_period: Any,
         post_period: Any,
+        predictors: Any,
         weights: pd.Series,
         predictor_weights: pd.Series,
         predictor_names: list[str],
@@ -907,6 +911,14 @@ class SynthResult(BaseModel):
         self.time = time
         self.pre_period = pre_period
         self.post_period = post_period
+        # Original `predictors` argument (None for the default outcome-path
+        # predictors, or the list of predictor column names).  Stored so a
+        # placebo-in-space / placebo-in-time pass can reconstruct each
+        # placebo call from the result alone without the caller re-specifying
+        # it.  This is the one fit-config field the original SynthResult did
+        # not carry (predictor_weights is intentionally NOT reused: ADH
+        # placebo re-fits V per placebo unit).
+        self.predictors = None if predictors is None else list(predictors)
         self.weights = weights
         self.predictor_weights = predictor_weights
         self.predictor_names = list(predictor_names)
@@ -984,6 +996,30 @@ class SynthResult(BaseModel):
             "scoped task. The point-estimator result carries no covariance matrix."
         )
 
+    def placebo_space(self, data: pd.DataFrame, **kwargs: Any) -> "PlaceboSpaceResult":
+        """Placebo-in-space permutation inference on this fit.
+
+        Thin delegate to :func:`open_econs.models.causal.placebo.placebo_space`;
+        the caller supplies the full panel ``data`` (the result carries the rest
+        of the fit configuration).  See that function for the ADH permutation
+        convention and the ``exclude_pre_mspe_multiple`` parameter.
+        """
+        from open_econs.models.causal.placebo import placebo_space
+
+        return placebo_space(self, data, **kwargs)
+
+    def placebo_time(self, data: pd.DataFrame, **kwargs: Any) -> "PlaceboTimeResult":
+        """Placebo-in-time permutation inference on this fit.
+
+        Thin delegate to :func:`open_econs.models.causal.placebo.placebo_time`;
+        the caller supplies the full panel ``data`` (the result carries the rest
+        of the fit configuration).  See that function for the ADH permutation
+        convention and the ``exclude_pre_mspe_multiple`` parameter.
+        """
+        from open_econs.models.causal.placebo import placebo_time
+
+        return placebo_time(self, data, **kwargs)
+
     def to_dict(self) -> dict[str, Any]:
         d = super().to_dict()
         d["outcome"] = self.outcome
@@ -993,6 +1029,9 @@ class SynthResult(BaseModel):
         d["time"] = self.time
         d["pre_period"] = self.pre_period
         d["post_period"] = self.post_period
+        d["predictors"] = (
+            None if self.predictors is None else list(self.predictors)
+        )
         d["weights"] = {str(k): float(v) for k, v in self.weights.items()}
         d["predictor_weights"] = {
             str(k): float(v) for k, v in self.predictor_weights.items()
