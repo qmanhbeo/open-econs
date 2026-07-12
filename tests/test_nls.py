@@ -146,6 +146,7 @@ class TestCurveFitParity:
 # ── 2. R nls() parity (gated) ─────────────────────────────────────────────
 
 class TestRnlsParity:
+    @pytest.mark.r
     def test_r_nls_iid(self, exp_data, tmp_path):
         if not R_AVAILABLE:
             pytest.skip(f"Rscript not found at {RSCRIPT_EXE}")
@@ -201,6 +202,7 @@ class TestRnlsParity:
 # ── 3. Stata nl parity (gated) ────────────────────────────────────────────
 
 class TestStataNlParity:
+    @pytest.mark.stata
     def test_stata_nl_iid_and_robust(self, exp_data, tmp_path):
         if not STATA_AVAILABLE:
             pytest.skip(f"Stata not found at {STATA_EXE}")

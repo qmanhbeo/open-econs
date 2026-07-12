@@ -456,6 +456,7 @@ def _run_r_parity(p: dict, mode: str):
     return json.loads(r_json.read_text())
 
 
+@pytest.mark.r
 @pytest.mark.skipif(not R_AVAILABLE, reason="R Synth not installed (off-PATH)")
 def test_synth_parity_r_default():
     p = _make_panel()
@@ -499,6 +500,7 @@ def test_synth_parity_r_default():
     # reported, not asserted.
 
 
+@pytest.mark.r
 @pytest.mark.skipif(not R_AVAILABLE, reason="R Synth not installed (off-PATH)")
 def test_synth_parity_r_explicit():
     """Well-determined explicit case (P=12 >= N=12): W must agree tightly.
@@ -556,6 +558,7 @@ def test_synth_parity_r_explicit():
     assert abs(cov_mm_py - cov_mm_r) < 1e-2, "covariate objective differs between engines"
 
 
+@pytest.mark.r
 @pytest.mark.skipif(not R_AVAILABLE, reason="R Synth not installed (off-PATH)")
 def test_synth_rank_deficient_qp_same_objective_different_w():
     """P=2 < N=12: inner QP is rank-deficient -> same objective, different W.
@@ -631,6 +634,7 @@ end
 """
 
 
+@pytest.mark.stata
 @pytest.mark.skipif(not STATA_AVAILABLE, reason="Stata synth not installed (off-PATH)")
 def test_synth_parity_stata_explicit():
     p = _make_panel()

@@ -27,6 +27,8 @@ from open_econs.models.causal.balance import (
 
 from .stata_runner import read_stata
 
+pytestmark = pytest.mark.stata
+
 S = read_stata("balance_weighted")
 
 

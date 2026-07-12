@@ -11,6 +11,8 @@ import open_econs as oe
 
 from .stata_runner import read_stata
 
+pytestmark = pytest.mark.stata
+
 S_IV = read_stata("iv_basic")
 
 

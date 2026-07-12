@@ -14,6 +14,8 @@ from scipy import stats as _stats
 
 from .stata_runner import read_stata
 
+pytestmark = pytest.mark.stata
+
 S_BALANCE = read_stata("balance_basic")
 
 

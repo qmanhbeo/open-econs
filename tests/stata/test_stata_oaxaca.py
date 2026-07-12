@@ -19,6 +19,8 @@ import open_econs as oe
 
 from .stata_runner import read_stata
 
+pytestmark = pytest.mark.stata
+
 # Module-level Stata caches.
 S_TWO_FOLD = read_stata("oaxaca_two_fold")
 S_THREE_FOLD = read_stata("oaxaca_three_fold")

@@ -19,6 +19,8 @@ from open_econs.models.causal.rdd import _RDENSITY
 
 from .stata_runner import FIXTURES_DIR, read_stata
 
+pytestmark = pytest.mark.stata
+
 import sys as _sys
 
 _THIS = _sys.modules[__name__]
