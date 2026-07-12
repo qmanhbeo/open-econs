@@ -170,8 +170,39 @@ r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
 | `balance()` | Covariate balance diagnostics (SMD, variance ratio, weighted t-tests) |
 | `rosenbaum_bounds()` | Sensitivity analysis for matched pairs |
 | `synth()` | Synthetic control (Abadie-Diamond-Hainmueller) core point estimator: nested predictor-weight (V) + donor-weight (W) optimization, gap path, R/Stata parity |
+| `placebo_space()` | Synthetic control placebo-in-space permutation inference (ADH): re-fits `synth()` once per donor; `post/pre` MSPE ratio per placebo; permutation p-value; optional `exclude_pre_mspe_multiple` (space-only) |
+| `placebo_time()` | Synthetic control placebo-in-time permutation inference (ADH): re-fits `synth()` once per candidate pre-treatment date; `post/pre` MSPE ratio per candidate; permutation p-value |
 | `PanelContext(...)` | Pooled/FE/RE/FD/Driscoll-Kraay/Hausman/ABond with remembered entity/time |
 | `Context(...)` | Dataset-scoped workflow with access to all above estimators |
+
+### Synthetic control placebo inference (ADH)
+
+`placebo_space()` / `placebo_time()` build on a fitted `synth()` result and
+reuse its validated solver — no estimator logic is duplicated. The caller only
+supplies the panel `data`; the result carries the rest of the fit config.
+
+```python
+from open_econs.models.causal.synth import synth
+from open_econs.models.causal.placebo import placebo_space, placebo_time
+
+r = synth(df, "y", treated_unit="t", donor_pool=donors,
+          entity="unit", time="time", pre_period=1994, post_period=1995)
+
+ps = placebo_space(r, df)                 # permutation p-value across donors
+print(ps.p_value, ps.ratios)              # fraction of donor ratios >= treated's
+
+pt = placebo_time(r, df)                  # permutation p-value across candidate dates
+print(pt.p_value)
+
+# Opt-in, space-only pre-fit exclusion (default None: never applied silently):
+ps_filtered = placebo_space(r, df, exclude_pre_mspe_multiple=10.0)
+```
+
+`SynthResult` now also stores the original `predictors` argument (the one
+fit-config field it previously lacked) so the delegate can reconstruct each
+placebo call. `placebo_time()` does **not** accept `exclude_pre_mspe_multiple` —
+in the in-time loop "pre-MSPE" is the treated unit's own fit against itself at a
+different cutoff, so the space-style exclusion concept does not carry over.
 
 ## Result API
 
