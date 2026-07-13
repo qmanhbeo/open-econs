@@ -308,7 +308,7 @@ might fit.
 - [x] "Migrating from Stata" (updated) and "Migrating from R" (new) guides
 - [x] Numerical parity test suite against Stata/R reference output, **re-run in CI on every release** (`ci-parity.yml`, `release`/`workflow_dispatch` triggers). Runs against committed fixtures with **zero skips** on free runners; live fixture *regeneration* needs self-hosted Stata/R (documented gap, not "done")
 - [x] Benchmark suite (`benchmarks/ols_fe.py`, speed vs. statsmodels/linearmodels on large panels)
-- [ ] First tagged PyPI release announced beyond the initial contributor circle — **PREPARED, not published** (gated on explicit go-ahead; no tag / GitHub Release / PyPI upload made)
+- [x] First tagged PyPI release announced beyond the initial contributor circle — published at **v1.0.0** (tag + GitHub Release + PyPI upload); v1.0.1 is a documentation-correction patch
 
 ---
 

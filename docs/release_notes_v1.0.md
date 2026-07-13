@@ -1,8 +1,7 @@
 # open-econs v1.0.0 — Release Notes
 
-**Status: PREPARED, not published.** No tag, GitHub Release, or PyPI upload has
-been made yet. This document is the prepared release note; publication is gated
-on an explicit go-ahead.
+**Status: PUBLISHED.** Tagged `v1.0.0`, GitHub Release and PyPI upload
+completed. (v1.0.1 follows as a documentation-correction patch.)
 
 ## Highlights
 
