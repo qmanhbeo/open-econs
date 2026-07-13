@@ -280,7 +280,7 @@ def test_placebo_space_returns_placebo_result():
 
 
 def test_placebo_time_returns_placebo_result():
-    p = _make_panel()
+    p = _make_panel_small()
     r = _fit(p, predictors=["x1", "x2"])
     pt = r.placebo_time(p["df"])
     assert isinstance(pt.ratios, pd.Series)

@@ -280,10 +280,28 @@ def _fit(p: dict, predictors=None):
     )
 
 
+@pytest.fixture(scope="module")
+def _synth_panel():
+    """Shared deterministic panel for the SynthResult contract tests.
+
+    Module-scoped so the ~18s ``synth()`` fit is paid ONCE and reused across the
+    several independent contract checks (return type, immutability, tidy/export,
+    vcov stub, default predictors, ground-truth recovery, validation) instead of
+    once per test.  The fit is deterministic (``_make_panel`` seeds the RNG) and
+    ``SynthResult`` is immutable, so sharing is safe.
+    """
+    return _make_panel()
+
+
+@pytest.fixture(scope="module")
+def _synth_result(_synth_panel):
+    return _fit(_synth_panel)
+
+
 # ── always-on: result shape / immutability / API ─────────────────
-def test_synth_returns_synth_result():
-    p = _make_panel()
-    r = _fit(p)
+def test_synth_returns_synth_result(_synth_panel, _synth_result):
+    p = _synth_panel
+    r = _synth_result
     assert isinstance(r, SynthResult)
     assert isinstance(r.weights, pd.Series)
     assert isinstance(r.predictor_weights, pd.Series)
@@ -293,16 +311,16 @@ def test_synth_returns_synth_result():
     assert r.weights.index.tolist() == p["donors"]
 
 
-def test_synth_immutability():
-    p = _make_panel()
-    r = _fit(p)
+@pytest.mark.slow
+def test_synth_immutability(_synth_result):
+    r = _synth_result
     with pytest.raises(AttributeError):
         r.pre_mspe = 0.0  # type: ignore[misc]
 
 
-def test_synth_tidy_summary_export(tmp_path):
-    p = _make_panel()
-    r = _fit(p)
+def test_synth_tidy_summary_export(_synth_panel, _synth_result, tmp_path):
+    p = _synth_panel
+    r = _synth_result
     t = r.tidy()
     assert list(t.columns) == ["Donor", "Weight"]
     assert len(t) == len(p["donors"])
@@ -316,9 +334,8 @@ def test_synth_tidy_summary_export(tmp_path):
     assert "gap_path" in d and "convergence" in d
 
 
-def test_synth_vcov_not_implemented():
-    p = _make_panel()
-    r = _fit(p)
+def test_synth_vcov_not_implemented(_synth_result):
+    r = _synth_result
     with pytest.raises(NotImplementedError):
         r.vcov()
 
@@ -366,20 +383,20 @@ def test_synth_predict_plot_stubs():
         r.plot()  # type: ignore[call-arg]
 
 
-def test_synth_default_predictor_behaviour():
+def test_synth_default_predictor_behaviour(_synth_panel, _synth_result):
     """Default predictors = outcome's own pre-treatment path (one per period)."""
-    p = _make_panel()
-    r = _fit(p)
+    p = _synth_panel
+    r = _synth_result
     # P = number of pre periods = 1995 - 1980 = 15 predictors.
     assert len(r.predictor_weights) == (p["pre_period"] - p["times"][0] + 1)
     assert all(n.startswith("y[t=") for n in r.predictor_weights.index)
 
 
 # ── always-on: input validation ──────────────────────────────────
-def test_synth_validation_missing_columns():
-    p = _make_panel()
-    # A valid fit with the existing outcome must succeed (no error).
-    _fit(p)
+def test_synth_validation_missing_columns(_synth_panel, _synth_result):
+    p = _synth_panel
+    r = _synth_result  # a valid fit with the existing outcome must succeed
+    assert isinstance(r, SynthResult)
     with pytest.raises(ValueError):
         synth(p["df"], "nope", p["treated"], p["donors"], entity="unit",
               time="time", pre_period=p["pre_period"], post_period=p["post_period"])
@@ -432,10 +449,10 @@ def test_synth_validation_zero_variance_predictor():
 
 
 # ── always-on: ground-truth recovery ────────────────────────────
-def test_synth_ground_truth_recovery():
+def test_synth_ground_truth_recovery(_synth_panel, _synth_result):
     """Treated is an exact convex combo of d0,d1,d2 + a known post shift."""
-    p = _make_panel()
-    r = _fit(p)
+    p = _synth_panel
+    r = _synth_result
     w = r.weights.sort_index()
     assert abs(w["d0"] - 0.4) < 1e-2
     assert abs(w["d1"] - 0.35) < 1e-2
