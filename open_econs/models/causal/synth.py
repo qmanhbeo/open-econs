@@ -431,8 +431,15 @@ def _solve_w(
     v = v / v.sum()
     V = np.diag(v)
     H = X0_scaled @ V @ X0_scaled.T
-    c = -(X1_scaled @ V @ X0_scaled.T)
     N = X0_scaled.shape[0]
+    P = X0_scaled.shape[1]
+    # L2 regularization for rank-deficient inner QP (donors > predictors).
+    # The unregularized Hessian is PSD with rank at most P; adding a tiny ridge
+    # makes it strictly convex so the minimizer W is unique and numerically
+    # deterministic across BLAS backends / operating systems.
+    if N > P:
+        H = H + 1e-12 * np.eye(N)
+    c = -(X1_scaled @ V @ X0_scaled.T)
 
     def _obj(w: np.ndarray) -> float:
         return 0.5 * float(w @ H @ w) + float(c @ w)
