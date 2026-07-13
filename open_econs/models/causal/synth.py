@@ -39,7 +39,7 @@ from typing import Any, Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
-from scipy.optimize import minimize
+from scipy.optimize import OptimizeResult, minimize
 
 from open_econs._internal import errors
 from open_econs.core.call_capture import capture_call as _capture_call
@@ -506,7 +506,7 @@ def _optimize_v(
     if "maxiter" in solver_kwargs:
         nm_opts["maxiter"] = solver_kwargs["maxiter"]
 
-    def _run_multi_method(start: np.ndarray) -> "OptimizeResult":
+    def _run_multi_method(start: np.ndarray) -> OptimizeResult:
         """Run NM + SLSQP from *start*, return the better result.
 
         NM is derivative-free and BLAS-insensitive, so it is useful as a
