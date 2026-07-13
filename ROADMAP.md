@@ -1,15 +1,15 @@
 ## Roadmap
 
-open-econs is built in two horizons. The **committed roadmap** (v0.1 → v1.0) is
-what the maintainers are actually building and will be held to. The **North
-Star** (v1.1 → v5.0) is the long-run vision — where the project could go if it
-earns a community around it. Nothing past v1.0 is a promise; it's a map of the
-terrain worth exploring, so contributors and users can see where their work
-might fit.
+open-econs is built in two horizons. The **committed roadmap** (v0.1 → v1.0,
+then the post-v1.0 milestones v1.1 → v1.3) is what the maintainers are actually
+building and will be held to. The **North Star** (v1.4 → v5.0) is the long-run
+vision — where the project could go if it earns a community around it. Nothing
+past the committed v1.3 is a promise; it's a map of the terrain worth exploring,
+so contributors and users can see where their work might fit.
 
 ---
 
-### Committed Roadmap
+### Committed Roadmap (v0.1 → v1.0)
 
 #### v0.1 — Foundation *(shipped)*
 - [x] `ols()` / `reg()` — OLS with HC1/robust and clustered standard errors
@@ -111,11 +111,48 @@ Landed across v0.6.1–v0.6.9 (patch-level numeric detail → `docs/v06x-parity-
 
 ---
 
-### v1.1 Candidates *(deferred — NO committed timeline)*
+### Committed Roadmap (post-v1.0)
 
-These items were scoped during the v1.0 close-out but are **not** committed to
-any release. They are recorded here so the work is visible and not lost; no
-dates, no promises.
+These milestones are committed in the same sense as v0.1–v1.0: each ships with
+parity tests before merge and is held to the same quality bar. They are the
+direct response to the senior-empirical-economist review of v1.0 — closing the
+time-series, limited-DV, and diagnostics gaps while making the Stata/R parity
+suite and per-estimator maturity explicit.
+
+#### v1.1 — Time-series econometrics *(committed)*
+The largest gap flagged by the reviewer (macro / finance / energy users look for
+a `tsset` equivalent immediately). New `open_econs/models/timeseries/` module plus
+a `tsset` equivalent on `PanelContext` / `TimeSeriesContext` (remembered time
+ordering + lag operators):
+- Univariate: `arima()` / `arma()` (AIC/BIC, `.forecast()`)
+- Unit-root: `adf()`, `pp()`, `kpss()` (statistic, p-value, critical values)
+- Cointegration: `johansen()` (trace + max-eigenvalue), `engle_granger()`
+- Multivariate: `var()` (`.irf()`, `.fevd()`, `.granger()` Granger causality), `vecm()`
+- ARDL/ECM: `ardl()` (bounds test), `ecm()`
+- Parity vs Stata `dfuller` / `pperron` / `kpss` / `vecrank` / `var` /
+  `vargranger` / `fcast` and R `urca` / `vars`
+- Sub-milestones (all under committed v1.1): 1.1.0 unit-root + ARIMA;
+  1.1.1 VAR/VECM + IRF/FEVD + Granger; 1.1.2 ARDL/ECM
+
+#### v1.2 — Count & limited dependent variable models *(committed)*
+New `open_econs/models/limited/` module:
+- `poisson()`, `nbreg()` (NB1/NB2), `ologit()` / `oprobit()` (ordered)
+- `tobit()` — MLE (statsmodels has no Tobit); validate vs R `censReg` / `AER::tobit`
+- `heckman()` — selection model (two-step + MLE); validate vs R `sampleSelection`
+- First-class `.margins()` / `.predict()`; parity vs Stata `poisson` / `nbreg` /
+  `tobit` / `heckman` / `ologit` / `oprobit`
+- Ships at **Beta** in the maturity table; `tobit` / `heckman` backend recon
+  recorded under "Explicitly Deferred Estimators" if it blocks the release
+
+#### v1.3 — Diagnostics: build missing + test *(committed)*
+Promote the existing JB / Breusch-Pagan / Durbin-Watson / Ramsey RESET / VIF into
+a consistent first-class result API, and implement the missing `estat` battery:
+- `bg_test()` (Breusch-Godfrey), `white_test()`, `ljung_box()`
+- `cooks_distance()`, `leverage()`, `dfbetas()`, `influence()`
+- `result.diagnostics()` summary `DataFrame`
+- Parity vs Stata `estat hettest` (BP/White), `estat bgodfrey`, `estat ovtest`
+  (RESET), `estat vif`, `predict, cooksd` / `dfbeta`, `sktest` / `swilk`,
+  `estat archlm`
 
 #### Done post-1.0 (deferred v1.0 stubs, now completed)
 
@@ -146,19 +183,21 @@ promise with a date on it.
   Stata's `xtreg, pa`. *Deferred from v0.9*; build only if demand materialises.
   No timeline attached.
 
-#### v1.x — Method Breadth
+#### v1.x — Method Breadth (aspirational; renumbered to avoid colliding with the committed v1.1–v1.3 above)
 The estimator library grows outward from the causal-inference core into the
-adjacent methods empirical economists actually reach for:
-- **v1.1** — Quantile regression; heteroskedasticity- and outlier-robust regression (MM-estimators)
-- **v1.2** — Dynamic panel breadth: Blundell-Bond system GMM, extending the existing `abond()`/GMM-core foundation
-- **v1.3** — Complex survey design: weighting, stratification, replicate-weight variance estimation
-- **v1.4** — High-dimensional methods: LASSO/post-double-selection for inference with many controls
-- **v1.5** — Spatial econometrics: spatial lag/error models, Moran's I diagnostics
-- **v1.6** — ML-assisted causal inference: double/debiased ML (Chernozhukov et al.), causal forests, targeted maximum likelihood
-- **v1.7** — Network econometrics: peer effects, network formation models
-- **v1.8** — Structural discrete choice: BLP demand estimation, dynamic discrete choice (Rust-style)
-- **v1.9** — Bayesian econometrics: Bayesian VAR, hierarchical models, MCMC-backed inference as an `inference="bayesian"` path on existing estimators
-- **v1.10** — Text-as-data: dictionary methods, embeddings-based regressors, econometrically-valid LLM-derived features (with measurement-error caveats explicit)
+adjacent methods empirical economists actually reach for. Survey/`.svy` design
+was explicitly requested by the reviewer and is tracked here at v1.6 (deferred
+to after the committed count/limited-DV and diagnostics work):
+- **v1.4** — Quantile regression; heteroskedasticity- and outlier-robust regression (MM-estimators)
+- **v1.5** — Dynamic panel breadth: Blundell-Bond system GMM, extending the existing `abond()`/GMM-core foundation
+- **v1.6** — Complex survey design (`.svy`): weighting, stratification, replicate-weight variance estimation
+- **v1.7** — High-dimensional methods: LASSO/post-double-selection for inference with many controls
+- **v1.8** — Spatial econometrics: spatial lag/error models, Moran's I diagnostics
+- **v1.9** — ML-assisted causal inference: double/debiased ML (Chernozhukov et al.), causal forests, targeted maximum likelihood
+- **v1.10** — Network econometrics: peer effects, network formation models
+- **v1.11** — Structural discrete choice: BLP demand estimation, dynamic discrete choice (Rust-style)
+- **v1.12** — Bayesian econometrics: Bayesian VAR, hierarchical models, MCMC-backed inference as an `inference="bayesian"` path on existing estimators
+- **v1.13** — Text-as-data: dictionary methods, embeddings-based regressors, econometrically-valid LLM-derived features (with measurement-error caveats explicit)
 
 Design constraint carried through all of v1.x: **every new estimator ships
 with a parity test against an existing reference implementation before merge.**

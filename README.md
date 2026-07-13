@@ -12,11 +12,28 @@ open-econs brings familiar empirical economics methods from Stata and R into a
 unified Python workflow. Every estimator uses a consistent API, with numerical
 validation against established reference implementations.
 
-- 217 Stata- and R-parity tests (208 vs Stata, 9 vs R) verify coefficients
-  and standard errors match reference implementations at machine precision.
+- 217 Stata- and R-parity tests (208 vs Stata, 9 vs R) verify coefficients and
+  standard errors against reference implementations — at tolerances from `1e-6`
+  (typical) up to `1e-15` for the tightest exact-equivalence cases (IV /
+  Arellano-Bond / synthetic control), mostly `1e-6`–`1e-10`.
 - One consistent interface across all estimators: `.summary()`, `.tidy()`,
   `.vcov()`, `.predict()`, `.export()`, `.to_latex()`.
 - Immutable, named pandas outputs — no raw arrays crossing the public API.
+
+## Validated against Stata & R
+
+Empirical researchers trust software because *someone else already tested it*.
+open-econs ships a tiered parity suite — **217 parity tests (208 vs Stata, 9 vs
+R)** — that checks coefficients **and** standard errors against reference
+implementations. Tolerances run from `1e-6` (the common default, used in ~80
+checks) up to `1e-15` for the tightest exact-equivalence cases (e.g. IV,
+Arellano-Bond, synthetic control), with most checks clustered at `1e-6`–`1e-10`.
+The `stata` /
+`r` parity markers run in CI on every release (see [Testing](TESTING.md)), so a
+numerical-equivalence regression fails the build before it ships. This is the
+project's primary trust signal, not a marketing claim — and it is the reason a
+senior empirical economist's first reaction was "finally, a Stata for modern
+Python."
 
 ## Installation
 
@@ -96,11 +113,13 @@ If you know the Stata or R command, you already know the open-econs equivalent.
 
 See [Migrating from Stata](docs/migrating_from_stata.md) for a
 detailed migration guide, or [Migrating from R](docs/migrating_from_r.md)
-for the R equivalent. Step-by-step porting walkthroughs for the causal
-estimators live in [Tutorials](docs/tutorials/README.md): [RDD](docs/tutorials/rdd.md)
-(maps to `rdrobust` / `rddensity`), [PSM](docs/tutorials/psm.md) (maps to
-`MatchIt` / `teffects psmatch`), and [Synthetic Control](docs/tutorials/synth_control.md)
-(maps to `Synth` / `synth`).
+for the R equivalent.
+
+Step-by-step porting walkthroughs for the causal estimators live in
+[Tutorials](docs/tutorials/README.md):
+- [RDD](docs/tutorials/rdd.md) (maps to `rdrobust` / `rddensity`)
+- [PSM](docs/tutorials/psm.md) (maps to `MatchIt` / `teffects psmatch`)
+- [Synthetic Control](docs/tutorials/synth_control.md) (maps to `Synth` / `synth`)
 
 ## Quick Start
 
@@ -159,59 +178,35 @@ r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
 
 ## Supported Methods
 
-| Function | Description |
-|---|---|
-| `ols()` / `reg()` | OLS with HC1/robust/clustered SEs, multi-way clustering, Newey-West HAC, WLS |
-| `fe()` | Fixed effects (one-way entity, two-way entity + time) |
-| `iv()` | Instrumental variables / 2SLS with first-stage F-stat |
-| `logit()` | Binary logit with `.margins()`, `.predict()` |
-| `probit()` | Binary probit (same API as logit) |
-| `mlogit()` | Multinomial logit (MNLogit) with per-outcome `.margins()` (dict), `.predict()`, robust/cluster SEs |
-| `oaxaca()` | Oaxaca-Blinder decomposition (two-fold, three-fold; multiple reference types) |
-| `nls()` | Nonlinear least squares (Gauss-Newton via scipy, analytic Jacobian) |
-| `gmm()` | General linear GMM framework (reuses `iv()` formula grammar; Hansen J size/power) |
-| `abond()` | Arellano-Bond dynamic panel GMM (one/two-step, Windmeijer SEs, collapsed instruments) |
-| `staggered_did()` | Callaway-Sant'Anna (2021) staggered DiD (doubly-robust `dripw` or `reg`) |
-| `rdd()` | Sharp / fuzzy regression discontinuity (local linear, triangular kernel) |
-| `did()` / `event_study()` | Two-period DiD, event-study with pre-trend diagnostics |
-| `psm()` | Propensity score matching (1:1 nearest-neighbor with replacement, AI 2012 SEs) |
-| `cem()` | Coarsened exact matching (auto or explicit cutpoints, multiple binning methods) |
-| `balance()` | Covariate balance diagnostics (SMD, variance ratio, weighted t-tests) |
-| `rosenbaum_bounds()` | Sensitivity analysis for matched pairs |
-| `synth()` | Synthetic control (Abadie-Diamond-Hainmueller) core point estimator: nested predictor-weight (V) + donor-weight (W) optimization, gap path, R/Stata parity |
-| `placebo_space()` | Synthetic control placebo-in-space permutation inference (ADH): re-fits `synth()` once per donor; `post/pre` MSPE ratio per placebo; permutation p-value; optional `exclude_pre_mspe_multiple` (space-only) |
-| `placebo_time()` | Synthetic control placebo-in-time permutation inference (ADH): re-fits `synth()` once per candidate pre-treatment date; `post/pre` MSPE ratio per candidate; permutation p-value |
-| `PanelContext(...)` | Pooled/FE/RE/FD/Driscoll-Kraay/Hausman/ABond with remembered entity/time |
-| `Context(...)` | Dataset-scoped workflow with access to all above estimators |
+| Function | Description | Status |
+|---|---|---|
+| `ols()` / `reg()` | OLS with HC1/robust/clustered SEs, multi-way clustering, Newey-West HAC, WLS | Production |
+| `fe()` | Fixed effects (one-way entity, two-way entity + time) | Production |
+| `iv()` | Instrumental variables / 2SLS with first-stage F-stat | Production |
+| `logit()` | Binary logit with `.margins()`, `.predict()` | Production |
+| `probit()` | Binary probit (same API as logit) | Production |
+| `mlogit()` | Multinomial logit (MNLogit) with per-outcome `.margins()` (dict), `.predict()`, robust/cluster SEs | Beta |
+| `oaxaca()` | Oaxaca-Blinder decomposition (two-fold, three-fold; multiple reference types) | Production |
+| `nls()` | Nonlinear least squares (Gauss-Newton via scipy, analytic Jacobian) | Beta |
+| `gmm()` | General linear GMM framework (reuses `iv()` formula grammar; Hansen J size/power) | Beta |
+| `abond()` | Arellano-Bond dynamic panel GMM (one/two-step, Windmeijer SEs, collapsed instruments) | Production |
+| `staggered_did()` | Callaway-Sant'Anna (2021) staggered DiD (doubly-robust `dripw` or `reg`) | Beta |
+| `rdd()` | Sharp / fuzzy regression discontinuity (local linear, triangular kernel) | Production |
+| `did()` / `event_study()` | Two-period DiD, event-study with pre-trend diagnostics | Production |
+| `psm()` | Propensity score matching (1:1 nearest-neighbor with replacement, AI 2012 SEs) | Production |
+| `cem()` | Coarsened exact matching (auto or explicit cutpoints, multiple binning methods) | Production |
+| `balance()` | Covariate balance diagnostics (SMD, variance ratio, weighted t-tests) | Production |
+| `rosenbaum_bounds()` | Sensitivity analysis for matched pairs | Beta |
+| `synth()` | Synthetic control (Abadie-Diamond-Hainmueller) core point estimator: nested predictor-weight (V) + donor-weight (W) optimization, gap path, R/Stata parity | Production |
+| `placebo_space()` | Synthetic control placebo-in-space permutation inference (ADH): re-fits `synth()` once per donor; `post/pre` MSPE ratio per placebo; permutation p-value; optional `exclude_pre_mspe_multiple` (space-only) | Beta |
+| `placebo_time()` | Synthetic control placebo-in-time permutation inference (ADH): re-fits `synth()` once per candidate pre-treatment date; `post/pre` MSPE ratio per candidate; permutation p-value | Beta |
+| `PanelContext(...)` | Pooled/FE/RE/FD/Driscoll-Kraay/Hausman/ABond with remembered entity/time | Production |
+| `Context(...)` | Dataset-scoped workflow with access to all above estimators | Production |
 
-### Synthetic control placebo inference (ADH)
-
-`placebo_space()` / `placebo_time()` build on a fitted `synth()` result and
-reuse its validated solver — no estimator logic is duplicated. The caller only
-supplies the panel `data`; the result carries the rest of the fit config.
-
-```python
-from open_econs.models.causal.synth import synth
-from open_econs.models.causal.placebo import placebo_space, placebo_time
-
-r = synth(df, "y", treated_unit="t", donor_pool=donors,
-          entity="unit", time="time", pre_period=1994, post_period=1995)
-
-ps = placebo_space(r, df)                 # permutation p-value across donors
-print(ps.p_value, ps.ratios)              # fraction of donor ratios >= treated's
-
-pt = placebo_time(r, df)                  # permutation p-value across candidate dates
-print(pt.p_value)
-
-# Opt-in, space-only pre-fit exclusion (default None: never applied silently):
-ps_filtered = placebo_space(r, df, exclude_pre_mspe_multiple=10.0)
-```
-
-`SynthResult` now also stores the original `predictors` argument (the one
-fit-config field it previously lacked) so the delegate can reconstruct each
-placebo call. `placebo_time()` does **not** accept `exclude_pre_mspe_multiple` —
-in the in-time loop "pre-MSPE" is the treated unit's own fit against itself at a
-different cutoff, so the space-style exclusion concept does not carry over.
+*Status reflects validation maturity: **Production** = machine-precision parity
+vs Stata/R on reference fixtures; **Beta** = validated but with narrower parity
+coverage or known edge cases documented in `methodology/`. Every estimator
+ships with parity tests before merge.*
 
 ## Result API
 

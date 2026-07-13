@@ -20,6 +20,32 @@ fixtures. The `-m "not stata and not r"` expression is kept only as an opt-in
 | `@pytest.mark.stata` | Compares against a Stata-generated `.dta` fixture. |
 | `@pytest.mark.r` | Compares against R output produced via `Rscript`. |
 
+### Parity scope and counts
+
+Collected totals (verified with `pytest --collect-only`):
+
+- **Full suite:** 705 tests.
+- **Parity subset (`-m "stata or r"`):** 217 tests = **208 Stata** + **9 R**,
+  with **zero** tests marked for both engines (the `stata and r` intersection is
+  empty). The 208/9 split counts test *functions*, not methods.
+
+The `stata` and `r` suites are **not** a clean partition of methods:
+
+- The 9 R tests mostly cover estimators that have **no** Stata fixture:
+  synthetic control (`test_synth.py`), NLS (`test_nls.py`), FE-HAC
+  (`test_fe_hac.py`), and synthetic-control placebo (`test_synth_placebo.py`).
+- A few methods carry parity against **both** engines via separate tests — the
+  example is `mlogit` (`tests/stata/test_mlogit.py` has 3 Stata-marked tests and
+  1 R-marked test).
+
+### Tolerance
+
+Parity assertions are not all to "machine precision." Tolerances run from
+`1e-6` (the common default, used in ~80 checks) up to `1e-15` for the tightest
+exact-equivalence cases (e.g. IV, Arellano-Bond, synthetic control), with most
+checks clustered at `1e-6`–`1e-10`. Refer to individual test files for the
+exact `rtol`/`atol` on each comparison.
+
 The `stata`/`r` markers are **no longer excluded by default**. `addopts` in
 `pyproject.toml` keeps only the `tests/stata/do/archive` ignore; a bare
 `pytest` collects and runs every test, including the parity tests:
@@ -117,10 +143,11 @@ Key maintainer notes (full detail in `tests/r/README.md`):
 ## CI
 
 CI (`.github/workflows/ci.yml`) has no Stata/R binaries. The single
-`pytest tests/ ...` step runs the **full suite** (607 tests): because the
+`pytest tests/ ...` step runs the **full suite** (705 tests): because the
 default run includes the `stata`/`r` parity tests and they read committed
 fixtures only, no binary is launched. The separate `-m "stata or r"` parity
-step was removed as redundant — it only re-ran the 216-test parity subset
-already covered by the full default run. The drift check in `stata_runner.py`
+step was removed as redundant — it only re-ran the 217-test parity subset
+(208 vs Stata, 9 vs R) already covered by the full default run. The drift check
+in `stata_runner.py`
 still fails a parity test loudly if a `.do` file is newer than its committed
 `.dta`, catching stale fixtures.
