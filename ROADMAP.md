@@ -231,15 +231,6 @@ might fit.
   without-replacement option; without-replacement may be added later if needed.
   (b) Default caliper (1.0) validated; tighter calipers not independently tested.
   See ``tests/test_psm.py``.
-- [ ] **Kernel / smooth-weight matching on top of the PS engine — INVESTIGATED 2026-07-11, deliberately NOT built in v0.8 (deferred to v0.9 as its own scoped, parity-validated pass). Classification: (c) investigated, deliberately deferred.**
-  - **Reference implementation:** `psmatch2` (Leuven & Sianesi, SSC) is the classic/applied-standard kernel matcher and directly supports `kernel` on the PS (`psmatch2 treat covariates, kernel kerneltype(epan) bw(#) outcome(y) ate` — confirmed live, ATT = −31.07, S.E. = 22.53 on cattaneo2). `kmatch` (Ben Jann, SSC) is the modern alternative (richer options, better-documented variance). **Both are viable parity references for the point estimate**; `psmatch2` is the more "expected" one in applied micro. Confirmed live that `teffects psmatch` does **not** accept `kernel` (r(198)), and neither does `teffects nnmatch` in this Stata 17 — so `teffects` (the command `psm()` is validated against for NN) cannot be the kernel reference. Installed `kmatch` is 1.1.5 (only `kmatch md ..., kernel()`; `psmatch2` runs out of the box).
-  - **Variance (read from source) — and why the SE is the hard part:** all three Stata commands compute the *same* kernel-on-PS point estimate but **diverge on the SE**, and none matches OE's `psm()` standard:
-    - `psmatch2, kernel` → Abadie–Imbens (2002) influence function, **explicitly without** the PS-estimation correction (its own output note: "S.E. does not take into account that the propensity score is estimated") — known to *understate* SEs.
-    - `kmatch` → influence function with weights assumed *fixed* (Jann 2019); `kmatch.sthlp` states analytic SEs are generally *conservative* and recommends `teffects`/bootstrap for consistent SEs.
-    - `teffects psmatch` (discrete NN, what `psm()` is validated against) → **full AI-2012**, including the `c'_τ V_γ c_τ` PS-estimation adjustment (`psm.py:382,384,470-473`).
-    - **Consequence:** since `teffects` can't do kernel, ANY kernel reference (psmatch2 *or* kmatch) leaves a gap — to stay consistent with OE's teffects-equivalent standard the kernel variance needs *both* the continuous-weight `K/K'` generalization *and* the PS-estimation adjustment, which neither user command provides by default. The point estimate is reusable; the variance is a genuine build.
-  - **The continuous-weight trap (the reason it is not a bolt-on):** OE's `psm()` variance (`psm.py`) is built on the discrete NN with-replacement count structure — `K_m(i)` (times matched) and `K'_m(i) = Σ_{j: i∈Ω(j)} 1/|Ω(j)|²` (the `K² + 2K − K'` term, `psm.py:382,405,426`). For kernel weights these counts are replaced by **weight-based aggregates** (total kernel weight supplied/received, and a normalized-squared-weight term). A naive "weighted average" plug-in is wrong — the `K'` normalization is what carries the AI-2012 variance over to continuous weights. This needs its own validated implementation, not an extension of the discrete `K/K'`.
-  - **Why deferred (not (a) reuse, not (b) built now):** it is a distinct estimator from the discrete-NN `psm()` variance, not a reuse; and bolting an un-validated continuous-weight variance onto the v0.8 close-out would violate the "built-and-validated or explicitly deferred" + "CI-green" standard. It deserves a dedicated pass with parity fixtures vs `kmatch` (and a decision on analytic-fixed-weights vs bootstrap). Revisit as v0.9 line item.
 - [x] Coarsened exact matching
 
   Core CEM: auto-Sturges coarsening (matching Stata's default), explicit
@@ -262,8 +253,6 @@ might fit.
   strata/weights/matched validated against Stata 17 for all four methods on a
   500-obs synthetic fixture.  FD includes Stata's MAD fallback when IQR=0.
   See ``tests/stata/test_stata_cem_autocuts.py``.
-  k2k matching and L1 balance diagnostics remain as Pass 3 (investigated,
-  deliberately not built — see prior investigation report).
 - [x] Pass 1 — weighted balance diagnostics in ``ctx.balance()``:
       ``weights=`` parameter with SMD (unweighted pooled-SD denominator,
       Rosenbaum–Rubin convention), variance ratio (weighted group variances),
@@ -290,8 +279,7 @@ might fit.
 - [x] `mlogit()` — multinomial logit (shipped, see v0.8)
 - [x] `synth()` — synthetic control (Abadie-Diamond-Hainmueller) — **core point estimator shipped** (v0.9)
    - Shipped: nested V+W optimization (outer predictor weights via R `Synth`'s two-start equal/regression procedure; inner donor-weight QP, `W>=0` & `sum W=1`, via SLSQP), `SynthResult` exposing `weights` / `predictor_weights` / `pre_mspe` / `post_mspe` / `gap_path`, `custom.v` fixed-`V` support, and R `Synth` (primary) + Stata `synth` (secondary) parity tests that run against committed fixtures with **zero skips** on CI (no Stata/R binary launched). Default predictors = outcome's own pre-treatment path (one per period); explicit predictors = user-supplied covariates aggregated by pre-window mean.
-  - Shipped (v0.9, this pass): `placebo_space()` / `placebo_time()` ADH permutation inference on top of the validated `synth()` solver — no estimator logic duplicated. `SynthResult` now also stores the original `predictors` argument (the one fit-config field it previously lacked) so the delegate can reconstruct each placebo call. `exclude_pre_mspe_multiple` is an **opt-in, space-only** pre-fit exclusion parameter (default `None`: never applied silently; ADH's chosen multipliers vary by application, so no single value is hard-coded). `placebo_time()` deliberately does **not** accept `exclude_pre_mspe_multiple` (in the in-time loop "pre-MSPE" is the treated unit's own fit against itself, so the space-style exclusion concept does not carry over; passing it raises `TypeError`). Verified against R `Synth` via a gated parity test (p-value matches exactly; per-donor ratio agreement `< 0.1` for the well-determined majority; residual up-to-`~3` divergence on a handful of rank-deficient placebo donors is the same documented nonconvex-V solver divergence as the core `synth()` parity test — reported, not forced to match).
-   - Deferred (own future items, currently `NotImplementedError` by design): `plot()`; `predict()` out-of-sample counterfactual.
+  - Shipped (v0.9, this pass): `placebo_space()` / `placebo_time()` ADH permutation inference on top of the validated `synth()` solver — no estimator logic duplicated. `SynthResult` now also stores the original `predictors` argument (the one fit-config field it previously lacked) so the delegate can reconstruct each placebo call. `exclude_pre_mspe_multiple` is an **opt-in, space-only** pre-fit exclusion parameter (default `None`: never applied silently; ADH's chosen multipliers vary by application, so no single value is hard-coded). `placebo_time()` deliberately does **not** accept `exclude_pre_mspe_multiple` (in the in-time loop "pre-MSPE" is the treated unit's own fit against itself, so the space-style exclusion concept does not carry over; passing it raises `TypeError`).    Verified against R `Synth` via a gated parity test (p-value matches exactly; per-donor ratio agreement `< 0.1` for the well-determined majority; residual up-to-`~3` divergence on a handful of rank-deficient placebo donors is the same documented nonconvex-V solver divergence as the core `synth()` parity test — reported, not forced to match).
 - [x] `synth()` solver cross-OS nondeterminism *(fixed: see `docs/synth-cross-os-solver-recon-update.md`)*. The inner QP's Hessian is singular when `N > P` (donors > predictors), making the minimizer `W` non-unique. Different BLAS backends would therefore select different `W` from the optimal affine subspace, which cascaded into different outer-`V` trajectories and thus different local `V` optima on Linux vs Windows. The fix adds a **tiny L2 ridge** (1e-12) to the inner QP Hessian when `N > P`. This makes the problem strictly convex with a unique `W` for any given `V`, so the outer `V` landscape is deterministic across BLAS backends. The ridge is negligible — well-determined cases (`P >= N`) are bit-identical, and the rank-deficient case now produces covariate mismatch `5.59e-05` (was `2.67e-07` on Windows, `0.327` on Linux) — well within the `1e-2` parity threshold. Both previously-gated parity tests (`test_synth_rank_deficient_qp_same_objective_different_w`, `test_placebo_space_parity_r`) are re-enabled as fixture-based CI tests.
 - [x] Placebo-in-space and placebo-in-time inference (ADH permutation p-value; shipped as `placebo_space()` / `placebo_time()`)
 - [x] Newey-West HAC standard errors as a `cov_type` option — shipped for `ols()`/`reg()` (v0.6.8.4), `fe()` and `nls()` (period-aggregation / Driscoll-Kraay convention, validated against statsmodels `cov_nw_groupsum` + R `sandwich`). `PanelContext.driscoll_kraay()` now accepts `cov_type="HAC"` as a preferred alias for the historical `cov_type="kernel"` (both invoke the same linearmodels Driscoll-Kraay / period-aggregation Bartlett-kernel Newey-West estimator; verified identical to the project's own `newey_west_cov`); the previously open `"kernel"`/`"HAC"` naming inconsistency is **resolved** (additive alias, no breaking change). Remaining: `iv()`/other estimators.
@@ -417,8 +405,66 @@ and help decide when it moves from "vision" to "roadmap."*
   with τ∈(0,1) (needs a genuinely nested, non-degenerate case to lock the
   estimator). (c) The analytic gradient (~200 lines of recursive tree traversal,
   Stata's `_dldtau`/`_dldx` Mata) needs a domain-expert implementation; a wrong
-  gradient silently yields wrong SEs. Also: no library backend exists
-  (statsmodels has only `MNLogit`), so it is a from-scratch build of ~500–800
-  lines + ~300 lines parity tests. Do NOT start until these are resolved.
+   gradient silently yields wrong SEs. Also: no library backend exists
+   (statsmodels has only `MNLogit`), so it is a from-scratch build of ~500–800
+   lines + ~300 lines parity tests. Do NOT start until these are resolved.
+
+- `psm()` kernel / smooth-weight matching — INVESTIGATED 2026-07-11, deliberately
+  NOT built in v0.8 (deferred to its own scoped, parity-validated pass).
+  Classification: (c) investigated, deliberately deferred.
+  - **Reference implementation:** `psmatch2` (Leuven & Sianesi, SSC) is the
+    classic/applied-standard kernel matcher and directly supports `kernel` on the
+    PS (`psmatch2 treat covariates, kernel kerneltype(epan) bw(#) outcome(y) ate`
+    — confirmed live, ATT = −31.07, S.E. = 22.53 on cattaneo2). `kmatch` (Ben
+    Jann, SSC) is the modern alternative (richer options, better-documented
+    variance). **Both are viable parity references for the point estimate**;
+    `psmatch2` is the more "expected" one in applied micro. Confirmed live that
+    `teffects psmatch` does **not** accept `kernel` (r(198)), and neither does
+    `teffects nnmatch` in this Stata 17 — so `teffects` (the command `psm()` is
+    validated against for NN) cannot be the kernel reference. Installed `kmatch`
+    is 1.1.5 (only `kmatch md ..., kernel()`; `psmatch2` runs out of the box).
+  - **Variance (read from source) — and why the SE is the hard part:** all three
+    Stata commands compute the *same* kernel-on-PS point estimate but **diverge
+    on the SE**, and none matches OE's `psm()` standard:
+    - `psmatch2, kernel` → Abadie–Imbens (2002) influence function, **explicitly
+      without** the PS-estimation correction (its own output note: "S.E. does not
+      take into account that the propensity score is estimated") — known to
+      *understate* SEs.
+    - `kmatch` → influence function with weights assumed *fixed* (Jann 2019);
+      `kmatch.sthlp` states analytic SEs are generally *conservative* and
+      recommends `teffects`/bootstrap for consistent SEs.
+    - `teffects psmatch` (discrete NN, what `psm()` is validated against) →
+      **full AI-2012**, including the `c'_τ V_γ c_τ` PS-estimation adjustment
+      (`psm.py:382,384,470-473`).
+    - **Consequence:** since `teffects` can't do kernel, ANY kernel reference
+      (psmatch2 *or* kmatch) leaves a gap — to stay consistent with OE's
+      teffects-equivalent standard the kernel variance needs *both* the
+      continuous-weight `K/K'` generalization *and* the PS-estimation adjustment,
+      which neither user command provides by default. The point estimate is
+      reusable; the variance is a genuine build.
+  - **The continuous-weight trap (the reason it is not a bolt-on):** OE's `psm()`
+    variance (`psm.py`) is built on the discrete NN with-replacement count
+    structure — `K_m(i)` (times matched) and `K'_m(i) = Σ_{j: i∈Ω(j)} 1/|Ω(j)|²`
+    (the `K² + 2K − K'` term, `psm.py:382,405,426`). For kernel weights these
+    counts are replaced by **weight-based aggregates** (total kernel weight
+    supplied/received, and a normalized-squared-weight term). A naive "weighted
+    average" plug-in is wrong — the `K'` normalization is what carries the
+    AI-2012 variance over to continuous weights. This needs its own validated
+    implementation, not an extension of the discrete `K/K'`.
+  - **Why deferred (not (a) reuse, not (b) built now):** it is a distinct
+    estimator from the discrete-NN `psm()` variance, not a reuse; and bolting an
+    un-validated continuous-weight variance onto the v0.8 close-out would violate
+    the "built-and-validated or explicitly deferred" + "CI-green" standard. It
+    deserves a dedicated pass with parity fixtures vs `kmatch` (and a decision on
+    analytic-fixed-weights vs bootstrap).
+
+- `cem()` k2k matching + L1 balance diagnostics — Pass 3, investigated,
+  deliberately not built (see prior investigation report).
+
+## Known Limitations (NotImplementedError by design)
+
+- `synth()` — `plot()` and `predict()` (out-of-sample counterfactual) currently
+  raise `NotImplementedError` by design; deferred as own future items.
+
 
 
