@@ -1,0 +1,44 @@
+name: Nightly Full Suite
+
+# Runs the ENTIRE test suite (fast + slow + parity) once per night and on
+# manual dispatch. This is the single nightly safety net: the per-PR `ci.yml`
+# only runs the lean fast path (`-m "not slow"`), and `ci-parity.yml` is the
+# release-time parity double-check. This workflow covers everything else.
+on:
+  schedule:
+    # Nightly at 03:17 UTC (non-round minute avoids the top-of-hour stampede).
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  full-suite:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev,lint,plot,rd]"
+
+      - name: Lint with ruff
+        run: ruff check open_econs/
+
+      - name: Type-check with mypy
+        run: mypy open_econs/ --ignore-missing-imports
+
+      # Full suite: NO `-m` filter, so fast + slow + `stata` + `r` all run.
+      # Parity (`stata`/`r`) runs against STATIC committed fixtures here —
+      # live fixture REGENERATION still needs self-hosted Stata/R (documented
+      # gap, not covered by free runners). Same fixture set as ci-parity.yml,
+      # just exercised nightly instead of only at release time.
+      - name: Run full test suite (fast + slow + parity)
+        run: python -m pytest tests/ -v --tb=short
