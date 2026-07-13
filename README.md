@@ -8,34 +8,32 @@
 
 **Python econometrics with Stata/R parity.**
 
+Empirical researchers often use Python for data cleaning, Stata for estimation,
+R for specialized methods, and LaTeX or custom scripts for output — a fragmented
+workflow that hurts reproducibility.
+
 open-econs brings familiar empirical economics methods from Stata and R into a
 unified Python workflow. Every estimator uses a consistent API, with numerical
 validation against established reference implementations.
 
-- 217 Stata- and R-parity tests (208 vs Stata, 9 vs R) verify coefficients and
+- **Familiar estimators** — OLS, fixed effects, IV/2SLS, logit, probit,
+  difference-in-differences, event studies, RDD, panel models, matching,...
+- **Tested against Stata/R** 217 Stata- and R-parity tests (208 vs Stata, 9 vs R) verify coefficients and
   standard errors against reference implementations — at tolerances from `1e-6`
   (typical) up to `1e-15` for the tightest exact-equivalence cases (IV /
-  Arellano-Bond / synthetic control), mostly `1e-6`–`1e-10`.
-- One consistent interface across all estimators: `.summary()`, `.tidy()`,
+  Arellano-Bond / synthetic control), mostly `1e-6`–`1e-10`. They run in CI on
+  every release, so a numerical-equivalence regression fails the build before it
+  ships.
+- **One consistent interface**  across all estimators: `.summary()`, `.tidy()`,
   `.vcov()`, `.predict()`, `.export()`, `.to_latex()`.
-- Immutable, named pandas outputs — no raw arrays crossing the public API.
+- **Named pandas outputs** — coefficients, standard errors, and diagnostics
+  return as `pd.Series` or `pd.DataFrame` with clear labels
+- **Immutable results** — no accidental mutation after estimation
+- **Reproducible exports** — JSON, CSV, LaTeX, HTML from any result
 
-## Validated against Stata & R
+## Installation & Quick Start
 
-Empirical researchers trust software because *someone else already tested it*.
-open-econs ships a tiered parity suite — **217 parity tests (208 vs Stata, 9 vs
-R)** — that checks coefficients **and** standard errors against reference
-implementations. Tolerances run from `1e-6` (the common default, used in ~80
-checks) up to `1e-15` for the tightest exact-equivalence cases (e.g. IV,
-Arellano-Bond, synthetic control), with most checks clustered at `1e-6`–`1e-10`.
-The `stata` /
-`r` parity markers run in CI on every release (see [Testing](TESTING.md)), so a
-numerical-equivalence regression fails the build before it ships. This is the
-project's primary trust signal, not a marketing claim — and it is the reason a
-senior empirical economist's first reaction was "finally, a Stata for modern
-Python."
-
-## Installation
+Requires Python ≥ 3.10.
 
 ```bash
 pip install open-econs                           # core: OLS, Oaxaca, FE, IV, Logit, Probit
@@ -44,28 +42,6 @@ pip install open-econs[nls]                       # + sympy for nls() (nonlinear
 pip install open-econs[dev,lint]                  # + development & linting tools
 pip install git+https://github.com/qmanhbeo/open-econs.git    # latest dev
 ```
-
-See [Testing](TESTING.md) for the tiered test suite (default / parity /
-fixture-regeneration modes) and the `stata`/`r` markers.
-
-Requires Python ≥ 3.10.
-
-## Why open-econs?
-
-Empirical researchers often use Python for data cleaning, Stata for estimation,
-R for specialized methods, and LaTeX or custom scripts for output — a fragmented
-workflow that hurts reproducibility.
-
-open-econs keeps everything in one Python environment:
-
-- **Familiar estimators** — OLS, fixed effects, IV/2SLS, logit, probit,
-  difference-in-differences, event studies, RDD, panel models, matching
-- **Consistent API** — the same `.summary()` / `.tidy()` / `.vcov()` /
-  `.predict()` interface across every method
-- **Named pandas outputs** — coefficients, standard errors, and diagnostics
-  return as `pd.Series` or `pd.DataFrame` with clear labels
-- **Immutable results** — no accidental mutation after estimation
-- **Reproducible exports** — JSON, CSV, LaTeX, HTML from any result
 
 ```python
 import open_econs as oe
@@ -81,7 +57,24 @@ df = pd.DataFrame({
 
 r = oe.ols("income ~ education + age", data=df, cluster="province")
 print(r.tidy())
+
+#     Variable       Coef    Std Err          t     P>|t|      0.025      0.975
+# 0  Intercept -32.820513   0.730054 -44.956283  0.000000 -34.251392 -31.389633
+# 1  education   8.974359  12.843154   0.698766  0.484698 -16.197761  34.146479
+# 2        age  -1.025641   5.156134  -0.198917  0.842328 -11.131478   9.080196
 ```
+
+
+
+## Why open-econs?
+
+
+
+open-econs keeps everything in one Python environment:
+
+
+
+
 
 ## For Stata and R users
 
