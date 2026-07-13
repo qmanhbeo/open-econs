@@ -12,8 +12,8 @@ open-econs brings familiar empirical economics methods from Stata and R into a
 unified Python workflow. Every estimator uses a consistent API, with numerical
 validation against established reference implementations.
 
-- 142+ Stata-parity tests verify coefficients and standard errors match
-  reference implementations at machine precision.
+- 217 Stata- and R-parity tests (208 vs Stata, 9 vs R) verify coefficients
+  and standard errors match reference implementations at machine precision.
 - One consistent interface across all estimators: `.summary()`, `.tidy()`,
   `.vcov()`, `.predict()`, `.export()`, `.to_latex()`.
 - Immutable, named pandas outputs — no raw arrays crossing the public API.
@@ -164,6 +164,7 @@ r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
 | `mlogit()` | Multinomial logit (MNLogit) with per-outcome `.margins()` (dict), `.predict()`, robust/cluster SEs |
 | `oaxaca()` | Oaxaca-Blinder decomposition (two-fold, three-fold; multiple reference types) |
 | `nls()` | Nonlinear least squares (Gauss-Newton via scipy, analytic Jacobian) |
+| `gmm()` | General linear GMM framework (reuses `iv()` formula grammar; Hansen J size/power) |
 | `abond()` | Arellano-Bond dynamic panel GMM (one/two-step, Windmeijer SEs, collapsed instruments) |
 | `staggered_did()` | Callaway-Sant'Anna (2021) staggered DiD (doubly-robust `dripw` or `reg`) |
 | `rdd()` | Sharp / fuzzy regression discontinuity (local linear, triangular kernel) |
