@@ -56,12 +56,43 @@ df = pd.DataFrame({
 })
 
 r = oe.ols("income ~ education + age", data=df, cluster="province")
+
 print(r.tidy())
 
 #     Variable       Coef    Std Err          t     P>|t|      0.025      0.975
 # 0  Intercept -32.820513   0.730054 -44.956283  0.000000 -34.251392 -31.389633
 # 1  education   8.974359  12.843154   0.698766  0.484698 -16.197761  34.146479
 # 2        age  -1.025641   5.156134  -0.198917  0.842328 -11.131478   9.080196
+
+print(r.summary())
+
+#                             OLS Regression Results                            
+# ======================================================================
+# Dep. Variable:               income
+# No. Observations:            8
+# Df Residuals:                5
+# Df Model:                    2
+# Covariance Type:             cluster(province)
+# R-squared:                   0.991941
+# Adj. R-squared:              0.988718
+# Condition No.:               3.31e+02
+# F-statistic (cluster(province)):     645774.0223
+# Prob (F-statistic):          1.548527e-06
+# Log-Likelihood:              -16.392
+# AIC:                         38.78
+# BIC:                         39.02
+# ======================================================================
+#  Variable       Coef   Std Err          t    P>|t|      0.025      0.975
+# Intercept -32.820513  0.730054 -44.956283 0.000000 -34.251392 -31.389633
+# education   8.974359 12.843154   0.698766 0.484698 -16.197761  34.146479
+#       age  -1.025641  5.156134  -0.198917 0.842328 -11.131478   9.080196
+# ======================================================================
+# Diagnostics:
+# Jarque-Bera (chi2=0.498, p=0.7796)
+# Breusch-Pagan (LM=5.296, p=0.0708)
+# Durbin-Watson:                  2.1311
+# Ramsey RESET (F=0.140, p=0.8731)
+# ======================================================================
 ```
 
 
