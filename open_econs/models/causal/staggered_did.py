@@ -1,3 +1,4 @@
+import warnings
 from typing import Any
 
 import numpy as np
@@ -7,6 +8,7 @@ from scipy.stats import norm as _norm
 from open_econs._version import __version__
 from open_econs.core.base import BaseModel
 from open_econs.core.call_capture import capture_call as _capture_call
+from open_econs.core.cov_type import validate_cov_type
 
 
 class StaggeredDiDResult(BaseModel):
@@ -40,6 +42,7 @@ class StaggeredDiDResult(BaseModel):
         method: str,
         summary_text: str,
         call: dict[str, Any],
+        cov_type: str = "cluster",
     ) -> None:
         self.att_group_time = att_group_time
         self.event_study = event_study
@@ -52,6 +55,7 @@ class StaggeredDiDResult(BaseModel):
         self.control_cohorts = control_cohorts
         self.method = method
         self.call = call
+        self.cov_type = cov_type
         self.timestamp = __import__("datetime").datetime.now()
         self.package_version = __version__
         self._freeze()
@@ -69,6 +73,7 @@ class StaggeredDiDResult(BaseModel):
             "=" * 66,
             f"  Overall ATT           : {self.att:.4f} (se {self.att_se:.4f}, p {self.att_p:.3f})",
             f"  Method                : {self.method}",
+            f"  Cov. type             : {self.cov_type}",
             f"  Cohorts               : {sorted(self.cohorts)}",
             f"  Time periods          : {self.n_periods}",
             f"  Observations          : {self.n_obs}",
@@ -223,6 +228,67 @@ def _cell_dripw(
     }
 
 
+def _staggered_hac_se(
+    gt: pd.DataFrame,
+    rif_matrix: pd.DataFrame,
+    all_entities: np.ndarray,
+    cluster_se: float,
+    lags: int,
+) -> float:
+    """Newey-West temporal correction on the aggregated influence function.
+
+    **PROJECT CONVENTION -- not externally validated.** The cluster-robust SE
+    (``cluster_se``) already absorbs arbitrary within-entity across-time
+    correlation by summing each entity's influence function before aggregation.
+    This adds a Newey-West Bartlett-kernel correction for *common time shocks*:
+    temporal autocorrelation of the per-time aggregated influence sums across
+    entities.
+
+    The correction is a multiplicative factor ``f = 1 + 2 * sum_{l=1}^{L}
+    (1 - l/(L+1)) * rho_l`` applied to the cluster variance, where ``rho_l`` is
+    the lag-``l`` autocorrelation of the demeaned per-time series ``U_t``. At
+    ``lags=0`` the factor is exactly 1, so the result equals the cluster-robust
+    SE. Under positive autocorrelation the SE is inflated. The Bartlett lag
+    window keeps ``f >= 0`` for ``|rho_l| <= 1`` (floored at 0 defensively).
+
+    ``U_t`` is the cross-entity sum of the per-time influence contribution:
+    for ``method="dripw"`` it is built from the per-entity RIF columns of
+    ``rif_matrix``; for ``method="reg"`` (no per-entity RIF) it is the per-cell
+    ATT sum at time ``t`` (a coarser proxy). See the estimator docstring for
+    the full caveat.
+    """
+    times = np.sort(gt["time"].unique())
+    if len(times) <= 1 or lags < 1:
+        return cluster_se
+    if not rif_matrix.empty:
+        cell_times = gt.loc[rif_matrix.columns, "time"].values
+        U = np.array([
+            float(rif_matrix.loc[:, cell_times == t].values.sum())
+            for t in times
+        ])
+    else:
+        U = (
+            gt.groupby("time")["att"]
+            .sum()
+            .reindex(times)
+            .values.astype(float)
+        )
+    U = U - U.mean()
+    T = len(U)
+    gamma0 = float(np.sum(U ** 2)) / T
+    if gamma0 <= 0:
+        return cluster_se
+    factor = 1.0
+    for lag in range(1, lags + 1):
+        if lag >= T:
+            break
+        gammal = float(np.sum(U[:-lag] * U[lag:])) / (T - lag)
+        rho = gammal / gamma0
+        factor += 2.0 * (1.0 - lag / (lags + 1.0)) * rho
+    factor = max(factor, 0.0)
+    return float(np.sqrt(cluster_se ** 2 * factor))
+
+
 def staggered_did(
     data: pd.DataFrame,
     y: str,
@@ -232,6 +298,8 @@ def staggered_did(
     covariates: list[str] | None = None,
     method: str | None = None,
     cluster: str | None = None,
+    cov_type: str = "cluster",
+    lags: int | None = None,
     control_cohorts: str = "not_yet_treated",
     bootstrap: bool = False,
     bootstrap_reps: int = 500,
@@ -271,6 +339,15 @@ def staggered_did(
         provided, ``"reg"`` otherwise.
     cluster : str, optional
         Column for clustered standard errors (defaults to *entity*).
+    cov_type : {"cluster", "HAC"}, default "cluster"
+        Covariance estimator for the overall aggregated ATT. ``"cluster"``
+        (default) uses entity-clustered influence-function standard errors.
+        ``"HAC"`` applies a Newey-West (1987) Bartlett-kernel temporal
+        correction on top of the cluster-robust base -- see the *HAC caveat*
+        note below. ``lags`` is required when ``cov_type="HAC"``.
+    lags : int, optional
+        Number of Newey-West lags for ``cov_type="HAC"``. Required (and must be
+        ``>= 1``) when ``cov_type="HAC"``.
     control_cohorts : {"not_yet_treated", "never_treated"}, default "not_yet_treated"
         Control group definition.  ``"not_yet_treated"`` uses both not-yet-treated
         and never-treated units as controls (the CS universal base);
@@ -320,6 +397,21 @@ def staggered_did(
     per-entity RIFs across post-treatment cells with equal weight
     (``1/K``) and applies the same full-sample IF variance.
 
+    **HAC caveat (experimental, project convention -- not externally
+    validated).**  ``cov_type="HAC"`` is accepted for API symmetry with the
+    other estimators, but it is *not* a canonical staggered-DiD variance.  The
+    cluster-robust SE already absorbs arbitrary within-entity (across-time)
+    correlation by summing each entity's influence function before aggregation.
+    The HAC correction instead adds a Newey-West Bartlett-kernel adjustment for
+    *common time shocks* -- temporal autocorrelation of the per-time aggregated
+    influence sums across entities (see :func:`_staggered_hac_se`).  It reduces
+    exactly to the cluster-robust SE when ``lags=0``, and inflates the SE under
+    positive autocorrelation.  No Stata/R reference implements staggered-DiD HAC
+    (the area is contested: Bacon decomposition, Callaway-Sant'Anna, etc.), so
+    this is a documented project convention only.  A ``UserWarning`` is raised
+    whenever ``cov_type="HAC"`` is used.  Prefer ``cov_type="cluster"`` for
+    publication.
+
     csdid parity (aggregated SE).  The aggregated ATT and its SE are validated
     against Callaway & Sant'Anna's own aggregation, NOT against Stata's
     ``csdid_estat simple`` command.  Concretely the OE aggregated SE equals
@@ -351,10 +443,31 @@ def staggered_did(
     if cluster is None:
         cluster = entity
 
+    cov_type = validate_cov_type(
+        cov_type,
+        accepted={"cluster", "HAC"},
+        estimator="staggered_did()",
+    )
+    if cov_type == "HAC":
+        if lags is None:
+            raise ValueError("lags= must be provided when cov_type='HAC'.")
+        if lags < 0:
+            raise ValueError("lags= must be a non-negative integer when cov_type='HAC'.")
+        warnings.warn(
+            "cov_type='HAC' on staggered_did() is experimental and a PROJECT CONVENTION "
+            "(Newey-West temporal correction on the aggregated influence function). It is "
+            "NOT externally validated against Stata/R, and staggered-DiD HAC inference is a "
+            "contested area. Prefer cluster-robust SEs (cov_type='cluster', the default) for "
+            "publication.",
+            UserWarning,
+            stacklevel=2,
+        )
+
     call = _capture_call(
         y=y, entity=entity, time=time, treatment=treatment,
         covariates=covariates, method=method,
-        cluster=cluster, control_cohorts=control_cohorts,
+        cluster=cluster, cov_type=cov_type, lags=lags,
+        control_cohorts=control_cohorts,
         bootstrap=bootstrap, bootstrap_reps=bootstrap_reps, seed=seed,
     )
 
@@ -466,6 +579,11 @@ def staggered_did(
         overall_se = float(np.sqrt(np.average(gt["se"] ** 2, weights=gt["n_treat"])))
     overall_p = float(2 * (1 - _norm.cdf(abs(overall / overall_se)))) if overall_se > 0 else float("nan")
 
+    if cov_type == "HAC":
+        assert lags is not None, "guaranteed non-None by validation above"
+        overall_se = _staggered_hac_se(gt, rif_matrix, all_entities, overall_se, lags)
+        overall_p = float(2 * (1 - _norm.cdf(abs(overall / overall_se)))) if overall_se > 0 else float("nan")
+
     ev = (
         gt.groupby("lead")
         .apply(lambda d: pd.Series({
@@ -557,4 +675,5 @@ def staggered_did(
         method=method,
         summary_text="",
         call=call,
+        cov_type=cov_type,
     )
