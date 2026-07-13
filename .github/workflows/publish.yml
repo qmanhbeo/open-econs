@@ -25,6 +25,7 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_TOKEN }}
+        # OIDC trusted publishing: no token stored. PyPI must have a trusted
+        # publisher configured for owner=qmanhbeo, repo=open-econs,
+        # workflow=publish.yml (see release notes / handoff). The
+        # `id-token: write` permission above grants the OIDC credential.
