@@ -288,7 +288,6 @@ might fit.
 - [x] `nls()` — nonlinear least squares
   - Shipped as a nonlinear least squares estimator using `scipy.optimize.least_squares` with sympy-based analytic Jacobian (numerical fallback when analytic differentiation fails, flagged not silent); new `white_cov()` added to `core/cov.py` for HC0-HC3; validated against `curve_fit`, R's `nls()`, and Stata's `nl` (all three converging to the same SE); `sympy` shipped as an optional `[nls]` extra, not a hard dependency.
 - [x] `mlogit()` — multinomial logit (shipped, see v0.8)
-- [ ] `nlogit()` — nested logit *(deferred: recon complete, documented in `docs/nlogit-recon.md`. Blockers: R `mlogit` can't run full Stata-equivalent spec (nest-level covariates cause singularity on `webuse restaurant`); no validated fixture with τ∈(0,1); analytic gradient ~200 lines of recursive tree traversal needs domain-expert implementation.)*
 - [x] `synth()` — synthetic control (Abadie-Diamond-Hainmueller) — **core point estimator shipped** (v0.9)
    - Shipped: nested V+W optimization (outer predictor weights via R `Synth`'s two-start equal/regression procedure; inner donor-weight QP, `W>=0` & `sum W=1`, via SLSQP), `SynthResult` exposing `weights` / `predictor_weights` / `pre_mspe` / `post_mspe` / `gap_path`, `custom.v` fixed-`V` support, and R `Synth` (primary) + Stata `synth` (secondary) parity tests that run against committed fixtures with **zero skips** on CI (no Stata/R binary launched). Default predictors = outcome's own pre-treatment path (one per period); explicit predictors = user-supplied covariates aggregated by pre-window mean.
   - Shipped (v0.9, this pass): `placebo_space()` / `placebo_time()` ADH permutation inference on top of the validated `synth()` solver — no estimator logic duplicated. `SynthResult` now also stores the original `predictors` argument (the one fit-config field it previously lacked) so the delegate can reconstruct each placebo call. `exclude_pre_mspe_multiple` is an **opt-in, space-only** pre-fit exclusion parameter (default `None`: never applied silently; ADH's chosen multipliers vary by application, so no single value is hard-coded). `placebo_time()` deliberately does **not** accept `exclude_pre_mspe_multiple` (in the in-time loop "pre-MSPE" is the treated unit's own fit against itself, so the space-style exclusion concept does not carry over; passing it raises `TypeError`). Verified against R `Synth` via a gated parity test (p-value matches exactly; per-donor ratio agreement `< 0.1` for the well-determined majority; residual up-to-`~3` divergence on a handful of rank-deficient placebo donors is the same documented nonconvex-V solver divergence as the core `synth()` parity test — reported, not forced to match).
@@ -327,14 +326,6 @@ dates, no promises.
   runnability (not Stata/R numerical parity) is the validation bar, and each
   tutorial states its known limitations honestly. A tutorials index was added at
   `docs/tutorials/README.md`.
-
-- **`nlogit()` — nested logit** — recon is complete and documented in
-  `docs/nlogit-recon.md`, but the estimator is **not** built. Blockers: (a) R
-  `mlogit` cannot run a full Stata-equivalent spec (nest-level covariates cause
-  singularity on `webuse restaurant`); (b) no validated fixture with τ∈(0,1);
-  (c) the analytic gradient (~200 lines of recursive tree traversal) needs a
-  domain-expert implementation. Do not build until these are resolved; see the
-  existing v0.9 `nlogit()` deferred note for the full rationale.
 
 - **`oe.placebo_space` / `oe.placebo_time` top-level exports** — the two ADH
   permutation-inference helpers were previously only reachable via the submodule
@@ -413,5 +404,21 @@ and help decide when it moves from "vision" to "roadmap."*
 - **CEM autocuts parity test operator-precedence bug** (`tests/stata/test_stata_cem_autocuts.py`, `test_summary_counts`): the expression `t == 1 & m` parses as `t == (1 & m)`, not `(t == 1) & m`, so the intended "treated AND matched" subset is not what is actually computed. **Non-blocking** — the identical buggy expression is applied symmetrically on the Stata side, so the test never turns red. The row subset actually validated may not match the author's intent. Tracked inline with `# KNOWN ISSUE:` comments at the two affected lines. Do **not** fix silently; re-confirm intent before changing.
 
 - **Incidental fix, tracked 2026-07-11:** The `iv()` formula-parser extraction (f61cc07, done to let `gmm()` reuse `iv()`'s formula grammar) added an index intersection (`x_index.intersection(Z_instr.index)`) when building Y/X/Z that the pre-refactor code lacked. Pre-refactor, Z was built from the full dataset with no alignment check against X/y's index — meaning rows with missing instrument values but complete regressor data could have silently misaligned Z against y/X. The refactor incidentally hardens this. No parity impact on the existing Stata fixture (no missing values present), so this is unverified in either direction on a real missing-data case. Not urgent — no known user has hit this — but worth a dedicated unit test with actual missing instrument rows at some point to confirm the new behavior is correct (not just different).
+
+---
+
+## Explicitly Deferred Estimators
+
+- `nlogit()` — nested logit. **Recon complete** (`docs/nlogit-recon.md`, branch
+  `feature/nlogit` off `db2dfe5`); **implementation NOT built**. Blockers: (a) R
+  `mlogit` cannot run a full Stata-equivalent spec — nest-level covariates cause
+  singularity on `webuse restaurant`, so it is only a simple-spec reference, not
+  the full one; Stata alone is the primary reference. (b) No validated fixture
+  with τ∈(0,1) (needs a genuinely nested, non-degenerate case to lock the
+  estimator). (c) The analytic gradient (~200 lines of recursive tree traversal,
+  Stata's `_dldtau`/`_dldx` Mata) needs a domain-expert implementation; a wrong
+  gradient silently yields wrong SEs. Also: no library backend exists
+  (statsmodels has only `MNLogit`), so it is a from-scratch build of ~500–800
+  lines + ~300 lines parity tests. Do NOT start until these are resolved.
 
 
