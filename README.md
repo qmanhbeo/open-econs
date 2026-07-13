@@ -28,7 +28,7 @@ pip install open-econs[dev,lint]                  # + development & linting tool
 pip install git+https://github.com/qmanhbeo/open-econs.git    # latest dev
 ```
 
-See [TESTING.md](TESTING.md) for the tiered test suite (default / parity /
+See [Testing](TESTING.md) for the tiered test suite (default / parity /
 fixture-regeneration modes) and the `stata`/`r` markers.
 
 Requires Python ≥ 3.10.
@@ -94,8 +94,8 @@ If you know the Stata or R command, you already know the open-econs equivalent.
 | `did`                | `oe.staggered_did()`        |
 | `MatchIt`            | `oe.psm()`                  |
 
-See [docs/migrating_from_stata.md](docs/migrating_from_stata.md) for a
-detailed migration guide, or [docs/migrating_from_r.md](docs/migrating_from_r.md)
+See [Migrating from Stata](docs/migrating_from_stata.md) for a
+detailed migration guide, or [Migrating from R](docs/migrating_from_r.md)
 for the R equivalent. Step-by-step porting walkthroughs for the causal
 estimators live in [Tutorials](docs/tutorials/README.md): [RDD](docs/tutorials/rdd.md)
 (maps to `rdrobust` / `rddensity`), [PSM](docs/tutorials/psm.md) (maps to
@@ -258,7 +258,7 @@ Every estimator includes a methodology specification covering:
 - Stata/R equivalents
 - Academic references
 
-See [methodology/](methodology/) for the full registry.
+See [Methodology](methodology/) for the full registry.
 
 ## Tutorials
 
@@ -283,7 +283,7 @@ Step-by-step walkthroughs for the core estimators:
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for planned features and development milestones.
+See [Roadmap](ROADMAP.md) for planned features and development milestones.
 
 ## Development
 
