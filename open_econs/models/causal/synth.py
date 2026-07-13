@@ -477,7 +477,17 @@ def _optimize_v(
     T_pre: int,
     solver_kwargs: dict[str, Any],
 ) -> tuple[np.ndarray, bool, float, int, int, str]:
-    """Outer V optimization with R Synth's two-start procedure.
+    """Outer V optimization mirroring R Synth's multi-method procedure.
+
+    R Synth uses ``optimx(method=c("Nelder-Mead", "BFGS"))`` at each of two
+    starts (equal-weight and regression-derived), then picks the best result
+    across methods via ``collect.optimx``.  We mirror this by running both
+    Nelder-Mead (derivative-free, BLAS-insensitive) and SLSQP at each start
+    and selecting the result with the lowest objective value.
+
+    Nelder-Mead is unconstrained — ``_fn_v`` → ``_solve_w`` normalises ``|v|``
+    internally — so it can explore the full real line, which makes it robust to
+    BLAS differences that affect gradient-based methods differently.
 
     Start 1: equal weights ``1/P``.  Start 2: regression-derived
     ``Beta = (Xall' Xall)^-1 Xall' Zall``, ``V = Beta[-1,] %*% t(Beta[-1,])``,
@@ -486,18 +496,47 @@ def _optimize_v(
     """
     P = X1_scaled.shape[0]
     N = X0_scaled.shape[0]
-
-    sv1 = np.full(P, 1.0 / P)
+    fn_args = (X1_scaled, X0_scaled, Z1, Z0, T_pre, solver_kwargs)
 
     constraints = [{"type": "eq", "fun": lambda v: float(np.sum(v) - 1.0)}]
     bounds = [(0.0, 1.0)] * P
 
-    res1 = minimize(
-        _fn_v, sv1, args=(X1_scaled, X0_scaled, Z1, Z0, T_pre, solver_kwargs),
-        method="SLSQP", bounds=bounds, constraints=constraints, **solver_kwargs,
-    )
+    # Nelder-Mead options: honour user maxiter if given, else default.
+    nm_opts: dict[str, Any] = {}
+    if "maxiter" in solver_kwargs:
+        nm_opts["maxiter"] = solver_kwargs["maxiter"]
 
-    # Regression-derived start (mirrors R's SV2 construction).
+    def _run_multi_method(start: np.ndarray) -> "OptimizeResult":
+        """Run NM + SLSQP from *start*, return the better result.
+
+        NM is derivative-free and BLAS-insensitive, so it is useful as a
+        cross-check against gradient-based SLSQP.  However, NM is
+        unconstrained (``_fn_v`` normalises |v| internally) and can converge
+        to boundary V where one predictor dominates — this produces low
+        ``fn_v`` but poor *covariate* balance.  We therefore only accept NM
+        when it finds an interior V (no component > 0.95 or < 0.05 after
+        normalisation) *and* its objective is strictly better than SLSQP's.
+        """
+        res_slsp = minimize(
+            _fn_v, start, args=fn_args,
+            method="SLSQP", bounds=bounds, constraints=constraints, **solver_kwargs,
+        )
+        res_nm = minimize(
+            _fn_v, start, args=fn_args, method="Nelder-Mead", options=nm_opts,
+        )
+        # Normalise NM result to check for boundary.
+        nm_v = np.abs(res_nm.x)
+        nm_v = nm_v / nm_v.sum() if nm_v.sum() > 0 else start
+        nm_interior = np.all(nm_v > 0.05) and np.all(nm_v < 0.95)
+        if nm_interior and res_nm.fun < res_slsp.fun:
+            return res_nm
+        return res_slsp
+
+    # ── Start 1: equal weights ────────────────────────────────────
+    sv1 = np.full(P, 1.0 / P)
+    best = _run_multi_method(sv1)
+
+    # ── Start 2: regression-derived (mirrors R's SV2) ─────────────
     treated_row_full = np.concatenate([[1.0], X1_scaled])          # (P+1,)
     donor_rows_full = np.column_stack([np.ones(N), X0_scaled])     # (N, P+1)
     X_full = np.vstack([treated_row_full, donor_rows_full])        # (N+1, P+1)
@@ -516,16 +555,9 @@ def _optimize_v(
         have_sv2 = False
 
     if have_sv2:
-        res2 = minimize(
-            _fn_v, sv2, args=(X1_scaled, X0_scaled, Z1, Z0, T_pre, solver_kwargs),
-            method="SLSQP", bounds=bounds, constraints=constraints, **solver_kwargs,
-        )
-        if res2.fun < res1.fun:
+        res2 = _run_multi_method(sv2)
+        if res2.fun < best.fun:
             best = res2
-        else:
-            best = res1
-    else:
-        best = res1
 
     solution_v = np.abs(best.x) / np.sum(np.abs(best.x))
     return (
