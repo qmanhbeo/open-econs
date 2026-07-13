@@ -38,9 +38,20 @@ every estimator, so the mental model you build once transfers across methods.
   they are easy to consume programmatically and from AI agents.
 - **Export** any result with `result.export("out.json")` or `result.export("out.csv")`.
 
-## Not yet ported (on the roadmap)
+## v1.0 status notes
 
-- `reghdfe`-style multi-way *absorbed* fixed effects (efficient). Current
+- **Synthetic control (`synth`) shipped in v0.9** (Abadie-Diamond-Hainmueller
+  core point estimator + ADH placebo-in-space / placebo-in-time inference).
+  It is no longer "planned"; see `docs/api_stability.md` for limitations
+  (`synth.predict()` / `synth.plot()` remain `NotImplementedError` by design).
+- **`staggered_did` HAC is experimental.** `staggered_did(..., cov_type="HAC")`
+  is a *project convention* (Newey-West temporal correction on the aggregated
+  influence function), **not** externally validated. For publication prefer the
+  default `cov_type="cluster"`. A `UserWarning` is raised on HAC use.
+- **`nls` requires the optional `[nls]` extra** (`pip install "open-econs[nls]"`
+  → pulls `sympy`). It is not a hard dependency.
+- **`nlogit` (nested logit) is deferred** — documented in `docs/nlogit-recon.md`.
+- **`reghdfe`-style multi-way *absorbed* fixed effects** are not yet implemented;
   `fe()` absorbs entity and time via the within transform.
-- Synthetic control (`synth`) — planned for a future release.
-- Bootstrap inference for staggered DiD (currently uses cluster-robust SEs).
+- **Bootstrap inference for staggered DiD** is not implemented; use
+  cluster-robust SEs (or the experimental HAC convention).
