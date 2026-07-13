@@ -1,0 +1,65 @@
+name: CI durations diagnostic
+
+# ONE-OFF / temporary diagnostic workflow (NOT part of the standard push/PR gate).
+# Triggered manually via `gh workflow run ci-durations-diag.yml --ref <branch>`.
+#
+# Purpose: capture REAL, CI-measured, per-test durations for the fast suite
+# (`-m "not slow"`), WITHOUT conflating --cov instrumentation overhead with raw
+# test time. Each Python leg runs the suite twice:
+#   * cov=no  -> pytest -m "not slow" tests/ --durations=0 --junitxml (NO --cov)
+#   * cov=yes -> same, but WITH --cov=open_econs (isolates coverage overhead)
+#
+# Artifacts (durations-*.xml, durations-*.txt) are uploaded so the data can be
+# pulled and inspected directly rather than summarized from memory.
+#
+# Cleanup: this file should be REMOVED after data collection (or kept as a
+# standing manual-dispatch diagnostic — see hand-off report). Recommendation:
+# remove it once the re-tiering decision is made, to avoid a stray always-on
+# workflow definition.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  durations:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+        cov: ["no", "yes"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev,lint,plot]"
+
+      - name: Run fast suite (NO --cov)
+        if: matrix.cov == 'no'
+        run: |
+          python -m pytest -m "not slow" tests/ --durations=0 -q --junitxml=durations-nocov.xml > durations-nocov.txt 2>&1
+
+      - name: Run fast suite (WITH --cov)
+        if: matrix.cov == 'yes'
+        run: |
+          python -m pytest -m "not slow" tests/ --cov=open_econs --durations=0 -q --junitxml=durations-cov.xml > durations-cov.txt 2>&1
+
+      - name: Upload duration artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: durations-py${{ matrix.python-version }}-cov-${{ matrix.cov }}
+          path: |
+            durations-nocov.xml
+            durations-nocov.txt
+            durations-cov.xml
+            durations-cov.txt
+          if-no-files-found: warn
+          retention-days: 14
