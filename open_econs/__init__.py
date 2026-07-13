@@ -17,6 +17,7 @@ from .models.causal.psm import psm
 from .models.causal.sensitivity import rosenbaum_bounds
 from .models.causal.rdd import density_test, rdd
 from .models.causal.synth import synth, SynthResult
+from .models.causal.placebo import placebo_space, placebo_time
 from .core.context import Context
 from .core.panel_context import PanelContext
 
@@ -28,5 +29,6 @@ __all__ = [
     "psm", "rdd", "rosenbaum_bounds", "gmm", "GMMResult",
     "nls", "NLSResult",
     "synth", "SynthResult",
+    "placebo_space", "placebo_time",
     "Context", "PanelContext", "__version__",
 ]

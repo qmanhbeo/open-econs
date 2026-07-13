@@ -336,7 +336,13 @@ dates, no promises.
   domain-expert implementation. Do not build until these are resolved; see the
   existing v0.9 `nlogit()` deferred note for the full rationale.
 
----
+- **`oe.placebo_space` / `oe.placebo_time` top-level exports** — the two ADH
+  permutation-inference helpers were previously only reachable via the submodule
+  path `from open_econs.models.causal.placebo import ...`. They are now added to
+  the top-level `open_econs/__init__.py` exports (and `__all__`), so
+  `oe.placebo_space` / `oe.placebo_time` work directly. The `synth_control.md`
+  tutorial was updated to use the top-level path and drop the submodule-import
+  note. No estimator logic changed. (Source-only + doc; no release.)
 
 ### North Star *(vision — not a commitment)*
 

@@ -5,18 +5,14 @@ point estimator** (`oe.synth`) plus ADH permutation inference
 (`placebo_space` / `placebo_time`). The estimator mirrors R's `Synth` (primary
 reference) and Stata's `synth` (secondary reference).
 
-> **API note.** `oe.synth` is a top-level export. The two inference helpers
-> `placebo_space` and `placebo_time` currently live in the submodule and are
-> imported as `from open_econs.models.causal.placebo import placebo_space,
-> placebo_time` (a top-level `oe.placebo_space` / `oe.placebo_time` export is a
-> planned v1.1 tidy-up). This tutorial uses the real, current import path so it
-> runs as written.
+> **API note.** `oe.synth`, `oe.placebo_space`, and `oe.placebo_time` are all
+> top-level exports, so the inference helpers can be called directly as
+> `oe.placebo_space` / `oe.placebo_time`.
 
 ```python
 import numpy as np
 import pandas as pd
 import open_econs as oe
-from open_econs.models.causal.placebo import placebo_space, placebo_time
 ```
 
 ## 1. Simulate a balanced panel
@@ -97,11 +93,11 @@ date. The ADH p-value is the fraction of placebo post/pre-MSPE ratios that are
 at least as large as the treated unit's own ratio.
 
 ```python
-ps = placebo_space(res, df)       # optional: exclude_pre_mspe_multiple=10
+ps = oe.placebo_space(res, df)       # optional: exclude_pre_mspe_multiple=10
 print(ps.summary())
 ps.p_value
 
-pt = placebo_time(res, df)
+pt = oe.placebo_time(res, df)
 print(pt.summary())
 pt.p_value
 ```

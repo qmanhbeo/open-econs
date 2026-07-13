@@ -12,7 +12,7 @@ key attributes → output interpretation → honest parity note.
 | [DiD](did.md) | `oe.did`, `oe.event_study`, `oe.staggered_did` | Stata `did` / R `fixest` / `csdid` |
 | [RDD](rdd.md) | `oe.rdd`, `oe.density_test` | R `rdrobust` / Stata `rddensity` |
 | [PSM](psm.md) | `oe.psm`, `oe.cem`, `oe.balance`, `oe.rosenbaum_bounds` | R `MatchIt` / `Matching` / Stata `teffects psmatch` / `rbounds` |
-| [Synthetic Control](synth_control.md) | `oe.synth`, `placebo_space`, `placebo_time` | R `Synth` / Stata `synth` |
+| [Synthetic Control](synth_control.md) | `oe.synth`, `oe.placebo_space`, `oe.placebo_time` | R `Synth` / Stata `synth` |
 
 **Validation bar.** These tutorials are smoke-tested locally for runnability
 and sensible numbers. They are *not* a claim of full Stata/R numerical parity;
