@@ -95,7 +95,12 @@ If you know the Stata or R command, you already know the open-econs equivalent.
 | `MatchIt`            | `oe.psm()`                  |
 
 See [docs/migrating_from_stata.md](docs/migrating_from_stata.md) for a
-detailed migration guide.
+detailed migration guide, or [docs/migrating_from_r.md](docs/migrating_from_r.md)
+for the R equivalent. Step-by-step porting walkthroughs for the causal
+estimators live in [Tutorials](docs/tutorials/README.md): [RDD](docs/tutorials/rdd.md)
+(maps to `rdrobust` / `rddensity`), [PSM](docs/tutorials/psm.md) (maps to
+`MatchIt` / `teffects psmatch`), and [Synthetic Control](docs/tutorials/synth_control.md)
+(maps to `Synth` / `synth`).
 
 ## Quick Start
 
@@ -263,10 +268,9 @@ Step-by-step walkthroughs for the core estimators:
 - [Fixed Effects](docs/tutorials/fe.md)
 - [Instrumental Variables](docs/tutorials/iv.md)
 - [Difference-in-Differences](docs/tutorials/did.md)
-
-RDD, PSM, and synthetic control tutorials are planned for a post-1.0 release.
-See also [Migrating from Stata](docs/migrating_from_stata.md) and
-[Migrating from R](docs/migrating_from_r.md).
+- [RDD](docs/tutorials/rdd.md)
+- [PSM](docs/tutorials/psm.md)
+- [Synthetic Control](docs/tutorials/synth_control.md)
 
 ## Comparison
 
