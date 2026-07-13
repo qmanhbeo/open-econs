@@ -31,15 +31,13 @@ jobs:
       - name: Type-check with mypy
         run: mypy open_econs/ --ignore-missing-imports
 
-      # Tiering: split the default suite into a fast path and a slow path so a
-      # typical push gets feedback in ~2 minutes while coverage is unchanged.
-      # The `slow` marker is applied to tests whose runtime is materially higher
-      # than the typical test (currently the multi-method V-optimization synth
-      # placebo sweeps). BOTH steps run on every push/PR. Bare local `pytest`
-      # still runs everything (default addopts are unchanged) — this split is a
-      # CI feedback optimization, not a coverage reduction.
+      # Tiering: ONLY the fast path (`pytest -m "not slow"`) runs on every
+      # push/PR so a typical push gets feedback in ~3 minutes, matching main.
+      # The `slow` marker (currently the multi-method V-optimization synth
+      # placebo sweeps) is run by a SEPARATE workflow (ci-slow.yml) on a nightly
+      # cron and manual `workflow_dispatch`, so it stays a safety net without
+      # gating every PR. Bare local `pytest` still runs everything (default
+      # addopts are unchanged) — this split is a CI feedback optimization, not a
+      # coverage reduction for local runs.
       - name: Run fast test suite (not slow)
         run: python -m pytest -m "not slow" tests/ --cov=open_econs --cov-report=term-missing -v --tb=short
-
-      - name: Run slow test suite (marked slow)
-        run: python -m pytest -m "slow" tests/ --cov=open_econs --cov-report=term-missing -v --tb=short
