@@ -61,17 +61,14 @@ execute without R.  No R binary is launched and no fixture is rewritten.
 - `test_synth_rank_deficient_qp_same_objective_different_w`
 - `test_placebo_space_parity_r`
 
-These are NOT part of the general "skip R on CI" stance the fixture migration
-removed — they are a narrow, deliberate exception.  Both fail on CI purely
-because Python's `synth()` SLSQP fit is **cross-OS nondeterministic** for
-rank-deficient / nonconvex-V panels (R `Synth` is OS-stable: Windows-Python vs
-Windows-R and vs Linux-R both give `max|ratio| ~ 4.6`, while CI's Linux-Python
-gives `7.97`; and `cov_mm_py` is `2.67e-07` on Windows but `3.27e-01` on Linux).
-The root cause is the **estimator**, not the fixture, and a single committed R
-fixture cannot satisfy either test on both OSes.  They are tracked as a single
-follow-up bug in `docs/synth-cross-os-solver-recon.md` — do NOT try to make them
-pass on CI via an OS-matched fixture, a third variant, or a relaxed tolerance.
-The other four R tests run on CI against committed fixtures with zero skips.
+These were previously a narrow, deliberate exception gated behind `R_AVAILABLE`
+because Python's `synth()` SLSQP fit was cross-OS nondeterministic for
+rank-deficient panels. This was **fixed** by L2-regularizing the inner QP
+(ridge 1e-12 when `N > P`), which makes the minimizer `W` unique and the outer
+`V` landscape deterministic across BLAS backends
+(`docs/synth-cross-os-solver-recon-update.md`).  The skipif guard was removed in
+the same fix pass; both tests now run on CI against committed fixtures with zero
+skips, like the other four R tests.
 
 ---
 

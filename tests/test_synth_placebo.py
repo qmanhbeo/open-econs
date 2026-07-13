@@ -27,15 +27,11 @@ import pytest
 from open_econs.models.causal.synth import synth
 from .r.r_runner import read_r, R_FIXTURES_DIR, r_available
 
-# Re-gated to R-present machines (see test_synth_rank_deficient_qp_same_objective_
-# different_w in test_synth.py and docs/synth-cross-os-solver-recon.md). The
-# placebo-ratio assertion cannot be satisfied by any single committed R fixture:
-# R is OS-stable (Windows-Python vs Windows-R and vs Linux-R both give ~4.6), so
-# the CI divergence (max|ratio|=7.97) is driven entirely by Python's cross-OS
-# SLSQP nondeterminism, not by which OS generated the fixture. A Linux-R fixture
-# does NOT fix CI (Linux-Python vs Linux-R == Linux-Python vs Windows-R == 7.97).
-# Gated rather than fudged; tracked as the same follow-up bug as the rank-deficient
-# test.
+# This test was previously re-gated to R-present machines (see the commit for
+# docs/synth-cross-os-solver-recon-update.md for full context). The cross-OS
+# SLSQP nondeterminism has been resolved by L2-regularizing the inner QP when
+# N > P (making the outer fn_v landscape deterministic). The skipif was removed
+# in the same pass; this test now runs against committed fixtures on CI.
 R_AVAILABLE = r_available()
 
 
@@ -342,21 +338,6 @@ def test_placebo_space_requires_data_frame():
 
 
 @pytest.mark.r
-@pytest.mark.skipif(
-    not R_AVAILABLE,
-    reason=(
-        "R Synth not installed (off-PATH). Like test_synth_rank_deficient_qp_same_"
-        "objective_different_w, this test's cross-engine ratio assertion cannot be "
-        "satisfied by any single committed R fixture: R is OS-stable (Windows-Python "
-        "vs Windows-R and vs Linux-R both give max|ratio|~4.6), so the CI divergence "
-        "(max|ratio|=7.97) is driven entirely by Python's cross-OS SLSQP "
-        "nondeterminism, not by which OS generated the fixture. A Linux-R fixture "
-        "does NOT fix CI (Linux-Python vs Linux-R == Linux-Python vs Windows-R == "
-        "7.97). Gated to R-present machines and tracked as the SAME follow-up bug "
-        "(docs/synth-cross-os-solver-recon.md); do NOT pick an OS-specific tolerance "
-        "or a third fixture variant to make this pass on CI."
-    ),
-)
 def test_placebo_space_parity_r():
     p = _panel_from_csv(
         R_FIXTURES_DIR / "synth_placebo_space_input.csv",
