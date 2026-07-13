@@ -82,6 +82,7 @@ class GMMResult(BaseModel):
         self._freeze()
 
     def tidy(self) -> pd.DataFrame:
+        """R-broom-style coefficient table (Variable, Coef, Std Err, z, P>|z|, CI)."""
         df = pd.DataFrame({
             "Variable": self.coefficients.index,
             "Coef": self.coefficients.values,
@@ -95,6 +96,7 @@ class GMMResult(BaseModel):
         return df
 
     def summary(self) -> str:
+        """Pretty-printed terminal summary of the GMM fit (incl. Hansen J test)."""
         header = (
             f"                    Linear GMM Regression Results                       \n"
             f"======================================================================\n"
@@ -111,6 +113,7 @@ class GMMResult(BaseModel):
         return header + tbl + "\n======================================================================\n"
 
     def vcov(self) -> pd.DataFrame:
+        """Return the GMM parameter variance-covariance matrix as a DataFrame."""
         return pd.DataFrame(
             self._vcov,
             index=self.coefficients.index,
@@ -118,6 +121,7 @@ class GMMResult(BaseModel):
         )
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialisable dict; extends the base payload with GMM-specific fields."""
         d = super().to_dict()
         d["step"] = self.step
         d["hansen_j"] = self.hansen_j

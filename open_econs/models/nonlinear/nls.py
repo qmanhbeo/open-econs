@@ -138,6 +138,7 @@ class NLSResult(BaseModel):
         return self.n_function_evaluations
 
     def tidy(self) -> pd.DataFrame:
+        """R-broom-style coefficient table (Variable, Coef, Std Err, t, P>|t|, CI)."""
         df = pd.DataFrame({
             "Variable": self.coefficients.index,
             "Coef": self.coefficients.values,
@@ -151,6 +152,7 @@ class NLSResult(BaseModel):
         return df
 
     def summary(self) -> str:
+        """Pretty-printed terminal summary of the NLS fit (incl. convergence stats)."""
         header = (
             f"                  Nonlinear Least Squares Results                        \n"
             f"======================================================================\n"
@@ -171,6 +173,7 @@ class NLSResult(BaseModel):
         return header + tbl + "\n======================================================================\n"
 
     def vcov(self) -> pd.DataFrame:
+        """Return the parameter variance-covariance matrix as a DataFrame."""
         return pd.DataFrame(
             self._vcov,
             index=self.coefficients.index,
@@ -178,6 +181,7 @@ class NLSResult(BaseModel):
         )
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialisable dict; extends the base payload with NLS convergence fields."""
         d = super().to_dict()
         d["jacobian_method"] = self.jacobian_method
         d["convergence"] = {

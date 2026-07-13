@@ -118,6 +118,7 @@ class DiDResult(BaseModel):
         )
 
     def vcov(self) -> pd.DataFrame:
+        """Return the parameter variance-covariance matrix as a DataFrame."""
         if self._fit is None:
             raise RuntimeError("vcov() requires a fitted statsmodels result.")
         return pd.DataFrame(
@@ -441,6 +442,7 @@ class EventStudyResult(BaseModel):
         plt.show()
 
     def vcov(self) -> pd.DataFrame:
+        """Return the parameter variance-covariance matrix as a DataFrame."""
         if self._fit is None:
             raise RuntimeError("vcov() requires a fitted statsmodels result.")
         return pd.DataFrame(

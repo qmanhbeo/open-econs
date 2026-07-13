@@ -31,6 +31,7 @@ class Context:
         cluster: str | None = None,
         cov_type: str = "HC2",
     ) -> Any:
+        """Fit OLS on the wrapped data. Delegates to :func:`open_econs.ols`; see that function for full argument meaning."""
         from open_econs.models.linear.ols import ols as _ols
 
         return _ols(formula=formula, data=self._data, cluster=cluster, cov_type=cov_type)
@@ -41,6 +42,7 @@ class Context:
         by: str,
         decomposition_type: str = "two-fold",
     ) -> Any:
+        """Blinder-Oaxaca decomposition on the wrapped data. Delegates to :func:`open_econs.oaxaca`."""
         from open_econs.models.decomposition.oaxaca import oaxaca as _oaxaca
 
         return _oaxaca(
@@ -51,11 +53,13 @@ class Context:
         )
 
     def logit(self, formula: str, cov_type: str = "nonrobust") -> Any:
+        """Fit logistic regression on the wrapped data. Delegates to :func:`open_econs.logit`."""
         from open_econs.models.discrete.logit import logit as _logit
 
         return _logit(formula=formula, data=self._data, cov_type=cov_type)
 
     def probit(self, formula: str, cov_type: str = "nonrobust") -> Any:
+        """Fit probit regression on the wrapped data. Delegates to :func:`open_econs.probit`."""
         from open_econs.models.discrete.probit import probit as _probit
 
         return _probit(formula=formula, data=self._data, cov_type=cov_type)
@@ -71,6 +75,7 @@ class Context:
         time: str | None = None,
         **solver_kwargs: Any,
     ) -> Any:
+        """Fit nonlinear least squares on the wrapped data. Delegates to :func:`open_econs.nls`."""
         from open_econs.models.nonlinear.nls import nls as _nls
 
         return _nls(
@@ -85,6 +90,7 @@ class Context:
         )
 
     def vif(self, formula: str) -> pd.Series:
+        """Compute variance inflation factors for the RHS of ``formula`` on the wrapped data."""
         if "~" in formula:
             rhs = formula.split("~", 1)[1].strip()
         else:
@@ -113,6 +119,7 @@ class Context:
         cluster: str | None = None,
         cov_type: str = "HC2",
     ) -> Any:
+        """Two-way (static) DiD on the wrapped data. Delegates to :func:`open_econs.did`."""
         from open_econs.models.causal.did import did as _did
 
         return _did(
@@ -133,6 +140,7 @@ class Context:
         cov_type: str = "HC2",
         omitted_period: int = -1,
     ) -> Any:
+        """Event-study (leads/lags) DiD on the wrapped data. Delegates to :func:`open_econs.event_study`."""
         from open_econs.models.causal.did import event_study as _event_study
 
         return _event_study(
@@ -151,6 +159,7 @@ class Context:
         covariates: list[str] | None = None,
         weights: str | None = None,
     ) -> pd.DataFrame:
+        """Covariate balance table for ``treatment`` on the panel data. Delegates to :func:`open_econs.balance`."""
         from open_econs.models.causal.balance import balance as _balance
 
         return _balance(
@@ -177,6 +186,7 @@ class Context:
         entity: str | None = None,
         time: str | None = None,
     ) -> Any:
+        """Pooled OLS (optionally GEE) on the panel. See :func:`open_econs.ols` / GEE docs for options."""
         return self._to_panel(entity, time).pooled(
             formula, cov_type=cov_type, cluster=cluster, entity=entity, time=time,
         )
@@ -189,6 +199,7 @@ class Context:
         cov_type: str = "HC1",
         cluster: str | None = None,
     ) -> Any:
+        """Fixed-effects (entity-demeaned / within) regression on the panel."""
         return self._to_panel(entity, time).fe(
             formula, cov_type=cov_type, cluster=cluster,
         )
@@ -200,15 +211,19 @@ class Context:
         time: str,
         cov_type: str = "unadjusted",
     ) -> Any:
+        """Random-effects (FGLS) regression on the panel."""
         return self._to_panel(entity, time).re(formula, cov_type=cov_type)
 
     def diff(self, formula: str, entity: str, time: str) -> Any:
+        """First-difference regression on the panel."""
         return self._to_panel(entity, time).diff(formula)
 
     def driscoll_kraay(self, formula: str, entity: str, time: str) -> Any:
+        """Driscoll-Kraay SE regression on the wrapped panel data. Delegates to :meth:`PanelContext.driscoll_kraay`."""
         return self._to_panel(entity, time).driscoll_kraay(formula)
 
     def hausman(self, fe_result: Any, re_result: Any, alpha: float = 0.05) -> Any:
+        """Hausman test: compares a fixed-effects and a random-effects result."""
         return self._to_panel().hausman(fe_result, re_result, alpha=alpha)
 
     def abond(
@@ -221,6 +236,7 @@ class Context:
         step: str = "two-step",
         exogenous: list[str] | None = None,
     ) -> Any:
+        """Arellano-Bond linear dynamic panel GMM estimator."""
         return self._to_panel(entity, time).abond(
             formula, lags=lags, max_iv_lag=max_iv_lag, step=step, exogenous=exogenous,
         )

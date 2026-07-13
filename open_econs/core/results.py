@@ -953,6 +953,7 @@ class SynthResult(BaseModel):
         return df
 
     def summary(self) -> str:
+        """Pretty-printed terminal summary of the synthetic-control fit."""
         header = (
             f"                 Synthetic Control (ADH) Results                       \n"
             f"======================================================================\n"
@@ -990,6 +991,11 @@ class SynthResult(BaseModel):
         )
 
     def vcov(self) -> pd.DataFrame:
+        """Not available for synthetic control in this pass.
+
+        Synth inference (placebo-in-space / placebo-in-time) is a separate,
+        later scoped task; the point estimate carries no covariance matrix.
+        """
         raise NotImplementedError(
             "SynthResult.vcov() is not available in this pass: synthetic control "
             "inference (placebo-in-space / placebo-in-time) is a separate, later "
@@ -1021,6 +1027,7 @@ class SynthResult(BaseModel):
         return placebo_time(self, data, **kwargs)
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialisable dict; extends the base payload with synth fit fields."""
         d = super().to_dict()
         d["outcome"] = self.outcome
         d["treated_unit"] = self.treated_unit

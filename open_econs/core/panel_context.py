@@ -320,6 +320,7 @@ class PanelContext:
     # ── delegation to the cross-sectional estimators ───────────────
 
     def ols(self, formula: str, cluster: str | None = None, cov_type: str = "HC2") -> Any:
+        """Fit OLS on the wrapped data. Delegates to :func:`open_econs.ols`; see that function for full argument meaning."""
         from open_econs.models.linear.ols import ols as _ols
 
         return _ols(formula=formula, data=self._data, cluster=cluster, cov_type=cov_type)
@@ -361,16 +362,19 @@ class PanelContext:
         )
 
     def logit(self, formula: str, cov_type: str = "nonrobust") -> Any:
+        """Fit logistic regression on the wrapped data. Delegates to :func:`open_econs.logit`."""
         from open_econs.models.discrete.logit import logit as _logit
 
         return _logit(formula=formula, data=self._data, cov_type=cov_type)
 
     def probit(self, formula: str, cov_type: str = "nonrobust") -> Any:
+        """Fit probit regression on the wrapped data. Delegates to :func:`open_econs.probit`."""
         from open_econs.models.discrete.probit import probit as _probit
 
         return _probit(formula=formula, data=self._data, cov_type=cov_type)
 
     def did(self, formula: str, treatment: str, post: str, cluster: str | None = None, cov_type: str = "HC2") -> Any:
+        """Two-way (static) DiD on the wrapped data. Delegates to :func:`open_econs.did`."""
         from open_econs.models.causal.did import did as _did
 
         return _did(formula=formula, data=self._data, treatment=treatment, post=post,
@@ -378,12 +382,14 @@ class PanelContext:
 
     def event_study(self, formula: str, treatment: str, post: str, cluster: str | None = None,
                     cov_type: str = "HC2", omitted_period: int = -1) -> Any:
+        """Event-study (leads/lags) DiD on the wrapped data. Delegates to :func:`open_econs.event_study`."""
         from open_econs.models.causal.did import event_study as _event_study
 
         return _event_study(formula=formula, data=self._data, treatment=treatment, post=post,
                             cluster=cluster, cov_type=cov_type, omitted_period=omitted_period)
 
     def balance(self, treatment: str, covariates: list[str] | None = None) -> pd.DataFrame:
+        """Covariate balance table for ``treatment`` on the panel data. Delegates to :func:`open_econs.balance`."""
         from open_econs.models.causal.balance import balance as _balance
 
         return _balance(self._data, treatment=treatment, covariates=covariates)

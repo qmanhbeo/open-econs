@@ -145,6 +145,7 @@ class IVResult(BaseModel):
         return ", ".join(self._fit.model.endog.cols)
 
     def vcov(self) -> pd.DataFrame:
+        """Return the 2SLS/IV parameter variance-covariance matrix as a DataFrame."""
         if self._fit is None:
             raise RuntimeError(
                 "vcov() requires a fitted model result."

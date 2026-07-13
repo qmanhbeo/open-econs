@@ -63,12 +63,24 @@ class BaseModel(ABC):
     # ── optional stubs (loud) ───────────────────────────────────────
 
     def predict(self, newdata: pd.DataFrame | None = None) -> pd.Series:
+        """Predict on ``newdata`` using the fitted model.
+
+        Not every estimator supports in-sample or out-of-sample prediction;
+        results that do not (e.g. most causal/nonlinear estimators) raise
+        ``NotImplementedError`` describing which family supports it.
+        """
         raise NotImplementedError(
             f"{type(self).__name__} does not support predict(). "
             "predict() is only defined for LinearModel-family results."
         )
 
     def plot(self) -> None:
+        """Render a diagnostic/coefficient plot for this result.
+
+        Not implemented in this version. ``matplotlib`` is intentionally an
+        optional extra, not a hard dependency. Call ``.tidy()`` and plot the
+        returned DataFrame yourself in the meantime.
+        """
         raise NotImplementedError(
             "plot() is not implemented in this version of open-econs. "
             "Planned for a future release; matplotlib will be an optional "
@@ -77,6 +89,13 @@ class BaseModel(ABC):
         )
 
     def export(self, path: str) -> None:
+        """Persist the result to disk.
+
+        Writes ``.json`` (full ``to_dict()`` payload) or ``.csv`` (the
+        ``.tidy()`` coefficient table). Other extensions raise
+        ``NotImplementedError``. Serialisation uses ``default=str`` so numpy
+        scalars and timestamps survive the round-trip.
+        """
         import json
 
         if path.endswith(".json"):
@@ -94,6 +113,12 @@ class BaseModel(ABC):
             )
 
     def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serialisable dict of the result.
+
+        Includes ``formula``, ``nobs``, ``cov_type``, the captured ``call``,
+        ``timestamp``, ``package_version``, and the ``results`` rows built
+        from ``.tidy()``.
+        """
         d = self.tidy().to_dict(orient="records")
         return {
             "formula": self.formula,
@@ -106,6 +131,11 @@ class BaseModel(ABC):
         }
 
     def to_latex(self, caption: str = "", label: str = "") -> str:
+        """Return a LaTeX ``table`` of the ``.tidy()`` coefficient table.
+
+        Pass ``caption`` / ``label`` to wrap the ``tabular`` in a
+        ``\\begin{table}`` environment.
+        """
         tex = self.tidy().to_latex(index=False)
         if caption or label:
             head = "\\begin{table}\n\\centering\n"
@@ -118,6 +148,10 @@ class BaseModel(ABC):
         return tex
 
     def to_html(self, caption: str = "") -> str:
+        """Return an HTML table of the ``.tidy()`` coefficient table.
+
+        Pass ``caption`` to embed a ``<caption>`` element.
+        """
         html = self.tidy().to_html(index=False)
         if caption:
             html = html.replace("<table", f'<table\n<caption>{caption}</caption>', 1)
