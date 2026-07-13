@@ -435,7 +435,7 @@ and help decide when it moves from "vision" to "roadmap."*
       recommends `teffects`/bootstrap for consistent SEs.
     - `teffects psmatch` (discrete NN, what `psm()` is validated against) →
       **full AI-2012**, including the `c'_τ V_γ c_τ` PS-estimation adjustment
-      (`psm.py:382,384,470-473`).
+      (`psm.py:384-387,428-463`).
     - **Consequence:** since `teffects` can't do kernel, ANY kernel reference
       (psmatch2 *or* kmatch) leaves a gap — to stay consistent with OE's
       teffects-equivalent standard the kernel variance needs *both* the
@@ -461,10 +461,12 @@ and help decide when it moves from "vision" to "roadmap."*
 - `cem()` k2k matching + L1 balance diagnostics — Pass 3, investigated,
   deliberately not built (see prior investigation report).
 
-## Known Limitations (NotImplementedError by design)
+## Known Limitations (not implemented)
 
-- `synth()` — `plot()` and `predict()` (out-of-sample counterfactual) currently
-  raise `NotImplementedError` by design; deferred as own future items.
+- `synth()` — `plot()` and `predict()` (out-of-sample counterfactual) are **not
+  implemented**: `SynthResult` defines no such methods. The `synth` module
+  docstring notes they are intentionally out of scope for the core pass and are
+  a separate, later-scoped task.
 
 
 
