@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.10", "3.13"]
 
     steps:
       - uses: actions/checkout@v4
@@ -49,10 +49,11 @@ jobs:
       # addopts are unchanged) — this split is a CI feedback optimization, not a
       # coverage reduction for local runs.
       #
-      # Coverage: Python 3.12 keeps `--cov` (line-level coverage gathered every
-      # PR); Python 3.13 deliberately runs WITHOUT `--cov`. On 3.13 coverage.py's
+      # Coverage: the min supported Python (3.10) keeps `--cov` (line-level
+      # coverage gathered every PR); the max (3.13) deliberately runs WITHOUT
+      # `--cov`. On 3.13 coverage.py's
       # PEP 669 `sys.monitoring` path adds ~60% overhead to the test step
-      # (~157s), vs only ~6% on 3.12 — see
+      # (~157s), vs only ~6% on 3.10 — see
       # docs/synth-cross-os-solver-recon-update.md. This is a disclosed per-PR
       # coverage tradeoff (3.13-only paths lose live coverage reporting), not a
       # reduction in test execution.
