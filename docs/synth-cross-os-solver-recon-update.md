@@ -168,8 +168,9 @@ the tests. The following surgical re-tiering/optimization was applied to the
 
 ### CI-measured durations (real hardware — supersedes the local probe above)
 
-A temporary `ci-durations-diag.yml` captured per-test timings on real CI runners
-(see run `29259559738`, Py3.12/3.13 × with/without `--cov`). The local probe is
+A temporary `ci-durations-diag.yml` (since removed in `9671521`) captured per-test
+timings on real CI runners (see run `29259559738`, Py3.12/3.13 × with/without
+`--cov`). The local probe is
 **not** a substitute for these numbers. Headlines:
 
 | Leg | no-cov total | with-cov total | `--cov` overhead |
@@ -266,16 +267,14 @@ A temporary `ci-durations-diag.yml` captured per-test timings on real CI runners
 | `pyproject.toml` | `slow` marker registered; `addopts` unchanged |
 | `.github/workflows/ci.yml` | Fast-only gate on push/PR; pip cache (`setup-python`) + `.mypy_cache` cache; **`--cov` now conditional — dropped on Py3.13 leg, kept on 3.12** |
 | `.github/workflows/ci-slow.yml` | NEW — nightly + manual slow safety net (no push/PR) |
-| `.github/workflows/ci-durations-diag.yml` | TEMPORARY diagnostic (captured run `29259559738`); still on branch with push trigger — cleanup decision pending (see Still Open) |
+| `.github/workflows/ci-durations-diag.yml` | TEMPORARY diagnostic — REMOVED in `9671521` (captured run `29259559738`; per-push cost no longer justified) |
 | `docs/synth-cross-os-solver-recon-update.md` | This file (corrected false "Status: Fixed"; caching + tiering follow-up + CI-measured durations + second follow-up) |
 
 ## Still Open
 
-- **CI: `ci-durations-diag.yml` cleanup decision pending.** The temporary
-  diagnostic workflow is still on the branch with a **push trigger**, so every
-  push to this branch spawns an extra ~15–20 min 4-job run. Options: remove it
-  now that run `29259559738` captured the data, or keep it as `workflow_dispatch`-
-  only after merge to `main`. Not yet acted on.
+- **CI: `ci-durations-diag.yml` REMOVED** in `9671521`. The temporary diagnostic
+  workflow (push trigger) was deleted once run `29259559738` had captured the
+  per-test data it was added for; its per-push CI cost was no longer justified.
 - `nlogit()` — recon complete (`docs/nlogit-recon.md`); implementation blocked on
   `mlogit`-spec equality-structure syntax.
 - API freeze candidate — no more breaking signature changes without deprecation.
