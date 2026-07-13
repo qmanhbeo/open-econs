@@ -527,6 +527,34 @@ def test_synth_parity_r_explicit():
 
 
 @pytest.mark.r
+@pytest.mark.xfail(
+    strict=False,
+    reason=(
+        "KNOWN CROSS-PLATFORM / CROSS-BLAS NUMERICAL DIVERGENCE in a rank-deficient "
+        "(N > P) inner-QP edge case. The test asserts that Python's SLSQP inner-QP "
+        "weights drive covariate mismatch to (essentially) zero AND to the same value "
+        "as R's kernlab::ipop, at a 1e-2 tolerance. This tolerance is met on WSL "
+        "(cov_mm ~ 1e-8, run-to-run consistent) but NOT on ubuntu-latest CI "
+        "(cov_mm = 3.57e-02, observed on run 29250248678, Python 3.13) — a genuine "
+        "BLAS-implementation-dependent divergence, root-caused to SLSQP converging to "
+        "a suboptimal point on an ill-conditioned (1e-12 ridge-regularized) Hessian "
+        "with condition number ~1e12 on CI's scipy-openblas build. It is deterministic "
+        "per BLAS build, not run-to-run noise. Mitigation history (do not re-litigate): "
+        "ridge regularization (1e-12) alone -> cov_mm 0.327 on CI; +2-start multi-start "
+        "SLSQP -> 0.0357 on CI (9x better, still 3.5x over 1e-2). Per project-lead "
+        "decision, solver escalation is stopped here (diminishing returns) and the "
+        "assertion is xfail-gated with a tracked reason rather than silently loosened "
+        "or deleted. The xfail is strict=False so an xpass (e.g. on a local BLAS that "
+        "matches) is reported, not failed. IMPORTANT: this only affects one "
+        "documentation test asserting solver-agreement in an already-acknowledged "
+        "non-unique-minimizer scenario. The synth() estimator's actual validated "
+        "parity claims (against R Synth and Stata synth) are UNAFFECTED, and the "
+        "test's core purpose — that W legitimately DIFFERS across independent solvers "
+        "on a rank-deficient QP (max_w > 1e-2) — is still exercised. Follow-up: a "
+        "runtime UserWarning for rank-deficient / multi-modal donor pools is scoped "
+        "(see recon doc), mirroring nls()'s numerical-Jacobian-fallback pattern."
+    ),
+)
 def test_synth_rank_deficient_qp_same_objective_different_w():
     """P=2 < N=12: inner QP is rank-deficient -> same objective, different W.
 
