@@ -304,7 +304,7 @@ might fit.
 
 #### v1.0 — Stable Release
 - [x] Semver-committed public API — breaking changes require a major version bump (see `docs/api_stability.md`; enforced from v1.0.0)
-- [x] Tutorials (core subset shipped): OLS, FE, IV, DiD full walkthroughs in `docs/tutorials/`; RDD, PSM, synthetic control **deferred as documented post-1.0 stubs** (explicitly not in v1.0)
+- [x] Tutorials (full set shipped): OLS, FE, IV, DiD **plus RDD, PSM, and synthetic control** full walkthroughs in `docs/tutorials/` (the three were deferred as post-1.0 stubs in the v1.0 line and completed afterwards — see the "Done post-1.0" note under v1.1 Candidates)
 - [x] "Migrating from Stata" (updated) and "Migrating from R" (new) guides
 - [x] Numerical parity test suite against Stata/R reference output, **re-run in CI on every release** (`ci-parity.yml`, `release`/`workflow_dispatch` triggers). Runs against committed fixtures with **zero skips** on free runners; live fixture *regeneration* needs self-hosted Stata/R (documented gap, not "done")
 - [x] Benchmark suite (`benchmarks/ols_fe.py`, speed vs. statsmodels/linearmodels on large panels)
@@ -318,11 +318,16 @@ These items were scoped during the v1.0 close-out but are **not** committed to
 any release. They are recorded here so the work is visible and not lost; no
 dates, no promises.
 
+#### Done post-1.0 (deferred v1.0 stubs, now completed)
+
 - **RDD / PSM / synthetic-control TUTORIALS** — the estimators (`rdd()`,
-  `psm()`/`cem()`, `synth()`) already shipped in v1.0; only the
-  `docs/tutorials/` walkthroughs are missing (RDD, PSM, synthetic control were
-  explicitly deferred as post-1.0 stubs in the v1.0 line). Pure documentation —
-  cheap early wins once someone picks them up. No code, no new parity work.
+  `psm()`/`cem()`, `synth()`) shipped in v1.0; the `docs/tutorials/` walkthroughs
+  (`rdd.md`, `psm.md`, `synth_control.md`) are now written and locally smoke-tested.
+  Pure documentation, no estimator code changed, no new parity work — local
+  runnability (not Stata/R numerical parity) is the validation bar, and each
+  tutorial states its known limitations honestly. A tutorials index was added at
+  `docs/tutorials/README.md`.
+
 - **`nlogit()` — nested logit** — recon is complete and documented in
   `docs/nlogit-recon.md`, but the estimator is **not** built. Blockers: (a) R
   `mlogit` cannot run a full Stata-equivalent spec (nest-level covariates cause
