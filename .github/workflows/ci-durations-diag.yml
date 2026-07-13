@@ -19,6 +19,8 @@ name: CI durations diagnostic
 
 on:
   workflow_dispatch:
+  push:
+    branches: [fix/synth-cross-os-solver]
 
 jobs:
   durations:
