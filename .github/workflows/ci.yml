@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10"]
+        python-version: ["3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v4
@@ -49,11 +49,21 @@ jobs:
       # addopts are unchanged) — this split is a CI feedback optimization, not a
       # coverage reduction for local runs.
       #
-      # Coverage: line-level coverage is gathered every PR (single 3.10 job
-      # keeps `--cov`; no 3.13 PEP 669 overhead tradeoff to manage).
-      - name: Select coverage flag
+      # Coverage: Python 3.12 keeps `--cov` (line-level coverage gathered every
+      # PR); Python 3.13 deliberately runs WITHOUT `--cov`. On 3.13 coverage.py's
+      # PEP 669 `sys.monitoring` path adds ~60% overhead to the test step
+      # (~157s), vs only ~6% on 3.12 — see
+      # docs/synth-cross-os-solver-recon-update.md. This is a disclosed per-PR
+      # coverage tradeoff (3.13-only paths lose live coverage reporting), not a
+      # reduction in test execution.
+      - name: Select coverage flag (3.13 runs without --cov for speed)
         id: covflag
-        run: echo "cov=--cov=open_econs --cov-report=term-missing" >> "$GITHUB_OUTPUT"
+        run: |
+          if [ "${{ matrix.python-version }}" = "3.13" ]; then
+            echo "cov=" >> "$GITHUB_OUTPUT"
+          else
+            echo "cov=--cov=open_econs --cov-report=term-missing" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Run fast test suite (not slow)
         run: python -m pytest -m "not slow" tests/ ${{ steps.covflag.outputs.cov }} -v --tb=short
