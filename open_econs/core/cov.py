@@ -194,6 +194,7 @@ def white_cov(J: np.ndarray, resid: np.ndarray, kind: str = "HC2") -> np.ndarray
     h = np.clip(h, 0.0, 1.0 - 1e-12)  # guard against numerical > 1
 
     e2 = resid ** 2
+    scale: np.ndarray = e2
     if kind == "HC0":
         scale = e2
     elif kind == "HC1":
