@@ -312,6 +312,27 @@ might fit.
 
 ---
 
+### v1.1 Candidates *(deferred — NO committed timeline)*
+
+These items were scoped during the v1.0 close-out but are **not** committed to
+any release. They are recorded here so the work is visible and not lost; no
+dates, no promises.
+
+- **RDD / PSM / synthetic-control TUTORIALS** — the estimators (`rdd()`,
+  `psm()`/`cem()`, `synth()`) already shipped in v1.0; only the
+  `docs/tutorials/` walkthroughs are missing (RDD, PSM, synthetic control were
+  explicitly deferred as post-1.0 stubs in the v1.0 line). Pure documentation —
+  cheap early wins once someone picks them up. No code, no new parity work.
+- **`nlogit()` — nested logit** — recon is complete and documented in
+  `docs/nlogit-recon.md`, but the estimator is **not** built. Blockers: (a) R
+  `mlogit` cannot run a full Stata-equivalent spec (nest-level covariates cause
+  singularity on `webuse restaurant`); (b) no validated fixture with τ∈(0,1);
+  (c) the analytic gradient (~200 lines of recursive tree traversal) needs a
+  domain-expert implementation. Do not build until these are resolved; see the
+  existing v0.9 `nlogit()` deferred note for the full rationale.
+
+---
+
 ### North Star *(vision — not a commitment)*
 
 This is the "imagine it's five years from now" section. It's here so the
