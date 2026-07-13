@@ -1,0 +1,49 @@
+name: Parity (Stata / R)
+
+# Numerical parity validation against Stata/R reference output.
+#
+# HONEST STATUS (read before trusting this workflow):
+#   * All `stata`/`r`-marked tests run against COMMITTED reference fixtures
+#     (`.dta` / `.json`) generated from Stata/R at fixture-creation time. NO
+#     test skips and NO Stata/R binary is launched in a default run — the
+#     parity *check* runs on free GitHub runners on every release (and on
+#     workflow_dispatch) against the static committed fixtures.
+#   * Two previously Stata-launched tests (nls `nl`, synth) were converted to
+#     read the committed R-derived fixtures, so parity runs against committed
+#     fixtures with zero skips (see tests/test_nls.py and tests/test_synth.py).
+#   * The `rddensity`-based RDD density tests need the optional `[rd]` python
+#     extra (a pip package, not a binary); it is installed below so those tests
+#     also run on free runners.
+#   * KNOWN GAP (not "done"): refreshing the committed fixtures from a live
+#     Stata/R install — so the parity baseline tracks upstream Stata/R version
+#     changes — requires self-hosted runners with Stata and R installed
+#     (gated behind `OE_REGENERATE_FIXTURES`). On free runners the fixtures are
+#     static. This is a documented limitation, not a completed parity pipeline.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev,lint,plot,rd]"
+
+      - name: Run Stata/R parity suite (committed-fixture checks)
+        run: python -m pytest -m "stata or r" tests/ -v --tb=short
