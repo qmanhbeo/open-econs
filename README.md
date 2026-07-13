@@ -254,6 +254,19 @@ Every estimator includes a methodology specification covering:
 
 See [methodology/](methodology/) for the full registry.
 
+## Tutorials
+
+Step-by-step walkthroughs for the core estimators:
+
+- [OLS](docs/tutorials/ols.md)
+- [Fixed Effects](docs/tutorials/fe.md)
+- [Instrumental Variables](docs/tutorials/iv.md)
+- [Difference-in-Differences](docs/tutorials/did.md)
+
+RDD, PSM, and synthetic control tutorials are planned for a post-1.0 release.
+See also [Migrating from Stata](docs/migrating_from_stata.md) and
+[Migrating from R](docs/migrating_from_r.md).
+
 ## Comparison
 
 | Library | Strength |
