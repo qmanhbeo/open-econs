@@ -2,8 +2,9 @@
 
 **Status:** Partially mitigated — Component 1 (rank-deficient inner QP) is
 **xfail-gated, not algorithmically fixed**; Component 2 (placebo parity) is
-**validated green**. CI restructured so push/PR runs only the fast suite (~10
-min observed) with the slow synth sweeps moved to a nightly + manual safety net.
+**validated green**. CI restructured so push/PR runs only the fast suite (now
+**~2.5 min local**, wall-clock targeted to ~3–4 min via pip/mypy caching) with
+the slow synth sweeps moved to a nightly + manual safety net.
 **Branch:** `fix/synth-cross-os-solver`
 **PR:** #19 (OPEN — do not merge without explicit instruction)
 **Previous docs:**
@@ -111,13 +112,19 @@ from the push/PR path restores the fast gate.
 
 ### Caveats / open points
 
-- **Duration is ~9.5 min, not the ~3-min `main` baseline.** The gap is dominated
-  by cold `pip install -e ".[dev,lint,plot]"` + 689-test execution, **not** the
-  removed slow tests. The `main` 3-min figure is for `main`'s (smaller,
-  synth-tests-disabled) suite, so it is not apples-to-apples with this branch's
-  fast set. If a tighter wall-clock is required, add pip caching
-  (`actions/setup-python` cache or `actions/cache`) and/or review whether more
-  tests belong in the `slow` set.
+- **Duration ~9.5 min on the pre-caching run, not the ~3-min `main` baseline.**
+  The gap was dominated by cold `pip install -e ".[dev,lint,plot]"` + `mypy`
+  (no cache) overhead, **not** the removed slow tests and not the fast-suite
+  tests themselves (the fast suite runs in ~2.5 min locally). The `main` 3-min
+  figure is for `main`'s smaller, synth-tests-disabled suite, so it is not
+  apples-to-apples.
+- **Pip + mypy caching added (2026-07-13).** `ci.yml` now uses
+  `actions/setup-python` `cache: pip` (keyed on `pyproject.toml`) and an
+  `actions/cache` on `.mypy_cache` keyed on
+  `mypy-<python-version>-<hash(pyproject.toml)>`. This is expected to close most
+  of the 9.5-min → ~3–4-min gap on **warm-cache** runs. The **first run after
+  this change is still cold** (no cache yet) and will be slow — that is expected,
+  not a regression. See "Test tiering follow-up" for the test-side changes too.
 - **`ci-slow.yml` cannot be manually dispatched from this feature branch.** The
   GitHub dispatch/schedule API resolves workflows from the **default branch
   (`main`)**, so `gh workflow run ci-slow.yml` returns 404 until the file is
@@ -130,17 +137,65 @@ from the push/PR path restores the fast gate.
 
 ---
 
+## Test tiering follow-up (2026-07-13)
+
+Durations probe (`pytest -m "not slow" --durations=50`) showed the fast suite
+executes in **214.58s (3:34)** locally — already near the ~3-min target — so
+the 9.5-min CI wall-clock is CI-job overhead (cold pip + mypy + coverage), not
+the tests. The following surgical re-tiering/optimization was applied to the
+fast set's slowest outliers; **no test was skipped or deleted** ("move" = runs
+on the nightly/manual `ci-slow.yml` path only).
+
+### `test_placebo_immutability` → moved to `slow`
+- 18.66s → now `slow`. It only asserted pydantic-v2 `BaseModel` immutability
+  (framework behaviour), already covered by `test_synth_immutability`
+  (`SynthResult` is the same `BaseModel` family). Zero project-logic coverage
+  loss.
+
+### `test_placebo_plot_predict_stubs` + `test_synth_predict_plot_stubs` → optimized (kept fast)
+- Both now build a **lightweight result object directly** (minimal
+  `PlaceboSpaceResult` / `SynthResult`, no `synth()`/`placebo_space()` fit) and
+  still assert `plot()`/`predict()` raise `NotImplementedError`.
+- **Plot-deprecation finding (confirmed for synth/placebo results):** `plot()`
+  and `predict()` are deliberate `NotImplementedError` stubs on every synth
+  result object (`SynthResult`/`PlaceboSpaceResult`/`PlaceboTimeResult` —
+  ROADMAP.md, `synth.py:846`, `placebo.py:79/193`), with `pd.DataFrame`/pydantic
+  outputs as the supported interface. NOTE: plotting is **not** deprecated
+  project-wide — `OLSResult.plot()` is deprecated (v0.8) and `DiD`-style results
+  implement `plot()`, but the synth/placebo stub contract is exactly what these
+  two tests guard. The optimization is therefore safe.
+
+### `test_placebo_space_internal_consistency` + `test_placebo_space_returns_placebo_result` → optimized (kept fast)
+- 19.77s / 18.60s → both now use a **smaller panel** (`_make_panel_small`: 6
+  donors / 12 periods vs 12 / 20), exercising the full `placebo_space` path
+  end-to-end but refitting for far fewer donors. Correctness-critical (no faster
+  equivalent) so kept in the fast gate rather than moved.
+
+### Result
+- Fast suite: **144.55s (2:24)** after changes (was 3:34). 657 passed, 19
+  pre-existing NLS/sympy `ImportError` failures (unrelated), 11 skipped, **5
+  deselected** (the 4 original `slow` + `test_placebo_immutability`), 1 xpassed.
+- **Open follow-up (out of scope, flagged):** `test_placebo_time_returns_placebo_result`
+  is now the fast set's slowest at ~29s — and its runtime is *variable* (it
+  refits `synth()` per pre-period candidate; the multi-method `V`-optimization
+  has run-to-run solver variance). It was **not** in the re-tiering list and was
+  left untouched; a future pass could point it at `_make_panel_small` too.
+
+---
+
+---
+
 ## Files Changed (this branch, full chain)
 
 | File | Change |
 |------|--------|
 | `open_econs/models/causal/synth.py` | L2 ridge in `_solve_w()` when `N > P`; multi-start inner QP; multi-method V-optimization (`_optimize_v`) |
-| `tests/test_synth.py` | Rank-deficient test xfail-gated (`:530`) |
-| `tests/test_synth_placebo.py` | Donor-exclusion logic (Component 2); 4 tests marked `@pytest.mark.slow` |
+| `tests/test_synth.py` | Rank-deficient test xfail-gated (`:530`); `test_synth_predict_plot_stubs` optimized via lightweight `SynthResult` |
+| `tests/test_synth_placebo.py` | Donor-exclusion logic (Component 2); 4 tests marked `@pytest.mark.slow`; `test_placebo_immutability` moved to `slow`; plot-stub + 2 consistency/shape tests optimized (smaller panel / lightweight `PlaceboSpaceResult`) |
 | `pyproject.toml` | `slow` marker registered; `addopts` unchanged |
-| `.github/workflows/ci.yml` | Fast-only gate on push/PR |
+| `.github/workflows/ci.yml` | Fast-only gate on push/PR; **pip cache (`setup-python`) + `.mypy_cache` cache added** |
 | `.github/workflows/ci-slow.yml` | NEW — nightly + manual slow safety net (no push/PR) |
-| `docs/synth-cross-os-solver-recon-update.md` | This file (corrected from the false "Status: Fixed") |
+| `docs/synth-cross-os-solver-recon-update.md` | This file (corrected from the false "Status: Fixed"; caching + tiering follow-up) |
 
 ## Still Open (unchanged)
 

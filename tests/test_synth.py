@@ -323,9 +323,43 @@ def test_synth_vcov_not_implemented():
         r.vcov()
 
 
+def _make_minimal_synth_result() -> SynthResult:
+    """Lightweight ``SynthResult`` carrying no fit, used by the plot/predict stub
+    guard so it does not pay for a full ``synth()`` estimation."""
+    idx = pd.Index(["d0", "d1", "d2"], name="unit")
+    weights = pd.Series([0.4, 0.35, 0.25], index=idx)
+    pv = pd.Series([1.0, 0.0], index=["x1", "x2"])
+    gp = pd.DataFrame(
+        {"treated": [0.0], "synthetic": [0.0], "gap": [0.0]},
+        index=pd.Index([1994], name="time"),
+    )
+    return SynthResult(
+        formula="synth(y ~ unit + time)",
+        outcome="y",
+        treated_unit="t",
+        donor_pool=["d0", "d1", "d2"],
+        entity="unit",
+        time="time",
+        pre_period=1994,
+        post_period=1995,
+        predictors=["x1", "x2"],
+        weights=weights,
+        predictor_weights=pv,
+        predictor_names=["x1", "x2"],
+        pre_mspe=1.0,
+        post_mspe=1.0,
+        gap_path=gp,
+        n_donors=3,
+        n_pre_periods=15,
+        n_post_periods=5,
+        v_success=True, v_loss=0.0, v_nit=1, v_nfev=1, v_message="",
+        w_success=True, w_loss=0.0, w_nit=1, w_nfev=1, w_message="",
+        call={},
+    )
+
+
 def test_synth_predict_plot_stubs():
-    p = _make_panel()
-    r = _fit(p)
+    r = _make_minimal_synth_result()
     with pytest.raises(NotImplementedError):
         r.predict()  # type: ignore[call-arg]
     with pytest.raises(NotImplementedError):

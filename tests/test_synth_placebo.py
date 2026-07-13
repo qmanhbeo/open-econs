@@ -25,6 +25,7 @@ import pandas as pd
 import pytest
 
 from open_econs.models.causal.synth import synth
+from open_econs.models.causal.placebo import PlaceboSpaceResult
 from .r.r_runner import read_r, R_FIXTURES_DIR, r_available
 
 # This test was previously re-gated to R-present machines (see the commit for
@@ -100,6 +101,79 @@ def _make_panel() -> dict:
         "df": df, "donors": donors, "treated": treated, "times": times,
         "pre_period": 1994, "post_period": 1995, "w_true": w_true, "shift": 4.0,
     }
+
+
+def _make_panel_small() -> dict:
+    """Cheaper variant of ``_make_panel`` (fewer donors/periods) used by the
+    per-PR fast-gate placebo tests.  Exercises the full ``placebo_space`` path
+    end-to-end without the cost of refitting for every donor in a 12-unit panel.
+    """
+    rng = np.random.default_rng(7)
+    N, T = 6, 12
+    times = list(range(1980, 1980 + T))
+    donors = [f"d{i}" for i in range(N)]
+    treated = "t"
+    units = [treated] + donors
+    base = rng.normal(size=(N, T)).cumsum(axis=1)
+    x1 = rng.normal(size=(N + 1, T)).cumsum(axis=1)
+    x2 = rng.normal(size=(N + 1, T)).cumsum(axis=1)
+
+    Y = pd.DataFrame(index=pd.Index(units, name="unit"), columns=times, dtype=float)
+    X1 = pd.DataFrame(index=pd.Index(units, name="unit"), columns=times, dtype=float)
+    X2 = pd.DataFrame(index=pd.Index(units, name="unit"), columns=times, dtype=float)
+    Y.loc[donors] = base
+    X1.loc[units] = x1
+    X2.loc[units] = x2
+
+    w_true = np.array([0.4, 0.35, 0.25])
+    Y.loc[treated] = w_true @ base[:3, :]
+    post_times = [t for t in times if t >= 1991]
+    Y.loc[treated, post_times] = Y.loc[treated, post_times] + 4.0
+
+    y_df = Y.reset_index().melt(id_vars="unit").rename(
+        columns={"variable": "time", "value": "y"}
+    )
+    x1_df = X1.reset_index().melt(id_vars="unit").rename(
+        columns={"variable": "time", "value": "x1"}
+    )
+    x2_df = X2.reset_index().melt(id_vars="unit").rename(
+        columns={"variable": "time", "value": "x2"}
+    )
+    df = y_df.merge(x1_df, on=["unit", "time"]).merge(x2_df, on=["unit", "time"])
+    return {
+        "df": df, "donors": donors, "treated": treated, "times": times,
+        "pre_period": 1990, "post_period": 1991, "w_true": w_true, "shift": 4.0,
+    }
+
+
+def _make_minimal_placebo_space_result() -> PlaceboSpaceResult:
+    """Lightweight ``PlaceboSpaceResult`` carrying no fit, used by the plot/predict
+    stub guards so they do not pay for a full ``placebo_space`` permutation run.
+    """
+    donors = [f"d{i}" for i in range(6)]
+    unit_idx = pd.Index(donors, name="unit")
+    ratios = pd.Series(np.linspace(0.5, 2.0, len(donors)), index=unit_idx)
+    gap_paths = pd.DataFrame(
+        np.zeros((2, len(donors))),
+        index=pd.Index([1994, 1995], name="time"),
+        columns=donors,
+    )
+    pre_mspe = pd.Series(np.ones(len(donors)), index=unit_idx)
+    post_mspe = pd.Series(np.ones(len(donors)), index=unit_idx)
+    return PlaceboSpaceResult(
+        treated_unit="t",
+        treated_ratio=1.0,
+        treated_pre_mspe=1.0,
+        treated_post_mspe=1.0,
+        ratios=ratios,
+        excluded=[],
+        pre_mspe_threshold=None,
+        p_value=0.5,
+        gap_paths=gap_paths,
+        pre_mspe=pre_mspe,
+        post_mspe=post_mspe,
+        call={},
+    )
 
 
 def _make_panel_welldetermined() -> dict:
@@ -196,7 +270,7 @@ def _fit(p: dict, predictors=None):
 
 # ── always-on: result shape / immutability / API ─────────────────
 def test_placebo_space_returns_placebo_result():
-    p = _make_panel()
+    p = _make_panel_small()
     r = _fit(p, predictors=["x1", "x2"])
     ps = r.placebo_space(p["df"])
     assert isinstance(ps.ratios, pd.Series)
@@ -216,6 +290,7 @@ def test_placebo_time_returns_placebo_result():
     assert 0.0 <= pt.p_value <= 1.0
 
 
+@pytest.mark.slow
 def test_placebo_immutability():
     p = _make_panel()
     r = _fit(p, predictors=["x1", "x2"])
@@ -248,9 +323,7 @@ def test_placebo_tidy_summary_export(tmp_path):
 
 
 def test_placebo_plot_predict_stubs():
-    p = _make_panel()
-    r = _fit(p, predictors=["x1", "x2"])
-    ps = r.placebo_space(p["df"])
+    ps = _make_minimal_placebo_space_result()
     with pytest.raises(NotImplementedError):
         ps.plot()  # type: ignore[call-arg]
     with pytest.raises(NotImplementedError):
@@ -259,7 +332,7 @@ def test_placebo_plot_predict_stubs():
 
 def test_placebo_space_internal_consistency():
     """A placebo run must reproduce a direct synth() call on the same config."""
-    p = _make_panel()
+    p = _make_panel_small()
     r = _fit(p, predictors=["x1", "x2"])
     ps = r.placebo_space(p["df"])
 
