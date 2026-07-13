@@ -51,9 +51,11 @@ res.vcov()
 res.stage1_results      # first-stage estimates (if exposed)
 ```
 
-`oe.iv` supports `cov_type` (e.g. `"HC2"`, `"cluster"`) the same way as `ols()`,
+`oe.iv` supports `cov_type` (e.g. `"HC2"`, `"robust"`) the same way as `ols()`,
 and `cov_type="HAC"` (validated canonical Newey-West) for panel/timeseries data
-with a `time` column and `lags`.
+with a `time` column and `lags`. One-way cluster-robust standard errors are
+available via the separate `cluster="<col>"` argument (mirroring `ols()`), which
+takes precedence over `cov_type`.
 
 ## 4. Overidentification
 

@@ -167,6 +167,7 @@ def iv(
     formula: str,
     data: pd.DataFrame,
     cov_type: str = "robust",
+    cluster: str | list[str] | None = None,
     lags: int | None = None,
     time: str | None = None,
     hac_adjust: bool = False,
@@ -197,6 +198,16 @@ def iv(
         Set ``cov_type="HAC"`` to use Newey-West (1987) heteroskedasticity-
         and autocorrelation-robust standard errors with a Bartlett kernel;
         the number of lags is given by *lags* and the time ordering by *time*.
+
+        ``cluster`` takes precedence over *cov_type*: when *cluster* is
+        supplied, one-way cluster-robust standard errors are used regardless
+        of the *cov_type* value.
+    cluster : str or list of str, optional
+        Column name for one-way cluster-robust standard errors.  Pass a single
+        column name (e.g. ``cluster="firm"``).  Multi-way clustering is **not**
+        supported for IV-2SLS (linearmodels' IV covariance only implements
+        one-way clustering); passing a list with more than one column raises
+        ``NotImplementedError``.  Takes precedence over *cov_type*.
     lags : int, optional
         Number of lags for Newey-West HAC (required when ``cov_type="HAC"``).
     time : str, optional
@@ -223,8 +234,8 @@ def iv(
     >>> r.cragg_donald_stat
     """
     call = _capture_call(
-        formula=formula, cov_type=cov_type, lags=lags, time=time,
-        hac_adjust=hac_adjust,
+        formula=formula, cov_type=cov_type, cluster=cluster, lags=lags,
+        time=time, hac_adjust=hac_adjust,
     )
 
     cov_type = validate_cov_type(
@@ -232,6 +243,25 @@ def iv(
         accepted=set(_IV_COV_MAP.keys()) | {"HAC"},
         estimator="iv()",
     )
+
+    if cov_type == "clustered" and cluster is None:
+        raise ValueError(
+            "iv(): cov_type='clustered' requires a `cluster` column. "
+            "Pass cluster='<column>' to request cluster-robust IV standard errors."
+        )
+
+    if cluster is not None:
+        if isinstance(cluster, (list, tuple)):
+            if len(cluster) > 1:
+                raise NotImplementedError(
+                    "iv(): multi-way clustering is not supported for IV-2SLS. "
+                    "linearmodels' IV covariance estimator implements only one-way "
+                    "clustering. Pass a single cluster column (e.g. cluster='firm'). "
+                    "For multi-way clustered IV, use linearmodels directly or another tool."
+                )
+            cluster = cluster[0]
+        if cluster not in data.columns:
+            raise errors.missing_column_error(cluster, data.columns.tolist())
 
     if cov_type == "HAC":
         if lags is None:
@@ -264,9 +294,22 @@ def iv(
     X_exog = X_full[:, exog_idx] if exog_idx else None
     X_endog = X_full[:, endog_idx] if endog_idx else None
 
+    # Align the cluster column to the same rows kept for y / X / instruments,
+    # so the cluster labels never disagree with the estimation sample.
+    if cluster is not None:
+        cluster_arr = data.loc[parsed["index"], cluster].values
+    else:
+        cluster_arr = None
+
     from linearmodels.iv import IV2SLS as LM_IV2SLS
     try:
-        if cov_type == "HAC":
+        if cluster_arr is not None:
+            fitted = LM_IV2SLS(y_arr, X_exog, X_endog, Z_arr).fit(
+                cov_type="clustered",
+                clusters=cluster_arr,
+            )
+            cov_label = f"clustered({cluster})"
+        elif cov_type == "HAC":
             fitted = LM_IV2SLS(y_arr, X_exog, X_endog, Z_arr).fit(
                 cov_type="kernel",
                 debiased=hac_adjust,

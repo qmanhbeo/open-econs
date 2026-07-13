@@ -165,8 +165,8 @@ The default `"robust"` corresponds to HC0 without finite-sample correction. Use 
 | First-stage F | Per-endog variable; Cragg-Donald = min(F) | Same | Same |
 | Weak instrument critical values | Not implemented (user compares against Stock-Yogo) | `estat weakiv` | Available |
 | Hansen J overidentification | Yes (via linearmodels sargan) | `estat overid` | `summary()` output |
-| Cluster-robust SE | Not available via `oe.iv()` API | `ivregress 2sls, vce(cluster)` | `vcovCL` |
-| HAC SE | Not available | `ivregress 2sls, vce(hac)` | Not directly |
+| Cluster-robust SE | Available: `cluster="<col>"` (one-way) | `ivregress 2sls, vce(cluster)` | `vcovCL` |
+| HAC SE | Available: `cov_type="HAC", lags=, time=` | `ivregress 2sls, vce(hac)` | Not directly |
 | Predict | Not implemented | Yes | `predict()` |
 
 ## Implementation Details
@@ -431,8 +431,8 @@ result = oe.iv("y ~ w | x ~ z", data=df)
 
 ## Limitations
 
-1. **No cluster-robust SEs**: The `cluster` parameter is not exposed in `oe.iv()`. For clustered IV, use linearmodels directly or preprocess manually.
-2. **No HAC SEs**: Heteroskedasticity-and-autocorrelation consistent covariance is not available for IV.
+1. **One-way clustering only**: `oe.iv(..., cluster="<col>")` exposes one-way cluster-robust IV standard errors (linearmodels `cov_type="clustered"`). Multi-way clustering is **not** supported for IV-2SLS; for that, use linearmodels directly or another tool.
+2. **HAC SEs are available**: `cov_type="HAC"` with `lags` and `time` gives Newey-West (1987) heteroskedasticity- and autocorrelation-robust IV standard errors.
 3. **No HC2/HC3 distinction for IV**: Linearmodels does not implement leverage-adjusted HC2/HC3 for IV (HC0, HC2, HC3 all map to the same robust estimator). For leverage-corrected IV standard errors, use Stata or R.
 4. **No `predict()`**: `IVResult` does not support `.predict()`. Fitted values are available via `.fitted_values`.
 5. **No weak-instrument critical values**: The Cragg-Donald statistic is reported but not compared against Stock-Yogo critical values.
