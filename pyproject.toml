@@ -55,6 +55,7 @@ addopts = "--ignore=tests/stata/do/archive"
 markers = [
     "stata: marks tests that compare against Stata-generated .dta fixtures (require Stata to regenerate; excluded by default historically, now run in the default suite against committed fixtures)",
     "r: marks tests that compare against R-generated output via Rscript (require R; excluded by default historically, now run in the default suite against committed fixtures)",
+    "slow: marks tests whose runtime is materially higher than the typical test (e.g. multi-start / multi-method solver sweeps). They run in the default local suite (bare `pytest`) AND in a dedicated CI job, so coverage is unchanged; the split exists only to give a fast feedback path (CI 'fast' step) without dropping coverage.",
 ]
 
 [build-system]

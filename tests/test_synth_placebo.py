@@ -226,6 +226,7 @@ def test_placebo_immutability():
         ps.ratios = ps.ratios  # type: ignore[misc]
 
 
+@pytest.mark.slow
 def test_placebo_tidy_summary_export(tmp_path):
     p = _make_panel()
     r = _fit(p, predictors=["x1", "x2"])
@@ -275,6 +276,7 @@ def test_placebo_space_internal_consistency():
     assert np.allclose(ps.gap_paths[d].to_numpy(), direct.gap_path["gap"].to_numpy())
 
 
+@pytest.mark.slow
 def test_placebo_space_internal_consistency_default_predictors():
     """Internal consistency also holds when predictors=None (default path)."""
     p = _make_panel()
@@ -291,6 +293,7 @@ def test_placebo_space_internal_consistency_default_predictors():
     assert abs(ps.ratios[d] - direct.post_mspe / direct.pre_mspe) < 1e-9
 
 
+@pytest.mark.slow
 def test_placebo_space_exclusion_threshold():
     """The pathological donor is dropped by ``exclude_pre_mspe_multiple``."""
     p = _make_panel_with_outlier_donor()
@@ -338,6 +341,7 @@ def test_placebo_space_requires_data_frame():
 
 
 @pytest.mark.r
+@pytest.mark.slow
 def test_placebo_space_parity_r():
     p = _panel_from_csv(
         R_FIXTURES_DIR / "synth_placebo_space_input.csv",
