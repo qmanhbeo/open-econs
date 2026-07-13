@@ -240,16 +240,16 @@ A temporary `ci-durations-diag.yml` captured per-test timings on real CI runners
   skipped, **5 deselected** (the 4 original `slow` + `test_placebo_immutability`),
   1 xpassed.
 
-### Result (after second follow-up — projected from CI measurement, to be confirmed by next push run)
+### Result (after second follow-up — CONFIRMED by push run `29262027059`)
 
 - `SynthResult` cluster: 6×~18s → ~18s (shared fixture).
 - `test_placebo_time_returns_placebo_result`: ~46s → ~10s (smaller panel).
 - `test_gmm::test_hansen_j_size_and_power`: ~14s → ~9s (R 300).
-- Py3.13 test step: ~414.8s (with `--cov`) → ~259.9s (no `--cov`).
-- Net per-PR: both legs now ≈ **260–270s test execution** + install/type-check;
-  3.13 no longer carries the ~157s coverage tax, so the gate sits comfortably
-  under the original ~3–4 min target. (Numbers above are projections from the
-  `29259559738` measurement; the next CI push run is the source of truth.)
+- Py3.13 test step: ~414.8s (with `--cov`) → ~259.9s no-coverage, and the per-PR
+  leg now RUNS WITHOUT `--cov`, so the 3.13 job finished in **2m1s** and the 3.12
+  job (still with `--cov`) in **2m48s**. Per-PR feedback is now ~2–3 min/leg,
+  comfortably under the original ~3–4 min target (and far below the prior 6–8 min).
+- Source of truth: push run `29262027059` (both legs green).
 
 ---
 
