@@ -446,11 +446,28 @@ def _solve_w(
 
     constraints = [{"type": "eq", "fun": lambda w: float(np.sum(w) - 1.0)}]
     bounds = [(0.0, 1.0)] * N
-    w0 = np.full(N, 1.0 / N)
-    return minimize(
-        _obj, w0, method="SLSQP", bounds=bounds,
+
+    # For rank-deficient QPs (N > P), SLSQP from a single start may converge
+    # to a suboptimal W on certain BLAS backends because the ill-conditioned
+    # Hessian creates flat regions that trap the gradient-based solver.  We
+    # mitigate this by trying a few additional random interior starts and
+    # keeping the result with the lowest objective value.
+    n_extra = 2 if N > P else 0
+    best_res = minimize(
+        _obj, np.full(N, 1.0 / N), method="SLSQP", bounds=bounds,
         constraints=constraints, **solver_kwargs,
     )
+    if n_extra > 0:
+        rng = np.random.default_rng(17)
+        for _ in range(n_extra):
+            raw = rng.dirichlet(np.ones(N))
+            res = minimize(
+                _obj, raw, method="SLSQP", bounds=bounds,
+                constraints=constraints, **solver_kwargs,
+            )
+            if res.fun < best_res.fun:
+                best_res = res
+    return best_res
 
 
 def _fn_v(
