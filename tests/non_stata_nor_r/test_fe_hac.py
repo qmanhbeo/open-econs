@@ -22,7 +22,7 @@ import statsmodels.stats.sandwich_covariance as sw
 
 import open_econs as oe
 from open_econs.core.cov import _as_int_labels
-from .r.r_runner import read_r
+from ..r.r_runner import read_r
 
 
 def _make_panel(n=8, T=10, seed=123):

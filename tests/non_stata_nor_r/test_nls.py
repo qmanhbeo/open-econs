@@ -29,7 +29,7 @@ from scipy.optimize import curve_fit
 
 import open_econs as oe
 from open_econs.models.nonlinear.nls import NLSResult
-from .r.r_runner import read_r, R_INPUTS_DIR
+from ..r.r_runner import read_r, R_INPUTS_DIR
 
 # ── committed-fixture parity ──────────────────────────────────────────────
 # R nls() iid parity reads a committed fixture (tests/r/fixtures/nls_iid.json)
