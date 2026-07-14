@@ -153,6 +153,40 @@ formula with **no extra dof factor**:
 
 **D1 is closed as a non-issue: no HC2/HC3 correction is needed anywhere.**
 
+### D11 Partial Delivery: `.aggte()` — dynamic/group/calendar aggregation
+
+`StaggeredDiDResult.aggte(type=)` now implements R `did::aggte()` parity for
+all three aggregation types: `dynamic` (event-time), `group` (cohort), and
+`calendar` (calendar-time). Returns an `AggteResult` with overall ATT/SE and
+per-level ATTs/SEs.
+
+**Four bugs found and fixed during parity validation (R `did` source-traced):**
+
+1. **Wrong divisor**: Overall SE used `n_obs` (total observations) instead of
+   `n_entities` (unique entity count). R's `getSE` divides by entity count.
+   Source: `did:::getSE` (`sqrt(mean(thisinffunc^2)/n)` where `n = MP$n`).
+
+2. **Wrong RIF index**: Non-dynamic RIF reindexing used `range(n_obs)` instead
+   of entity IDs.
+
+3. **Wrong two-stage aggregation**: Overall SE for dynamic/group/calendar
+   was a simple mean/sum of cell RIFs. R uses two-stage IF aggregation:
+   per-level IFs via `get_agg_inf_func`, then overall IF via
+   `get_agg_inf_func` on per-level IFs. Source: `did:::compute.aggte`.
+
+4. **Missing centering in per-level group SE**: Per-level SE for group type
+   computed `sqrt(mean(RIF^2)/n)`. R's `getSE` uses `mean(IF^2)/n` where
+   `mean(IF)=0`. OE's RIFs are `IF+ATT`, so `mean(RIF^2) = var(IF)+ATT^2`.
+   The `ATT^2` term was included in the SE. Fixed by centering the RIF
+   before the second moment. Source: `did:::getSE` + `did:::get_agg_inf_func`.
+
+**Test coverage**: 45 tests in `test_r_staggered_did_aggte.py` — 3 types ×
+2 panels × (overall ATT/SE + per-level ATTs/SEs + type/count validation).
+All pass at `rtol=1e-6` against R `did` v2.5.1.
+
+R fixture scripts (`staggered_did_balanced.R`, `staggered_did_unbalanced.R`)
+extended with `aggte()` calls and regenerated.
+
 ---
 
 *Future work items (HC4/HC4m/HC5, non-Bartlett HAC kernels, pyfixest

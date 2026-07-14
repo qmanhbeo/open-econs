@@ -161,19 +161,19 @@ available in R's `sandwich::NeweyWest` but not in OE.
   marginal; the risk is real.
 - **Decision:** D10 (2026-07-14).
 
-### D11: staggered_did() Aggregation Modes (Future Enhancement)
+### D11: staggered_did() Aggregation Modes — `.aggte()` Delivered
 
 - **What:** Expose `aggte()`-style dynamic/group/calendar aggregation
   modes in `staggered_did()`. R's `did::aggte()` supports
   `type = "dynamic"` (event-time ATTs), `type = "group"` (cohort-specific
-  ATTs), and `type = "calendar"` (calendar-time ATTs). OE's
-  `staggered_did()` currently only returns the simple pooled ATT and
-  per-cell ATTs.
-- **Status:** Approved as future enhancement, explicitly out of scope
-  for the current phase. These are additive scope beyond what's needed
-  to close the parity gap (D9).
-- **Reference:** R `did::aggte(type = "dynamic"|"group"|"calendar")`.
-- **Decision:** D11 (2026-07-14).
+  ATTs), and `type = "calendar"` (calendar-time ATTs).
+- **Status:** Delivered (2026-07-14). `StaggeredDiDResult.aggte(type=)`
+  implements all three types with R parity at `rtol=1e-6`. Four bugs
+  found and fixed during validation (wrong divisor, wrong RIF index,
+  wrong two-stage aggregation, missing centering in per-level group SE).
+  See CHANGELOG for details.
+- **Remaining:** `did_sun_abraham()` and `did_gardner()` extensions
+  still queued (citations verified: Sun & Abraham 2021, Gardner 2022).
 
 ---
 
