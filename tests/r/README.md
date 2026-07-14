@@ -120,7 +120,7 @@ relax a tolerance as a shortcut to make a failing test pass.
 ## File naming convention
 
 ```
-tests/r/do/
+tests/r/generate-fixtures/
   {estimator}_{variant}.R          # e.g. synth_parity_default.R, nls_iid.R
 tests/r/fixtures/
   {estimator}_{variant}_input.csv  # shared input panel (committed)

@@ -48,12 +48,12 @@ checks clustered at `1e-6`–`1e-10`. Refer to individual test files for the
 exact `rtol`/`atol` on each comparison.
 
 The `stata`/`r` markers are **no longer excluded by default**. `addopts` in
-`pyproject.toml` keeps only the `tests/stata/do/archive` ignore; a bare
+`pyproject.toml` keeps only the `tests/stata/generate-fixtures/archive` ignore; a bare
 `pytest` collects and runs every test, including the parity tests:
 
 ```toml
 [tool.pytest.ini_options]
-addopts = '--ignore=tests/stata/do/archive'
+addopts = '--ignore=tests/stata/generate-fixtures/archive'
 ```
 
 `-m "not stata and not r"` remains available as an explicit opt-in *fast mode*
@@ -117,7 +117,7 @@ OE_REGENERATE_FIXTURES=1 pytest -m "stata or r"
 - Only needed when you changed a `.do` (or `.R`) script, or right before a
   release.
 - After regenerating, **revert any fixture you did not intend to change**
-  (`git checkout -- tests/stata/do/*.dta tests/r/fixtures/*.json`) so regenerated
+  (`git checkout -- tests/stata/generate-fixtures/*.dta tests/r/fixtures/*.json`) so regenerated
   fixtures are never left uncommitted. Commit the `.do`/`.R` and its regenerated
   fixture together.
 

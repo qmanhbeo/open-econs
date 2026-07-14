@@ -166,7 +166,7 @@ class TestMlogitR:
 
     def test_r_coefficients(self):
         # CI-safe: reads the committed fixture produced by
-        # tests/r/do/mlogit.R via read_r.  The .R script reads the same
+        # tests/r/generate-fixtures/mlogit.R via read_r.  The .R script reads the same
         # committed input (tests/r/fixtures/mlogit_input.csv, a copy of the
         # Stata df_mlogit.csv), so both engines fit identical data.  No R
         # binary and no skip are required on CI.

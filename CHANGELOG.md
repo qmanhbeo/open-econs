@@ -64,7 +64,7 @@ correct finite-sample adjustment.
   Backward-compatible: existing `entity=`/`time=` callers are unaffected.
 - `VcovTypeNotSupportedError` exported at top level (`oe.VcovTypeNotSupportedError`).
 - `fe()` now supports multi-way cluster-robust SEs: pass `cluster=["c1", "c2"]`.
-- `reghdfe` multiway-cluster fixture (`tests/stata/do/panel_fe_multiway_cluster.do`)
+- `reghdfe` multiway-cluster fixture (`tests/stata/generate-fixtures/panel_fe_multiway_cluster.do`)
   added for D3 verification.
 
 ### Internal

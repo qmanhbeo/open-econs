@@ -46,7 +46,7 @@ R_EXE = os.environ.get(
 )
 
 THIS_DIR = Path(__file__).resolve().parent
-R_SCRIPT_DIR = THIS_DIR / "do"
+R_SCRIPT_DIR = THIS_DIR / "generate-fixtures"
 R_FIXTURES_DIR = THIS_DIR / "fixtures"
 
 
@@ -79,7 +79,7 @@ def _check_drift_r(label: str) -> None:
 
 
 def run_r(label: str) -> None:
-    """Run tests/r/do/{label}.R via Rscript to regenerate its .json fixture.
+    """Run tests/r/generate-fixtures/{label}.R via Rscript to regenerate its .json fixture.
 
     Regeneration is gated behind the ``OE_REGENERATE_FIXTURES`` environment
     variable: Rscript is only launched when that variable is set to a truthy

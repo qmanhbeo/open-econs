@@ -8,7 +8,7 @@ Structure (mirrors ``tests/test_synth.py`` and ``tests/test_nls.py`` gating):
   configuration), and the pre-treatment-fit exclusion threshold on a
   constructed pathological donor.
 * **CI-safe parity vs R ``Synth`` (primary reference)** -- reads the committed
-  ``.json`` fixture produced by ``tests/r/do/synth_placebo_space.R`` (via
+  ``.json`` fixture produced by ``tests/r/generate-fixtures/synth_placebo_space.R`` (via
   ``read_r``) and compares the ratio / p-value distribution to the Python
   implementation.  Reports real numbers; honest divergence from the same
   nonconvex-``V`` sources already documented for the core ``synth()`` work is
@@ -411,7 +411,7 @@ def test_placebo_space_requires_data_frame():
 
 # ── CI-safe parity vs R Synth (primary) ───────────────────────────
 # The R side is now a committed `.json` fixture produced by
-# tests/r/do/synth_placebo_space.R and read through tests/r/r_runner.read_r.
+# tests/r/generate-fixtures/synth_placebo_space.R and read through tests/r/r_runner.read_r.
 # No R binary and no skip are required to run this test on CI; regeneration is
 # gated behind OE_REGENERATE_FIXTURES and only happens on a machine with R.
 

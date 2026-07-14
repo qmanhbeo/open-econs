@@ -32,7 +32,7 @@ STATA_EXE = os.environ.get(
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DO_DIR = Path(__file__).resolve().parent / "do"
+DO_DIR = Path(__file__).resolve().parent / "generate-fixtures"
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
 
@@ -62,7 +62,7 @@ def _check_drift(label: str) -> None:
 
 
 def run_do(label: str) -> None:
-    """Run tests/stata/do/{label}.do via StataMP to regenerate its .dta fixture.
+    """Run tests/stata/generate-fixtures/{label}.do via StataMP to regenerate its .dta fixture.
 
     Regeneration is gated behind the ``OE_REGENERATE_FIXTURES`` environment
     variable: StataMP is only launched when that variable is set to a truthy

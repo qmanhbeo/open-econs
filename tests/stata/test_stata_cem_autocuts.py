@@ -5,7 +5,7 @@ Validated per-observation (strata, weights, matched) against Stata 17's
 synthetic fixture (``df_cem_autocuts.csv``).
 
 All four methods run live through StataMP (the ``.dta`` files are regenerated
-on each test run via ``tests/stata/do/cem_autocuts_{method}.do``).
+on each test run via ``tests/stata/generate-fixtures/cem_autocuts_{method}.do``).
 
 Reference
 ---------
@@ -28,7 +28,7 @@ from .stata_runner import STATA_EXE, run_do
 
 pytestmark = pytest.mark.stata
 
-DO_DIR = Path(__file__).resolve().parent / "do"
+DO_DIR = Path(__file__).resolve().parent / "generate-fixtures"
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "df_cem_autocuts.csv"
 
 AUTOCUTS_METHODS = ["sturges", "fd", "scott", "ss"]

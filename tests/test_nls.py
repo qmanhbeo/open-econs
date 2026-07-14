@@ -145,7 +145,7 @@ class TestRnlsParity:
     @pytest.mark.r
     def test_r_nls_iid(self):
         # CI-safe: reads the committed fixture produced by
-        # tests/r/do/nls_iid.R via read_r.  The input CSV
+        # tests/r/generate-fixtures/nls_iid.R via read_r.  The input CSV
         # (tests/r/fixtures/nls_iid_input.csv) is the same file the .R script
         # reads, so both engines fit identical data.
         df = pd.read_csv(R_FIXTURES_DIR / "nls_iid_input.csv")

@@ -1,7 +1,7 @@
 """Stata parity tests for Arellano-Bond GMM (xtabond2 3.7.2).
 
 All 8 flavors (collapsed / non-collapsed × one-step / two-step × non-robust / robust)
-verified against live Stata via read_stata().  See tests/stata/do/abond.do.
+verified against live Stata via read_stata().  See tests/stata/generate-fixtures/abond.do.
 """
 
 from __future__ import annotations

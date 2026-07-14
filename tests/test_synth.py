@@ -12,7 +12,7 @@ Structure:
   recovered donor weights must match the known weights and the gap path must
   match the injected effect.
 * **CI-safe parity vs R ``Synth`` (primary reference)** -- reads the committed
-  ``.json`` fixture produced by ``tests/r/do/synth_parity_*.R`` (run via
+  ``.json`` fixture produced by ``tests/r/generate-fixtures/synth_parity_*.R`` (run via
   ``read_r``) and compares ``W``, ``V``, pre-treatment MSPE, and the gap path,
   reporting actual max-absolute diffs.  The fixture is regenerated only when
   ``OE_REGENERATE_FIXTURES`` is set and R is installed, so the test runs on CI
@@ -472,7 +472,7 @@ def test_synth_ground_truth_recovery(_synth_panel, _synth_result):
 
 # ── CI-safe parity vs R Synth (primary) ───────────────────────────
 # The R side is now a committed `.json` fixture produced by
-# tests/r/do/synth_parity_*.R and read through tests/r/r_runner.read_r.  No R
+# tests/r/generate-fixtures/synth_parity_*.R and read through tests/r/r_runner.read_r.  No R
 # binary and no skip are required to run these tests on CI; regeneration is
 # gated behind OE_REGENERATE_FIXTURES and only happens on a machine with R.
 
