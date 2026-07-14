@@ -40,7 +40,10 @@ from ..stata_runner import read_stata
 
 pytestmark = pytest.mark.stata
 
-RTOL = 1e-4
+# Tightened to 1e-6 per the v1.1.0 tolerance-standard re-audit: OE matches
+# Stata's ADF/PP statistic AND MacKinnon p-value to <=8e-9 (empirically
+# confirmed), so the maximally-tight 1e-6 is the principled bound (rule 2).
+RTOL = 1e-6
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 UR_INPUT = REPO_ROOT / "tests" / "r" / "fixtures" / "inputs" / "ur_input.csv"

@@ -32,6 +32,11 @@ from ..r_runner import read_r
 
 pytestmark = pytest.mark.r
 
+# LL agrees across OE / Stata / R to ~2e-9, so 1e-6 is the principled bound
+# (tightened here). The AR/MA coefficients and constant cannot reach 1e-6 (the
+# ARMA likelihood is flat in the AR/MA subspace near the optimum) and are handled
+# as a documented exception in the follow-up commit.
+RTOL_LL = 1e-6
 RTOL = 1e-4
 
 INPUT_CSV = (
@@ -76,4 +81,4 @@ class TestARIMAR:
 
     def test_loglik(self):
         f = _fit()
-        npt.assert_allclose(f["ll"], R_ARIMA["ll"], rtol=RTOL)
+        npt.assert_allclose(f["ll"], R_ARIMA["ll"], rtol=RTOL_LL)

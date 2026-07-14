@@ -44,7 +44,13 @@ from ..r_runner import read_r
 
 pytestmark = pytest.mark.r
 
-RTOL = 1e-4
+# Tight tolerance for the statistic-only cross-tool anchors that genuinely agree
+# to <=1e-15 (ADF, KPSS matched-bandwidth, ZA all match R urca to floating-point
+# precision). See the v1.1.0 tolerance-standard re-audit. PP vs R is NOT tightened
+# here -- it cannot reach 1e-6 and is handled as a documented exception in the
+# follow-up commit (R's ur.pp uses the dependent-variable variance in the PP
+# correction term; OE/arch/Stata use the regressor variance).
+RTOL_TIGHT = 1e-6
 
 INPUT_CSV = (
     Path(__file__).resolve().parents[2]
@@ -81,11 +87,11 @@ class TestADFUr:
 
     def test_c_statistic(self):
         oe_r = oe.adf(_y(), lags=0, trend="c")
-        npt.assert_allclose(oe_r.stat, R_ADF_C["stat"], rtol=RTOL)
+        npt.assert_allclose(oe_r.stat, R_ADF_C["stat"], rtol=RTOL_TIGHT)
 
     def test_ct_statistic(self):
         oe_r = oe.adf(_y(), lags=0, trend="ct")
-        npt.assert_allclose(oe_r.stat, R_ADF_CT["stat"], rtol=RTOL)
+        npt.assert_allclose(oe_r.stat, R_ADF_CT["stat"], rtol=RTOL_TIGHT)
 
 
 class TestPPUr:
@@ -100,13 +106,13 @@ class TestPPUr:
         y = _y()
         bw = _r_short_bandwidth(y)
         oe_r = oe.pp(y, trend="c", bandwidth="fixed", lags=bw)
-        npt.assert_allclose(oe_r.stat, R_PP_C["stat"], rtol=RTOL)
+        npt.assert_allclose(oe_r.stat, R_PP_C["stat"], rtol=1e-4)
 
     def test_ct_statistic(self):
         y = _y()
         bw = _r_short_bandwidth(y)
         oe_r = oe.pp(y, trend="ct", bandwidth="fixed", lags=bw)
-        npt.assert_allclose(oe_r.stat, R_PP_CT["stat"], rtol=RTOL)
+        npt.assert_allclose(oe_r.stat, R_PP_CT["stat"], rtol=1e-4)
 
 
 class TestKPSSMatchedBandwidth:
@@ -121,13 +127,13 @@ class TestKPSSMatchedBandwidth:
         y = _y()
         bw = _r_short_bandwidth(y)
         oe_r = oe.kpss(y, lags=bw)
-        npt.assert_allclose(oe_r.stat, R_KPSS_C["stat"], rtol=RTOL)
+        npt.assert_allclose(oe_r.stat, R_KPSS_C["stat"], rtol=RTOL_TIGHT)
 
     def test_ct_statistic(self):
         y = _y()
         bw = _r_short_bandwidth(y)
         oe_r = oe.kpss(y, trend="ct", lags=bw)
-        npt.assert_allclose(oe_r.stat, R_KPSS_CT["stat"], rtol=RTOL)
+        npt.assert_allclose(oe_r.stat, R_KPSS_CT["stat"], rtol=RTOL_TIGHT)
 
 
 class TestKPSSDefaultConfig:
@@ -159,8 +165,8 @@ class TestZivotAndrewsUr:
 
     def test_c_statistic(self):
         oe_r = oe.zivot_andrews(_y(), trend="c", lags=0)
-        npt.assert_allclose(oe_r.stat, R_ZA_C["stat"], rtol=RTOL)
+        npt.assert_allclose(oe_r.stat, R_ZA_C["stat"], rtol=RTOL_TIGHT)
 
     def test_ct_statistic(self):
         oe_r = oe.zivot_andrews(_y(), trend="ct", lags=0)
-        npt.assert_allclose(oe_r.stat, R_ZA_CT["stat"], rtol=RTOL)
+        npt.assert_allclose(oe_r.stat, R_ZA_CT["stat"], rtol=RTOL_TIGHT)

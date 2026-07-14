@@ -173,5 +173,35 @@ unit-root CV decision (§1,§2) is settled.**
 - Report **MacKinnon (1994) p-values** as the cross-check anchor (agrees with
   Stata) and label the CV table's vintage explicitly in `summary()`.
 
+---
+
+## 6. v1.1.0 tolerance-standard re-audit (2026-07-15, part 1 of 2)
+
+The v1.1.0 suite shipped under a looser tolerance standard. With rule 2 tightened
+to a hard **1e-6** ceiling, every cross-tool assertion was re-opened and actually
+attempted to be closed before being accepted. This commit records the assertions
+that tightened cleanly to <= 1e-6. The three cases that genuinely cannot reach
+1e-6 (PP-vs-R, ARIMA coefficients/constant, GARCH) are root-caused and committed
+as a separate, documented-exception commit.
+
+### 6.1 Confirmed <= 1e-6, tightened (no exception needed)
+
+| Anchor | Quantity | Observed relative gap | Action |
+|--------|----------|----------------------|--------|
+| ADF vs Stata | stat + MacKinnon p-value (c,ct) | 7e-9 / 1e-11 / 2e-8 | rtol 1e-4 -> 1e-6 |
+| PP vs Stata | stat + p-value (c,ct) | 5e-9 / 8e-9 / 1e-8 | rtol 1e-4 -> 1e-6 |
+| ADF vs R (ur.df) | stat | 1e-15 | rtol 1e-4 -> 1e-6 |
+| KPSS vs R (ur.kpss, matched bandwidth) | stat | 6e-16 / 2e-15 | rtol 1e-4 -> 1e-6 |
+| ZA vs R (ur.za) | stat | 9e-15 / 1e-14 | rtol 1e-4 -> 1e-6 |
+| DFGLS (OE == arch identity) | stat | 1e-12 abs | unchanged (already <= 1e-6) |
+| KPSS self-consistency guard | own default | 1e-9 | unchanged (already <= 1e-6) |
+| ARIMA LL vs Stata / R | loglik | ~2e-9 | rtol 1e-4 -> 1e-6 |
+
+OE matches Stata on ADF/PP to <=8e-9 and matches R (urca) on ADF/KPSS/ZA to
+floating-point precision. These are now asserted at the maximally-tight 1e-6.
+
+*Audit performed 2026-07-15. Only test tolerances and this document were modified;
+no `open_econs/` source was changed.*
+
 *Recon performed 2026-07-14. No source files under `open_econs/` were modified
 by this recon except this document.*
