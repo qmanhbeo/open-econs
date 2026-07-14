@@ -17,7 +17,7 @@ import pytest
 import open_econs as oe
 from open_econs.models.causal.rdd import _RDENSITY
 
-from .stata_runner import FIXTURES_DIR, read_stata
+from ..stata_runner import FIXTURES_DIR, read_stata
 
 pytestmark = pytest.mark.stata
 

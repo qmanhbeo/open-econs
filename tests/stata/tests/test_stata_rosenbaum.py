@@ -22,7 +22,7 @@ import numpy.testing as npt
 import pytest
 
 from open_econs.models.causal.sensitivity import rosenbaum_bounds
-from .stata_runner import read_stata
+from ..stata_runner import read_stata
 
 pytestmark = pytest.mark.stata
 

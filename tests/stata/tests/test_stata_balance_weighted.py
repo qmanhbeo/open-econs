@@ -25,7 +25,7 @@ from open_econs.models.causal.balance import (
     _wvar_iw,
 )
 
-from .stata_runner import read_stata
+from ..stata_runner import read_stata
 
 pytestmark = pytest.mark.stata
 

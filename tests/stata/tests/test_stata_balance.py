@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 from scipy import stats as _stats
 
-from .stata_runner import read_stata
+from ..stata_runner import read_stata
 
 pytestmark = pytest.mark.stata
 

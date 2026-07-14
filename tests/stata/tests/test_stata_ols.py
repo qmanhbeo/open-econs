@@ -9,7 +9,7 @@ import pytest
 
 import open_econs as oe
 
-from .stata_runner import DO_DIR, _check_drift, read_stata, run_do
+from ..stata_runner import DO_DIR, _check_drift, read_stata, run_do
 
 pytestmark = pytest.mark.stata
 

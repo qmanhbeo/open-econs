@@ -24,12 +24,11 @@ import pandas as pd
 import pytest
 
 from open_econs.models.causal.cem import cem
-from .stata_runner import STATA_EXE, run_do
+from ..stata_runner import DO_DIR, FIXTURES_DIR, STATA_EXE, run_do
 
 pytestmark = pytest.mark.stata
 
-DO_DIR = Path(__file__).resolve().parent / "generate-fixtures"
-FIXTURE = Path(__file__).resolve().parent / "fixtures" / "df_cem_autocuts.csv"
+FIXTURE = FIXTURES_DIR / "df_cem_autocuts.csv"
 
 AUTOCUTS_METHODS = ["sturges", "fd", "scott", "ss"]
 
