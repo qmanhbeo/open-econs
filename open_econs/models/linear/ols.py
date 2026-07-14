@@ -774,7 +774,8 @@ def _compute_f_stat(
                 R[i, i + 1] = 1.0
         else:
             q = k_total
-            R = np.eye(k_total)
+            R = np.zeros((k_total, k_total))
+            np.fill_diagonal(R, 1.0)
 
         Rb = R @ b
         RVR = R @ V @ R.T
