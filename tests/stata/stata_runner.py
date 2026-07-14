@@ -32,8 +32,10 @@ STATA_EXE = os.environ.get(
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DO_DIR = Path(__file__).resolve().parent / "do"
+DO_DIR = Path(__file__).resolve().parent / "generate-fixtures"
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
+INPUTS_DIR = FIXTURES_DIR / "inputs"
+EXPECTED_DIR = FIXTURES_DIR / "expected"
 
 
 class StataError(RuntimeError):
@@ -46,14 +48,18 @@ def stata_available() -> bool:
 
 
 def _check_drift(label: str) -> None:
-    """Fail loudly if a .do file is newer than its .dta — the fixture is stale."""
+    """Fail loudly if a .do file is newer than its .dta — the fixture is stale.
+
+    A 1-second tolerance avoids false positives from ``git checkout`` setting
+    similar sub-second mtimes on all checked-out files.
+    """
     do_path = DO_DIR / f"{label}.do"
-    dta_path = DO_DIR / f"{label}.dta"
+    dta_path = EXPECTED_DIR / f"{label}.dta"
     if not do_path.exists() or not dta_path.exists():
         return
     do_mtime = do_path.stat().st_mtime
     dta_mtime = dta_path.stat().st_mtime
-    if do_mtime > dta_mtime:
+    if do_mtime > dta_mtime + 1.0:
         raise RuntimeError(
             f"STALE FIXTURE: {label}.do (mtime {time.ctime(do_mtime)}) is newer "
             f"than {label}.dta (mtime {time.ctime(dta_mtime)}).  "
@@ -62,7 +68,7 @@ def _check_drift(label: str) -> None:
 
 
 def run_do(label: str) -> None:
-    """Run tests/stata/do/{label}.do via StataMP to regenerate its .dta fixture.
+    """Run tests/stata/generate-fixtures/{label}.do via StataMP to regenerate its .dta fixture.
 
     Regeneration is gated behind the ``OE_REGENERATE_FIXTURES`` environment
     variable: StataMP is only launched when that variable is set to a truthy
@@ -105,7 +111,7 @@ def read_stata(label: str) -> dict[str, float]:
     """
     run_do(label)
     _check_drift(label)
-    dta_path = DO_DIR / f"{label}.dta"
+    dta_path = EXPECTED_DIR / f"{label}.dta"
     if not dta_path.exists():
         raise FileNotFoundError(
             f"No .dta fixture found: {dta_path}.  "

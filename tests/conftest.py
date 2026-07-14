@@ -154,7 +154,7 @@ def df_panel_dup_index() -> pd.DataFrame:
 # Moving these four CSV-backed fixtures to the parent conftest makes them
 # always visible regardless of collection order/import timing.
 
-_STATA_FIXTURES = _Path(__file__).resolve().parent / "stata" / "fixtures"
+_STATA_FIXTURES = _Path(__file__).resolve().parent / "stata" / "fixtures" / "inputs"
 
 def _load_stata_csv(name: str) -> pd.DataFrame:
     p = _STATA_FIXTURES / f"{name}.csv"

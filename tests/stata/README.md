@@ -19,7 +19,7 @@ When you change a `.do` file, regenerate its `.dta`:
 
 ```bash
 # On a machine with StataMP 17:
-& "C:\Program Files\Stata17\StataMP-64.exe" /e do tests\stata\do\my_test.do
+& "C:\Program Files\Stata17\StataMP-64.exe" /e do tests\stata\generate-fixtures\my_test.do
 
 # Or via Python (will call StataMP if available):
 python -c "from tests.stata.stata_runner import run_do; run_do('my_test')"
@@ -154,7 +154,7 @@ If open-econs uses `cov_type="HC2"` by default but Stata uses conventional SEs, 
 ### 8. File naming convention
 
 ```
-tests/stata/do/
+tests/stata/generate-fixtures/
   {estimator}_{variant}.do        # e.g., ols_basic.do, panel_fe.do
   {estimator}_{variant}.dta       # output (committed — NOT gitignored)
 ```

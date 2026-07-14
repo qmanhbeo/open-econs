@@ -233,20 +233,123 @@ f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
         )
 
     def wald_test(self, r_matrix: Any) -> Any:
-        if self._fit is None:
-            raise RuntimeError(
-                "No fitted statsmodels result stored. "
-                "wald_test() is only available when ols() is used directly."
-            )
-        return self._fit.wald_test(r_matrix)
+        """Wald test using OE's own covariance matrix.
+
+        Parameters
+        ----------
+        r_matrix : str or array-like
+            Constraint specification.  Accepts:
+            - A string of the form ``"var1 = var2"`` or ``"var1 = 0"``.
+            - A matrix R and vector r such that H0: R*b = r.
+
+        Returns
+        -------
+        WaldTestResult
+            Object with ``.statistic`` (chi2), ``.pvalue``, and ``.df``.
+        """
+        b, V, R, r_vec, q = self._parse_test_constraint(r_matrix)
+        Rb = R @ b - r_vec
+        RVR = R @ V @ R.T
+        stat = float(Rb @ np.linalg.inv(RVR) @ Rb)
+        pval = float(_stats.chi2.sf(stat, q))
+
+        class WaldTestResult:
+            def __init__(self, statistic: float, pvalue: float, df: int) -> None:
+                self.statistic = statistic
+                self.pvalue = pvalue
+                self.df = df
+
+        return WaldTestResult(stat, pval, q)
 
     def f_test(self, r_matrix: Any) -> Any:
-        if self._fit is None:
-            raise RuntimeError(
-                "No fitted statsmodels result stored. "
-                "f_test() is only available when ols() is used directly."
+        """F test using OE's own covariance matrix.
+
+        Parameters
+        ----------
+        r_matrix : str or array-like
+            Constraint specification (same as ``wald_test``).
+
+        Returns
+        -------
+        FTestResult
+            Object with ``.fvalue`` (F-statistic), ``.pvalue``, ``.df_denom``,
+            ``.df_num``.
+        """
+        b, V, R, r_vec, q = self._parse_test_constraint(r_matrix)
+        Rb = R @ b - r_vec
+        RVR = R @ V @ R.T
+        stat = float(Rb @ np.linalg.inv(RVR) @ Rb)
+        f_stat = stat / q
+        dfd = max(self.nobs - len(b), 1)
+        pval = float(_stats.f.sf(f_stat, q, dfd))
+
+        class FTestResult:
+            def __init__(self, fvalue: float, pvalue: float, df_num: int, df_denom: int) -> None:
+                self.fvalue = fvalue
+                self.pvalue = pvalue
+                self.df_num = df_num
+                self.df_denom = df_denom
+
+        return FTestResult(f_stat, pval, q, dfd)
+
+    def _parse_test_constraint(
+        self, r_matrix: Any,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int]:
+        """Parse a constraint specification into (b, V, R, r_vec, q)."""
+        b = self.coefficients.values.astype(float)
+        cov_df = getattr(self, "_cov", None)
+        if cov_df is None:
+            raise RuntimeError("No covariance matrix available for test.")
+        common = [c for c in self.coefficients.index if c in cov_df.index]
+        V = np.asarray(cov_df.loc[common, common].values, dtype=float)
+        b = np.asarray(self.loc[common].values, dtype=float) if hasattr(self, "loc") else b
+        # Re-index b to match V ordering
+        b = np.array([self.coefficients[c] for c in common], dtype=float)
+
+        names = list(common)
+
+        if isinstance(r_matrix, str):
+            R, r_vec = self._constraint_string_to_matrix(r_matrix, names)
+        else:
+            R = np.asarray(r_matrix, dtype=float)
+            r_vec = np.zeros(R.shape[0])
+
+        q = R.shape[0]
+        return b, V, R, r_vec, q
+
+    def _constraint_string_to_matrix(
+        self, constraint: str, names: list[str],
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Parse ``"var1 = var2"`` or ``"var1 = 0"`` into R, r."""
+        parts = constraint.split("=")
+        if len(parts) != 2:
+            raise ValueError(
+                f"Constraint must be of the form 'var1 = var2' or 'var1 = 0', "
+                f"got: '{constraint}'"
             )
-        return self._fit.f_test(r_matrix)
+        left = parts[0].strip()
+        right = parts[1].strip()
+
+        k = len(names)
+        R = np.zeros((1, k))
+        r_val = 0.0
+
+        def _coef_index(name: str) -> int:
+            if name in names:
+                return names.index(name)
+            raise ValueError(
+                f"Coefficient '{name}' not found in model. "
+                f"Available coefficients: {names}"
+            )
+
+        if right == "0":
+            R[0, _coef_index(left)] = 1.0
+        else:
+            # left - right = 0 → R * b = 0
+            R[0, _coef_index(left)] = 1.0
+            R[0, _coef_index(right)] = -1.0
+
+        return R, np.array([r_val])
 
     def predict(self, newdata: pd.DataFrame | None = None) -> pd.Series:
         if newdata is None:

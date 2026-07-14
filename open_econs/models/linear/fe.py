@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any
 
 import numpy as np
@@ -5,6 +7,7 @@ import pandas as pd
 
 from open_econs.core.call_capture import capture_call as _capture_call
 from open_econs._internal import errors
+from open_econs._internal.errors import VcovTypeNotSupportedError
 from open_econs.core.results import OLSResult
 from open_econs.core.cov_type import validate_cov_type
 
@@ -14,8 +17,9 @@ def fe(
     data: pd.DataFrame,
     entity: str | None = None,
     time: str | None = None,
-    cluster: str | None = None,
-    cov_type: str = "HC2",
+    fixed_effects: list[str] | None = None,
+    cluster: str | list[str] | None = None,
+    cov_type: str = "HC1",
     lags: int | None = None,
     hac_adjust: bool = False,
 ) -> OLSResult:
@@ -25,10 +29,11 @@ def fe(
     ----------
     formula : str
         Two-sided formula string, e.g. ``"y ~ x1 + x2"``. Do *not* include
-        the fixed-effect indicator in the formula; use *entity* and *time*.
+        the fixed-effect indicator in the formula; use *entity*/*time* or
+        *fixed_effects*.
     data : pd.DataFrame
         Data containing all variables referenced in *formula* plus the
-        entity/time columns.
+        entity/time/fixed-effects columns.
     entity : str, optional
         Column name for entity (panel unit) fixed effects. If provided, both
         *y* and *X* are group-demeaned within each entity.
@@ -36,19 +41,36 @@ def fe(
         Column name for time fixed effects. If *entity* is also provided,
         two-way fixed effects are used (entity and time dummies absorbed
         via iterative demeaning for unbalanced panels).
-    cluster : str, optional
-        Column name for cluster-robust standard errors. Takes precedence over
-        ``cov_type="HAC"`` (cluster-robust is used when both are given).
-    cov_type : str, default "HC2"
+    fixed_effects : list of str, optional
+        Column names for arbitrary N-way fixed effects. Takes precedence
+        over *entity*/*time* when provided — pass **either** ``entity=``
+        /``time=`` **or** ``fixed_effects=``, not both (raises ``ValueError``).
+
+        Use this for 3+-way FE that cannot be expressed with just two named
+        kwargs::
+
+            # 3-way FE
+            oe.fe("y ~ x", data=df, fixed_effects=["firm", "year", "industry"])
+            # same as 2-way via entity/time
+            oe.fe("y ~ x", data=df, entity="firm", time="year")
+
+        Internally this maps to ``pyfixest``'s ``| f1 + f2 + ...`` syntax.
+    cluster : str or list of str, optional
+        Column name(s) for cluster-robust standard errors. Takes precedence
+        over ``cov_type="HAC"`` (cluster-robust is used when both are given).
+        Passing a *list* requests multi-way clustering (e.g.
+        ``["firm", "year"]``).
+    cov_type : str, default "HC1"
         Covariance estimator type. Used when *cluster* is not set. Common
-        choices: ``"HC0"``–``"HC3"``, ``"nonrobust"``. Set ``cov_type="HAC"``
-        to use Newey-West (1987) panel-HAC standard errors: the score
-        contributions ``x_it * e_it`` are aggregated *within each time period*
-        across entities, then a Bartlett-kernel long-run variance is applied
-        *across* time periods (the Arellano / Driscoll-Kraay convention,
-        matching statsmodels ``cov_nw_groupsum`` and Stata ``xtscc``). This
-        requires *time* (which doubles as the time fixed-effects dimension —
-        passing it incurs two-way FE) and *lags*.
+        choices: ``"HC1"`` (default, matching Stata ``xtreg, fe``),
+        ``"HC0"``, ``"nonrobust"``. Set ``cov_type="HAC"`` to use Newey-West
+        (1987) panel-HAC standard errors.
+
+        .. note::
+           HC2 and HC3 are **not supported** for models with absorbed fixed
+           effects (the leverage adjustments are invalid once FEs are absorbed).
+           Use ``cov_type="HC1"`` instead.  This matches ``pyfixest``'s
+           behaviour and is statistically correct.
     lags : int, optional
         Number of lags for Newey-West HAC (required when ``cov_type="HAC"``).
     hac_adjust : bool, default False
@@ -83,14 +105,39 @@ def fe(
         the iterative (alternating-projections) demeaning is used so
         unbalanced panels produce correct estimates.
 
+    Notes
+    -----
+    This function uses ``pyfixest.feols`` as the compute backend for
+    non-HAC covariance types (HC0, HC1, nonrobust, CRV1, CRV3).  The
+    ``entity=``/``time=`` and ``fixed_effects=`` kwargs are mapped internally
+    to ``pyfixest``'s ``| f1 + f2 + ...`` formula syntax.  The HAC path
+    retains the original ``statsmodels``-based implementation.
+
+    Arbitrary N-way FE (3+) are only supported on the pyfixest path (non-HAC).
+    Passing ``cov_type="HAC"`` with more than two fixed-effect columns raises
+    ``ValueError``.
+
+    **Breaking changes** (v1.1):
+    - The default ``cov_type`` changed from ``"HC2"`` to ``"HC1"``.  HC2/HC3
+      are now forbidden for FE models because the leverage adjustments in
+      HC2/HC3 are invalid once fixed effects are absorbed.  This matches
+      ``pyfixest``'s convention.
+    - Standard errors, t-statistics, p-values, and confidence intervals may
+      differ slightly from previous versions due to the adoption of
+      ``pyfixest``'s small-sample corrections (fixest-standard
+      leverage-adjusted dof scaling).
+
     Examples
     --------
     >>> import open_econs as oe
     >>> r = oe.fe("y ~ x1 + x2", data=df, entity="country", time="year")
     >>> r.tidy()
+    >>> # 3-way fixed effects
+    >>> r = oe.fe("y ~ x1", data=df, fixed_effects=["firm", "year", "industry"])
     """
     call = _capture_call(
-        formula=formula, entity=entity, time=time, cluster=cluster, cov_type=cov_type,
+        formula=formula, entity=entity, time=time, fixed_effects=fixed_effects,
+        cluster=cluster, cov_type=cov_type,
         lags=lags, hac_adjust=hac_adjust,
     )
 
@@ -100,9 +147,24 @@ def fe(
         estimator="fe()",
     )
 
-    if entity is None and time is None:
-        raise ValueError("At least one of entity= or time= must be provided.")
+    # D2: forbid HC2/HC3 on FE models (leverage adjustments are invalid once
+    # FEs are absorbed; pyfixest also refuses these).
+    if cov_type in ("HC2", "HC3"):
+        raise VcovTypeNotSupportedError(cov_type)
 
+    # ---- validate FE specification ----
+    if fixed_effects is not None and (entity is not None or time is not None):
+        raise ValueError(
+            "Pass either fixed_effects= OR entity=/time=, not both. "
+            "fixed_effects= takes precedence and ignores entity=/time=."
+        )
+
+    if fixed_effects is None and entity is None and time is None:
+        raise ValueError(
+            "At least one of fixed_effects= or entity= or time= must be provided."
+        )
+
+    # ---- build formula and data for pyfixest ----
     from formulaic import Formula
     try:
         formula_obj = Formula(formula)
@@ -138,15 +200,268 @@ def fe(
     if len(yy) == 0:
         raise errors.empty_data_error(original_n, dropped, [])
 
+    # ---- determine the FE columns ----
+    fe_parts: list[str] = []
+    if fixed_effects is not None:
+        fe_parts = list(fixed_effects)
+    else:
+        if entity is not None:
+            fe_parts.append(entity)
+        if time is not None:
+            fe_parts.append(time)
+
+    fe_formula_suffix = " + ".join(fe_parts)
+
+    # ---- HAC path: retain the original statsmodels implementation ----
+    # (pyfixest does not support HAC with absorbed FE)
+    use_hac = cov_type == "HAC"
+
+    if use_hac and len(fe_parts) > 2:
+        raise ValueError(
+            f"HAC standard errors are not supported with {len(fe_parts)}-way "
+            f"fixed effects ({', '.join(fe_parts)}). The HAC path only supports "
+            f"up to 2-way FE. Use cov_type='HC1' or cluster=... instead."
+        )
+
+    if use_hac:
+        # Map fixed_effects to entity/time for the HAC path (max 2-way guarded above).
+        hac_entity = entity
+        hac_time = time
+        if fixed_effects is not None:
+            hac_entity = fixed_effects[0] if len(fixed_effects) >= 1 else None
+            hac_time = fixed_effects[1] if len(fixed_effects) >= 2 else None
+
+        return _fe_hac_path(
+            formula=formula,
+            formula_obj=formula_obj,
+            model_spec=model_spec,
+            XX=XX,
+            yy=yy,
+            data=data,
+            entity=hac_entity,
+            time=hac_time,
+            fe_parts=fe_parts,
+            lags=lags,
+            hac_adjust=hac_adjust,
+            original_n=original_n,
+            dropped=dropped,
+            call=call,
+        )
+
+    # ---- pyfixest path: nonrobust / HC0 / HC1 / cluster ----
+    return _fe_pyfixest_path(
+        formula=formula,
+        fe_formula_suffix=fe_formula_suffix,
+        data=data,
+        XX=XX,
+        yy=yy,
+        entity=entity,
+        time=time,
+        fixed_effects=fixed_effects,
+        cluster=cluster,
+        cov_type=cov_type,
+        original_n=original_n,
+        dropped=dropped,
+        call=call,
+    )
+
+
+def _fe_pyfixest_path(
+    *,
+    formula: str,
+    fe_formula_suffix: str,
+    data: pd.DataFrame,
+    XX: pd.DataFrame,
+    yy: pd.Series,
+    entity: str | None,
+    time: str | None,
+    fixed_effects: list[str] | None,
+    cluster: str | list[str] | None,
+    cov_type: str,
+    original_n: int,
+    dropped: int,
+    call: dict[str, Any],
+) -> OLSResult:
+    """Run the FE estimation through pyfixest and translate to OLSResult."""
+    import pyfixest as pf
+
+    y_name = yy.columns[0] if hasattr(yy, "columns") else "y"
+    # Build the working dataframe with the LHS and RHS columns plus FE/cluster.
+    needed_cols = list(XX.columns)
+    if fixed_effects is not None:
+        needed_cols.extend(fixed_effects)
+    else:
+        if entity is not None:
+            needed_cols.append(entity)
+        if time is not None:
+            needed_cols.append(time)
+    if isinstance(cluster, str):
+        needed_cols.append(cluster)
+    elif isinstance(cluster, list):
+        needed_cols.extend(cluster)
+    # Deduplicate while preserving order (pyfixest / narwhals require unique columns).
+    seen: set[str] = set()
+    unique_cols: list[str] = []
+    for c in needed_cols:
+        if c not in seen:
+            seen.add(c)
+            unique_cols.append(c)
+    work = data.loc[XX.index, [c for c in unique_cols if c in data.columns]].copy()
+    work[y_name] = yy.values.ravel()
+
+    # Build the pyfixest formula:  "y ~ x1 + x2 | entity + time"
+    x_part = " + ".join(c for c in XX.columns if c != "Intercept")
+    pf_fml = f"{y_name} ~ {x_part} | {fe_formula_suffix}"
+
+    # Map cov_type to pyfixest vcov argument.
+    pf_vcov: Any
+    if cluster is not None:
+        if isinstance(cluster, str):
+            pf_vcov = {"CRV1": cluster}
+        elif isinstance(cluster, list):
+            pf_vcov = {"CRV1": " + ".join(cluster)}
+        cov_label = f"cluster({cluster})" if isinstance(cluster, str) else "cluster(" + ", ".join(cluster) + ")"
+    else:
+        if cov_type == "nonrobust":
+            pf_vcov = "iid"
+        else:
+            pf_vcov = cov_type  # HC0, HC1
+        cov_label = cov_type
+
+    fit = pf.feols(pf_fml, data=work, vcov=pf_vcov)
+
+    # ---- extract results from pyfixest ----
+    # pyfixest drops the intercept from coef(), se(), confint(), _vcov.
+    # Match the old statsmodels path: kept_columns excludes "Intercept".
+    all_columns = list(XX.columns)
+    kept_columns = [c for c in all_columns if c != "Intercept"]
+
+    coef_dict = fit.coef().to_dict()
+    se_dict = fit.se().to_dict()
+    tstat_dict = fit.tstat().to_dict()
+    pvalue_dict = fit.pvalue().to_dict()
+    ci_df = fit.confint()
+
+    # pyfixest reports slopes only — map directly.
+    coef_arr = np.array([coef_dict.get(c, 0.0) for c in kept_columns])
+    se_arr = np.array([se_dict.get(c, np.nan) for c in kept_columns])
+    t_arr = np.array([tstat_dict.get(c, np.nan) for c in kept_columns])
+    p_arr = np.array([pvalue_dict.get(c, np.nan) for c in kept_columns])
+
+    conf_lower = np.array([ci_df.loc[c, ci_df.columns[0]] if c in ci_df.index else np.nan for c in kept_columns])
+    conf_upper = np.array([ci_df.loc[c, ci_df.columns[1]] if c in ci_df.index else np.nan for c in kept_columns])
+    conf_arr = np.column_stack([conf_lower, conf_upper])
+
+    n = int(fit._N)
+    k = len(kept_columns)  # slopes only (no intercept)
+
+    # Count absorbed degrees of freedom. For 1-way FE it's simply the number
+    # of groups; for 2+ way FE we need inclusion-exclusion on the union of
+    # FE groups.
+    if fixed_effects is not None:
+        fe_cols_for_nabs = fixed_effects
+    else:
+        fe_cols_for_nabs = [c for c in [entity, time] if c is not None]
+
+    n_absorbed = _count_absorbed_dof(data.loc[XX.index], fe_cols_for_nabs)
+
+    df_resid_adj = max(n - n_absorbed - k, 1)
+    df_model_adj = k
+
+    r2 = float(fit._r2)
+    adj_r2 = float(fit._adj_r2)
+
+    # Within R-squared: use the first FE column for demeaning (entity convention).
+    first_fe_col = fe_cols_for_nabs[0] if fe_cols_for_nabs else None
+    if first_fe_col is not None:
+        fe_arr_for_r2 = data.loc[XX.index, first_fe_col].values
+        y_for_r2 = _demean(yy.values.ravel().astype(float), fe_arr_for_r2)
+    else:
+        y_for_r2 = yy.values.ravel().astype(float)
+    ssr = float(np.sum(fit.resid() ** 2))
+    sst = float(np.sum((y_for_r2 - np.mean(y_for_r2)) ** 2))
+    r2_within = 1.0 - ssr / (sst + 1e-15)
+    if np.isnan(r2_within) or r2_within < 0 or r2_within > 1:
+        r2_within = r2
+
+    # F-statistic from pyfixest.
+    f_stat = float(fit._f_statistic) if fit._f_statistic is not None else float("nan")
+
+    fitted_values = pd.Series(
+        fit.predict(), index=XX.index, name="fitted",
+    )
+    residuals = pd.Series(fit.resid(), index=XX.index, name="residuals")
+
+    rhs_formula = formula.split("~", 1)[1].strip()
+
+    # Build covariance DataFrame for vcov().
+    # pyfixest._vcov is (n_slope x n_slope), slopes only — same as kept_columns.
+    _cov = pd.DataFrame(
+        fit._vcov,
+        index=kept_columns,
+        columns=kept_columns,
+    )
+
+    condition_number = float(np.linalg.cond(XX.values)) if XX.shape[1] > 0 else 0.0
+
+    result = OLSResult(
+        formula=formula,
+        rhs_formula=rhs_formula,
+        nobs=n,
+        df_resid=df_resid_adj,
+        df_model=df_model_adj,
+        cov_type=cov_label,
+        coefficients=pd.Series(coef_arr, index=kept_columns),
+        std_errors=pd.Series(se_arr, index=kept_columns),
+        t_stats=pd.Series(t_arr, index=kept_columns),
+        p_values=pd.Series(p_arr, index=kept_columns),
+        conf_int=pd.DataFrame({"lower": conf_arr[:, 0], "upper": conf_arr[:, 1]}, index=kept_columns),
+        r_squared=float(r2_within),
+        adj_r_squared=float(adj_r2),
+        f_statistic=f_stat,
+        f_p_value=float("nan"),  # TODO(pyfixest-gap): pyfixest does not expose F p-value for FE models
+        rsd=float(np.sqrt(ssr / max(df_resid_adj, 1))),
+        llf=float("nan"),  # TODO(pyfixest-gap): pyfixest does not expose log-likelihood for FE models
+        aic=float("nan"),  # TODO(pyfixest-gap): pyfixest does not expose AIC for FE models
+        bic=float("nan"),  # TODO(pyfixest-gap): pyfixest does not expose BIC for FE models
+        fitted=fitted_values,
+        residuals=residuals,
+        call=call,
+        condition_number=condition_number,
+        _X=XX,
+        _fit=None,
+    )
+    object.__setattr__(result, "_cov", _cov)
+    return result
+
+
+def _fe_hac_path(
+    *,
+    formula: str,
+    formula_obj: Any,
+    model_spec: Any,
+    XX: pd.DataFrame,
+    yy: pd.Series,
+    data: pd.DataFrame,
+    entity: str | None,
+    time: str | None,
+    fe_parts: list[str],
+    lags: int | None,
+    hac_adjust: bool,
+    original_n: int,
+    dropped: int,
+    call: dict[str, Any],
+) -> OLSResult:
+    """Run the FE HAC estimation using the original statsmodels path."""
+    import statsmodels.api as sm
+
+    keep_mask = np.array([c != "Intercept" for c in XX.columns])
+    kept_columns = [c for c in XX.columns if c != "Intercept"]
     y_arr = yy.values.ravel().astype(float)
     X_arr = XX.values.astype(float)
 
-    # Identify intercept column (all zeros after demeaning) and non-intercept
-    # columns.  We drop the intercept before fitting so that statsmodels gets
-    # the correct rank and df, then apply the panel df correction ourselves.
-    keep_mask = np.array([c != "Intercept" for c in XX.columns])
-    kept_columns = [c for c in XX.columns if c != "Intercept"]
-
+    entity_arr = None
+    time_arr = None
     if entity is not None and time is not None:
         entity_arr = data.loc[XX.index, entity].values
         time_arr = data.loc[XX.index, time].values
@@ -160,119 +475,58 @@ def fe(
         y_arr = _demean(y_arr, time_arr)
         X_arr = _demean(X_arr, time_arr)
 
-    # Drop the (now all-zero) intercept column before fitting
     X_arr = X_arr[:, keep_mask]
 
-    # Count absorbed FE groups for panel df correction.
-    n_absorbed = 0
-    if entity is not None:
-        n_absorbed += len(np.unique(entity_arr))
-    if time is not None:
-        n_absorbed += len(np.unique(time_arr))
-    if entity is not None and time is not None:
-        n_absorbed -= 1  # avoid double-counting the grand mean
+    n_absorbed = _count_absorbed_dof(data.loc[XX.index], fe_parts)
 
-    import statsmodels.api as sm
-
-    # V_cov / se_arr are computed explicitly for the HAC path; for cluster and
-    # plain covariance types they are taken from the statsmodels fit below.
-    V_cov = None
-    se_arr = None
-
-    if cluster is not None:
-        if cluster not in data.columns:
-            raise errors.cluster_column_error(cluster, data.columns.tolist())
-        aligned_groups = data.loc[XX.index, cluster]
-        X_df = pd.DataFrame(X_arr, columns=kept_columns)
-        fitted = sm.OLS(y_arr, X_df).fit(
-            cov_type="cluster",
-            cov_kwds={"groups": aligned_groups},
+    if lags is None:
+        raise ValueError("Newey-West HAC requires `lags` (e.g. lags=1).")
+    if time is None:
+        raise ValueError(
+            "FE Newey-West HAC requires `time` (the time fixed-effects "
+            "dimension is used as the Newey-West period index)."
         )
-        cov_label = f"cluster({cluster})"
-    else:
-        use_hac = cov_type == "HAC"
-        if use_hac:
-            if lags is None:
-                raise ValueError("Newey-West HAC requires `lags` (e.g. lags=1).")
-            if time is None:
-                raise ValueError(
-                    "FE Newey-West HAC requires `time` (the time fixed-effects "
-                    "dimension is used as the Newey-West period index)."
-                )
-            from open_econs.core.cov import newey_west_cov, _as_int_labels
+    from open_econs.core.cov import newey_west_cov, _as_int_labels
 
-            X_df = pd.DataFrame(X_arr, columns=kept_columns)
-            fitted = sm.OLS(y_arr, X_df).fit(cov_type="nonrobust")
-            time_labels = _as_int_labels(data.loc[XX.index, time].values)
-            # Period-aggregation Newey-West (Arellano / Driscoll-Kraay): aggregate
-            # score contributions within each time period, then Bartlett-kernel
-            # HAC across periods.  cluster=time_labels is the within-panel HAC
-            # convention (matches statsmodels cov_nw_groupsum).
-            V_cov = newey_west_cov(
-                X_arr, np.asarray(fitted.resid), max_lags=lags, cluster=time_labels,
-                adjust=hac_adjust,
-            )
-            se_arr = np.sqrt(np.maximum(np.diag(V_cov), 0.0))
-            cov_label = f"HAC({lags})"
-        else:
-            X_df = pd.DataFrame(X_arr, columns=kept_columns)
-            fitted = sm.OLS(y_arr, X_df).fit(cov_type=cov_type)
-            cov_label = cov_type
+    X_df = pd.DataFrame(X_arr, columns=kept_columns)
+    fitted = sm.OLS(y_arr, X_df).fit(cov_type="nonrobust")
+    time_labels = _as_int_labels(data.loc[XX.index, time].values)
+    V_cov = newey_west_cov(
+        X_arr, np.asarray(fitted.resid), max_lags=lags, cluster=time_labels,
+        adjust=hac_adjust,
+    )
+    se_arr = np.sqrt(np.maximum(np.diag(V_cov), 0.0))
+    cov_label = f"HAC({lags})"
 
     n = int(fitted.nobs)
-    k = X_arr.shape[1]  # number of regressors
+    k = X_arr.shape[1]
     df_resid_adj = max(n - n_absorbed - k, 1)
     df_model_adj = int(fitted.df_model)
 
     coef_arr = np.asarray(fitted.params)
-    if se_arr is None:
-        se_arr = np.asarray(fitted.bse)
-    if V_cov is None:
-        V_cov = np.asarray(fitted.cov_params())
-    t_arr = np.asarray(fitted.tvalues)
-    p_arr = np.asarray(fitted.pvalues)
-    conf_arr = np.asarray(fitted.conf_int())
+    t_arr = np.where(se_arr > 0, coef_arr / se_arr, np.nan)
+    from scipy import stats as _stats
+    p_arr = 2.0 * _stats.t.sf(np.abs(t_arr), df_resid_adj)
+    crit = _stats.t.ppf(0.975, df_resid_adj)
+    conf_arr = np.column_stack([coef_arr - crit * se_arr, coef_arr + crit * se_arr])
 
-    # Rescale SEs, t-stats, p-values for the corrected df.  For non-robust
-    # (and HC1) covariances the SE is proportional to sqrt(SSR / df), so
-    # scaling by sqrt(df_old / df_new) is exact.  For cluster-robust SEs
-    # the same approximation is standard practice (Stata's xtreg, fe does
-    # the same).
-    df_old = max(int(fitted.df_resid), 1)
     _cov = None
+    df_old = max(int(fitted.df_resid), 1)
     if df_resid_adj != df_old and df_old > 0:
-        scale = np.sqrt(df_old / df_resid_adj)
-        se_arr = se_arr * scale
-        from scipy import stats as _stats
-        t_arr = coef_arr / se_arr
-        p_arr = 2.0 * _stats.t.sf(np.abs(t_arr), df_resid_adj)
-        crit = _stats.t.ppf(0.975, df_resid_adj)
-        conf_arr = np.column_stack([coef_arr - crit * se_arr, coef_arr + crit * se_arr])
-        # Store the df-scaled covariance so vcov() is consistent with
-        # the reported standard errors.  The raw covariance (HAC or
-        # statsmodels) uses sigma2 = SSR/(N-k); Stata uses SSR/(N-g-k).
-        # The ratio is df_old/df_resid_adj, applied element-wise.
         _cov = pd.DataFrame(
             V_cov * (df_old / df_resid_adj),
             index=kept_columns,
             columns=kept_columns,
         )
-
-    conf_int = pd.DataFrame(
-        {"lower": conf_arr[:, 0], "upper": conf_arr[:, 1]},
-        index=kept_columns,
-    )
+    else:
+        _cov = pd.DataFrame(V_cov, index=kept_columns, columns=kept_columns)
 
     ssr = float(np.sum(fitted.resid ** 2))
-
-    # Within R-squared: denominator is the SST of the within-transformed y
-    # using only the *entity* (or time) demeaning — matching Stata's e(r2_w).
-    # For one-way FE this is just sum(y_dm^2).  For two-way FE we use the
-    # entity-only demeaned y so that R² measures the share of within-entity
-    # variation explained (Stata's convention).
     if entity is not None:
+        assert entity_arr is not None
         y_for_r2 = _demean(yy.values.ravel().astype(float), entity_arr)
     elif time is not None:
+        assert time_arr is not None
         y_for_r2 = _demean(yy.values.ravel().astype(float), time_arr)
     else:
         y_for_r2 = yy.values.ravel().astype(float)
@@ -280,12 +534,10 @@ def fe(
     r2 = 1.0 - ssr / (sst + 1e-15)
     if np.isnan(r2) or r2 < 0 or r2 > 1:
         r2 = float(fitted.rsquared)
-
     adj_r2 = 1.0 - (1.0 - r2) * (n - 1) / max(df_resid_adj, 1)
 
     fitted_values = pd.Series(fitted.fittedvalues, index=XX.index, name="fitted")
     residuals = pd.Series(fitted.resid, index=XX.index, name="residuals")
-
     rhs_formula = formula.split("~", 1)[1].strip()
 
     result = OLSResult(
@@ -299,7 +551,7 @@ def fe(
         std_errors=pd.Series(se_arr, index=kept_columns),
         t_stats=pd.Series(t_arr, index=kept_columns),
         p_values=pd.Series(p_arr, index=kept_columns),
-        conf_int=conf_int,
+        conf_int=pd.DataFrame({"lower": conf_arr[:, 0], "upper": conf_arr[:, 1]}, index=kept_columns),
         r_squared=float(r2),
         adj_r_squared=float(adj_r2),
         f_statistic=_safe_fvalue(fitted),
@@ -315,21 +567,13 @@ def fe(
         _X=XX,
         _fit=fitted,
     )
-    # Attach the df-scaled covariance matrix so vcov() returns values
-    # consistent with the panel-adjusted standard errors.
     if _cov is not None:
         object.__setattr__(result, "_cov", _cov)
     return result
 
 
 def _demean(y: np.ndarray, groups: np.ndarray) -> np.ndarray:
-    """One-way within transform via O(n) group-mean subtraction.
-
-    Subtracts each observation's group mean (the analytical solution to the
-    dummy-regression projection) instead of forming the full dummy matrix and
-    running a least-squares solve — which would cost O(n x G) memory for G
-    groups and is the bottleneck for large panels.
-    """
+    """One-way within transform via O(n) group-mean subtraction."""
     if y.ndim == 1:
         y = y.reshape(-1, 1)
     cols = [f"c{i}" for i in range(y.shape[1])]
@@ -348,15 +592,7 @@ def _demean_two_way(
     max_iter: int = 100,
     tol: float = 1e-10,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Iterative (alternating-projections) demeaning for two-way FE.
-
-    This computes the within transformation y - y_bar_i - y_bar_t + y_bar
-    without explicitly constructing the dummy matrix, using the algorithm
-    from the Stata reghdfe package (Correia 2017). This is exact for
-    unbalanced panels.
-
-    Returns (y_demeaned, X_demeaned) as numpy arrays.
-    """
+    """Iterative (alternating-projections) demeaning for two-way FE."""
     if isinstance(y, pd.Series):
         y_arr = y.values.ravel().astype(float)
     else:
@@ -431,3 +667,19 @@ def _safe_bic(fitted: Any) -> float:
         return float(fitted.bic)
     except (ValueError, AttributeError):
         return float("nan")
+
+
+def _count_absorbed_dof(df: pd.DataFrame, fe_cols: list[str]) -> int:
+    """Count absorbed degrees of freedom for N-way FE.
+
+    The absorbed DOF equals the dimension of the linear space spanned by all
+    the FE indicator variables (including the intercept).  Since the intercept
+    is in every FE subspace, it is counted ``len(fe_cols)`` times and we
+    subtract ``len(fe_cols) - 1`` to correct.
+
+    Formula: ``sum(n_groups_i) - (k - 1)`` where ``k = len(fe_cols)``.
+    """
+    if not fe_cols:
+        return 0
+    n_groups = sum(df[c].nunique() for c in fe_cols)
+    return n_groups - (len(fe_cols) - 1)

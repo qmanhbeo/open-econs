@@ -22,8 +22,8 @@ so contributors and users can see where their work might fit.
 - [x] Numerical parity verified against raw `statsmodels` output
 
 #### v0.2 — Diagnostics & Quality *(shipped)*
-- [x] Default `cov_type` changed to `HC2` (matches modern Stata)
-- [x] Per-variable Oaxaca breakdown via `.variable_detail` and `tidy(detail=True)`
+- [x] Default `cov_type` changed to `HC2` (OE defaults to HC2 rather than Stata's bare `nonrobust` default because defaulting to non-robust SEs is widely considered poor applied practice; users who want exact Stata-default parity should pass `cov_type='nonrobust'` explicitly; note: Stata's `regress, robust` uses HC1, not HC2)
+    - [x] Per-variable Oaxaca breakdown via `.variable_detail` and `tidy(detail=True)`
 - [x] Diagnostic tests: Jarque-Bera, Breusch-Pagan, Durbin-Watson, Ramsey RESET
 - [x] Condition number threshold lowered to 30 (Belsley standard); stored on result
 - [x] `.export()` now supports CSV output

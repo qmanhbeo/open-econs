@@ -19,6 +19,7 @@ fixtures. The `-m "not stata and not r"` expression is kept only as an opt-in
 |--------|---------|
 | `@pytest.mark.stata` | Compares against a Stata-generated `.dta` fixture. |
 | `@pytest.mark.r` | Compares against R output produced via `Rscript`. |
+| `@pytest.mark.synth_placebo` | Synthetic control and placebo inference tests. Excluded from default runs. |
 
 ### Parity scope and counts
 
@@ -47,12 +48,12 @@ checks clustered at `1e-6`–`1e-10`. Refer to individual test files for the
 exact `rtol`/`atol` on each comparison.
 
 The `stata`/`r` markers are **no longer excluded by default**. `addopts` in
-`pyproject.toml` keeps only the `tests/stata/do/archive` ignore; a bare
+`pyproject.toml` keeps only the `tests/stata/generate-fixtures/archive` ignore; a bare
 `pytest` collects and runs every test, including the parity tests:
 
 ```toml
 [tool.pytest.ini_options]
-addopts = '--ignore=tests/stata/do/archive'
+addopts = '--ignore=tests/stata/generate-fixtures/archive'
 ```
 
 `-m "not stata and not r"` remains available as an explicit opt-in *fast mode*
@@ -63,23 +64,24 @@ that deselects the parity tests.
 ### 1. Default — full suite, fixture-only (routine iteration)
 
 ```bash
-pytest            # or: pytest tests/
+pytest -m "not synth_placebo"            # or: pytest -m "not synth_placebo" tests/
 ```
 
-- Runs **every** test in the suite, including the `stata`/`r` parity tests.
+- Runs every test **except** synth-placebo tests, including the `stata`/`r` parity tests.
 - All parity tests read committed `.dta` fixtures only; `run_do()` is gated
   behind `OE_REGENERATE_FIXTURES`, so no Stata or R binary is launched and no
   fixture file is rewritten on disk.
-- This is the mode for everyday local work — it now exercises the full suite,
+- This is the mode for everyday local work — it exercises the full suite,
   so parity regressions surface without a separate command.
 
-### 2. Fast mode — skip parity tests (quick local iteration)
+### 2. Fast mode — skip parity and synth-placebo tests (quick local iteration)
 
 ```bash
-pytest -m "not stata and not r"
+pytest -m "not stata and not r and not synth_placebo"
 ```
 
-- Deselects every `stata`/`r` test, so only the fast, non-parity tests run.
+- Deselects every `stata`/`r` test and every `synth_placebo` test, so only the
+  fast, non-parity tests run.
 - Same fixture-only behaviour as the default; just a smaller, quicker subset.
 - Use this when iterating on non-parity code and you don't need the parity
   assertions on every run.
@@ -115,7 +117,7 @@ OE_REGENERATE_FIXTURES=1 pytest -m "stata or r"
 - Only needed when you changed a `.do` (or `.R`) script, or right before a
   release.
 - After regenerating, **revert any fixture you did not intend to change**
-  (`git checkout -- tests/stata/do/*.dta tests/r/fixtures/*.json`) so regenerated
+  (`git checkout -- tests/stata/generate-fixtures/*.dta tests/r/fixtures/*.json`) so regenerated
   fixtures are never left uncommitted. Commit the `.do`/`.R` and its regenerated
   fixture together.
 
