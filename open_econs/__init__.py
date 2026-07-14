@@ -1,4 +1,5 @@
 from ._version import __version__
+from ._internal.errors import VcovTypeNotSupportedError
 from .models.linear.ols import ols
 from .models.decomposition.oaxaca import oaxaca
 from .models.discrete.logit import logit
@@ -30,5 +31,6 @@ __all__ = [
     "nls", "NLSResult",
     "synth", "SynthResult",
     "placebo_space", "placebo_time",
+    "VcovTypeNotSupportedError",
     "Context", "PanelContext", "__version__",
 ]
