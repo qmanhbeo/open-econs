@@ -187,6 +187,31 @@ available in R's `sandwich::NeweyWest` but not in OE.
   Naive single-stage VCE underestimates SE by ~17%.
 - **Remaining:** `did_sun_abraham()` still queued for next session.
 
+### D13: did_sun_abraham() — Sun & Abraham (2021) Interaction-Weighted DID — Delivered (R parity)
+
+- **What:** `did_sun_abraham(data, y, cohort, period, ref_period, entity, time,
+  cluster, covariates)` implements the Sun & Abraham (2021) interaction-weighted
+  estimator with cluster-robust SEs. Returns `SunAbrahamResult` with ATT/SE/t/p,
+  period-level and cohort-level aggregated views, full 9×9 VCE.
+- **Status:** Delivered (2026-07-14). R parity at `rtol=1e-6` against
+  `fixest::sunab()` v0.14.2. 23 tests, 0 regressions.
+- **Key findings:**
+  - SSC formula confirmed from fixest source (`vcov_cluster_internal`,
+    `ssc_compute_K`): `G/(G-1) × (n-1)/(n-K)` where `K = nparams - (G-1)`.
+  - Collinearity detection via sequential projection (Gram-Schmidt in original
+    column order) matches fixest's Cholesky-based detection.
+  - ATT is the time::0 period-level aggregate (cohort-weighted), not the
+    mean of all interaction coefficients.
+- **Stata-parity gap:** No Stata anchor exists for the Sun-Abraham estimator.
+  Stata equivalent would be `csdid` (Callaway & Sant'Anna 2021) with
+  `aggte(type="simple")`, or `eventstudyinteract` (Sun & Abraham 2021
+  Stata implementation by Sun). These are distinct packages with different
+  defaults; parity work is deferred.
+  - **Reference:** `csdid` (R & Stata), `eventstudyinteract` (Stata, by Liyang Sun).
+  - **Decision required:** Whether to implement Stata parity for D13 using
+    `csdid` or `eventstudyinteract` as the anchor, or to treat R fixest as the
+    sole parity anchor for this estimator.
+
 ---
 
 ## Test Layout — Deferred Migrations
@@ -209,4 +234,4 @@ available in R's `sandwich::NeweyWest` but not in OE.
 
 ---
 
-*Last updated: 2026-07-14, Gardner DID2S delivered (D12), Sun-Abraham queued.*
+*Last updated: 2026-07-14, Sun-Abraham D13 delivered (R parity), Gardner D12 delivered.*
