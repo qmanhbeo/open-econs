@@ -14,7 +14,7 @@ from open_econs.core.cov_type import validate_cov_type
 class AggteResult(BaseModel):
     """Result of aggregating group-time ATTs following Callaway & Sant'Anna (2021).
 
-    Obtained via :meth:`StaggeredDiDResult.aggte`.  Stores the overall
+    Obtained via :meth:`CsDiDResult.aggte`.  Stores the overall
     aggregated ATT and its standard error, plus a DataFrame of per-level
     ATTs and SEs for the chosen aggregation type.
 
@@ -72,8 +72,8 @@ class AggteResult(BaseModel):
         return "\n".join(lines)
 
 
-class StaggeredDiDResult(BaseModel):
-    """Result of a staggered difference-in-differences estimator.
+class CsDiDResult(BaseModel):
+    """Result of Callaway & Sant'Anna (2021) staggered difference-in-differences estimator.
 
     Implements the Callaway & Sant'Anna (2021) group-time estimator with
     doubly-robust inference (Sant'Anna and Zhao 2020).  Default method (with
@@ -533,7 +533,7 @@ def _staggered_hac_se(
     return float(np.sqrt(cluster_se ** 2 * factor))
 
 
-def staggered_did(
+def did_cs(
     data: pd.DataFrame,
     y: str,
     entity: str,
@@ -548,8 +548,8 @@ def staggered_did(
     bootstrap: bool = False,
     bootstrap_reps: int = 500,
     seed: int | None = None,
-) -> StaggeredDiDResult:
-    """Staggered (heterogeneous-timing) difference-in-differences.
+    ) -> CsDiDResult:
+    """Callaway & Sant'Anna (2021) staggered difference-in-differences.
 
     Implements the Callaway & Sant'Anna (2021) group-time estimator.  Two
     estimation methods:
@@ -606,7 +606,7 @@ def staggered_did(
 
     Returns
     -------
-    StaggeredDiDResult
+    CsDiDResult
 
     Notes
     -----
@@ -690,7 +690,7 @@ def staggered_did(
     cov_type = validate_cov_type(
         cov_type,
         accepted={"cluster", "HAC"},
-        estimator="staggered_did()",
+        estimator="did_cs()",
     )
     if cov_type == "HAC":
         if lags is None:
@@ -698,7 +698,7 @@ def staggered_did(
         if lags < 0:
             raise ValueError("lags= must be a non-negative integer when cov_type='HAC'.")
         warnings.warn(
-            "cov_type='HAC' on staggered_did() is experimental and a PROJECT CONVENTION "
+            "cov_type='HAC' on did_cs() is experimental and a PROJECT CONVENTION "
             "(Newey-West temporal correction on the aggregated influence function). It is "
             "NOT externally validated against Stata/R, and staggered-DiD HAC inference is a "
             "contested area. Prefer cluster-robust SEs (cov_type='cluster', the default) for "
@@ -906,7 +906,7 @@ def staggered_did(
             overall_se = float(np.std(boot_atts, ddof=1))
             overall_p = float(2 * (1 - _norm.cdf(abs(overall / overall_se)))) if overall_se > 0 else float("nan")
 
-    return StaggeredDiDResult(
+    return CsDiDResult(
         att_group_time=gt,
         event_study=ev,
         att=overall,

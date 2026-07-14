@@ -3,7 +3,7 @@ log using "C:\Users\manhn\AppData\Local\Temp\opencode\extract.log", text replace
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 drop if entity >= 20
 
-* Build gvar exactly as staggered_did.do: 0 = never, 3 = treated at time 3
+* Build gvar exactly as did_cs.do: 0 = never, 3 = treated at time 3
 gen gvar = 0
 replace gvar = 3 if entity >= 10 & entity < 20
 

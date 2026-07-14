@@ -27,7 +27,7 @@ def _sim_staggered(tau=2.0, n=200, T=6, seed=0):
 
 def test_staggered_recovers_constant_att():
     df = _sim_staggered(tau=2.0, seed=0)
-    r = oe.staggered_did(df, y="y", entity="entity", time="time", treatment="treat")
+    r = oe.did_cs(df, y="y", entity="entity", time="time", treatment="treat")
     assert np.isclose(r.att, 2.0, atol=0.2)
     assert r.att_p < 0.05
     assert set(r.cohorts) == {1, 3, 5}
@@ -38,7 +38,7 @@ def test_staggered_recovers_constant_att():
 
 def test_staggered_event_study_positive_leads():
     df = _sim_staggered(tau=2.0, seed=1)
-    r = oe.staggered_did(df, y="y", entity="entity", time="time", treatment="treat")
+    r = oe.did_cs(df, y="y", entity="entity", time="time", treatment="treat")
     assert (r.event_study["lead"] >= 0).all()
     assert np.isclose(r.event_study["att"].mean(), 2.0, atol=0.3)
 
@@ -54,7 +54,7 @@ def test_staggered_matches_simple_did_when_single_cohort():
     mu = rng.normal(0, 1, size=n)
     y = mu[ent] + 1.5 * treat + rng.normal(0, 1, size=n * T)
     df = pd.DataFrame({"y": y, "entity": ent, "time": t, "treat": treat})
-    r = oe.staggered_did(df, y="y", entity="entity", time="time", treatment="treat")
+    r = oe.did_cs(df, y="y", entity="entity", time="time", treatment="treat")
     # The treated cohort adopts at t=2; its post ATT should be ~1.5.
     post = r.att_group_time[r.att_group_time["time"] >= 2]
     assert np.isclose(post["att"].mean(), 1.5, atol=0.3)

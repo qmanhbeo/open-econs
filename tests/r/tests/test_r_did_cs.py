@@ -32,16 +32,16 @@ pytestmark = pytest.mark.r
 RTOL = 1e-6
 
 # Load R ground truth once per module (cached).
-R_BAL = read_r("staggered_did_balanced")
-R_UNBAL = read_r("staggered_did_unbalanced")
+R_BAL = read_r("did_cs_balanced")
+R_UNBAL = read_r("did_cs_unbalanced")
 
 
-def _oe_att_gt(oe_r: oe.StaggeredDiDResult) -> dict[tuple[int, int], float]:
+def _oe_att_gt(oe_r: oe.CsDiDResult) -> dict[tuple[int, int], float]:
     gt = oe_r.att_group_time
     return {(int(r.cohort), int(r.time)): r.att for r in gt.itertuples()}
 
 
-def _oe_se_gt(oe_r: oe.StaggeredDiDResult) -> dict[tuple[int, int], float]:
+def _oe_se_gt(oe_r: oe.CsDiDResult) -> dict[tuple[int, int], float]:
     gt = oe_r.att_group_time
     return {(int(r.cohort), int(r.time)): r.se for r in gt.itertuples()}
 
@@ -63,7 +63,7 @@ class TestStaggeredDiDRParityBalanced:
         df = df[df["entity"] < 20].copy()
         df["treat"] = 0.0
         df.loc[(df["entity"] >= 10) & (df["time"] >= 3), "treat"] = 1.0
-        self.oe_r = oe.staggered_did(
+        self.oe_r = oe.did_cs(
             df, y="y", entity="entity", time="time", treatment="treat",
             covariates=["x", "z"], method="dripw",
             control_cohorts="never_treated",
@@ -111,7 +111,7 @@ class TestStaggeredDiDRParityUnbalanced:
         df = df[df["entity"] < 23].copy()
         df["treat"] = 0.0
         df.loc[(df["entity"] >= 15) & (df["time"] >= 3), "treat"] = 1.0
-        self.oe_r = oe.staggered_did(
+        self.oe_r = oe.did_cs(
             df, y="y", entity="entity", time="time", treatment="treat",
             covariates=["x", "z"], method="dripw",
             control_cohorts="never_treated",

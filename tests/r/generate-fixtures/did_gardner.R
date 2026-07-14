@@ -5,7 +5,7 @@
 # second-stage regression of residuals on treatment indicator.
 # SEs: cluster-robust (by entity).
 #
-# Uses staggered_did_balanced_input.csv with treatment constructed as:
+# Uses did_cs_balanced_input.csv with treatment constructed as:
 # entities 10-19 treated at time >= 3, entities 0-9 never-treated.
 #
 # Args: argv[1] = input csv, argv[2] = output json

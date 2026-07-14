@@ -23,16 +23,16 @@ pytestmark = pytest.mark.stata
 RTOL = 1e-6
 
 # Load Stata ground truth once per module (cached), not per test method.
-S = read_stata("staggered_did")
-S_U = read_stata("staggered_did_unbalanced")
+S = read_stata("did_cs")
+S_U = read_stata("did_cs_unbalanced")
 
 
-def _oe_att_gt(oe_r: oe.StaggeredDiDResult) -> dict[tuple[int, int], float]:
+def _oe_att_gt(oe_r: oe.CsDiDResult) -> dict[tuple[int, int], float]:
     gt = oe_r.att_group_time
     return {(int(r.cohort), int(r.time)): r.att for r in gt.itertuples()}
 
 
-def _oe_se_gt(oe_r: oe.StaggeredDiDResult) -> dict[tuple[int, int], float]:
+def _oe_se_gt(oe_r: oe.CsDiDResult) -> dict[tuple[int, int], float]:
     gt = oe_r.att_group_time
     return {(int(r.cohort), int(r.time)): r.se for r in gt.itertuples()}
 
@@ -58,7 +58,7 @@ class TestStaggeredDiDWithCovariates:
         df = df[mask].copy()
         df["treat"] = 0.0
         df.loc[(df["entity"] >= 10) & (df["time"] >= 3), "treat"] = 1.0
-        self.oe_r = oe.staggered_did(
+        self.oe_r = oe.did_cs(
             df, y="y", entity="entity", time="time", treatment="treat",
             covariates=["x", "z"], method="dripw",
             control_cohorts="never_treated",
@@ -122,7 +122,7 @@ class TestStaggeredDiDWithCovariatesUnbalanced:
         df = df[df["entity"] < 23].copy()
         df["treat"] = 0.0
         df.loc[(df["entity"] >= 15) & (df["time"] >= 3), "treat"] = 1.0
-        self.oe_r = oe.staggered_did(
+        self.oe_r = oe.did_cs(
             df, y="y", entity="entity", time="time", treatment="treat",
             covariates=["x", "z"], method="dripw",
             control_cohorts="never_treated",
@@ -172,7 +172,7 @@ class TestStaggeredDiDNoCovariates:
         df = df[mask].copy()
         df["treat"] = 0.0
         df.loc[(df["entity"] >= 10) & (df["time"] >= 3), "treat"] = 1.0
-        self.oe_r = oe.staggered_did(df, y="y", entity="entity",
+        self.oe_r = oe.did_cs(df, y="y", entity="entity",
                                      time="time", treatment="treat")
 
     def test_att_not_nan(self):

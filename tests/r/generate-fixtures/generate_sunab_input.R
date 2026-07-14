@@ -1,9 +1,9 @@
 #!/usr/bin/env Rscript
 # Generate multi-cohort input data for Sun-Abraham parity testing
-# Uses the same base data as staggered_did_balanced_input.csv
+# Uses the same base data as did_cs_balanced_input.csv
 # but adds a cohort column for staggered treatment
 
-df <- read.csv("tests/r/fixtures/inputs/staggered_did_balanced_input.csv")
+df <- read.csv("tests/r/fixtures/inputs/did_cs_balanced_input.csv")
 
 # Multi-cohort treatment:
 # Entities 0-4: never-treated (cohort = NA)
@@ -18,8 +18,8 @@ df$cohort[df$entity >= 10 & df$entity < 15] <- 3
 df$cohort[df$entity >= 15 & df$entity < 20] <- 4
 
 # Write output
-write.csv(df, "tests/r/fixtures/inputs/did_sun_abraham_input.csv", row.names = FALSE)
-cat("Input CSV written to tests/r/fixtures/inputs/did_sun_abraham_input.csv\n")
+write.csv(df, "tests/r/fixtures/inputs/did_sa_input.csv", row.names = FALSE)
+cat("Input CSV written to tests/r/fixtures/inputs/did_sa_input.csv\n")
 cat("N rows:", nrow(df), "\n")
 cat("Cohort distribution:\n")
 print(table(df$cohort, useNA = "always"))

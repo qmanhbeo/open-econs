@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-# staggered_did_unbalanced.R - R parity anchor for staggered_did() unbalanced panel.
+# did_cs_unbalanced.R - R parity anchor for did_cs() unbalanced panel (Callaway & Sant'Anna 2021).
 #
 # CS2021 DR-DiD group-time ATTs + simple/dynamic/group/calendar aggregation.
 # Entities 0-14: never-treated, 15-22: treated at t=3, 23-29: excluded (gvar=5).

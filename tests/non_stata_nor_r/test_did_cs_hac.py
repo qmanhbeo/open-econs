@@ -1,8 +1,8 @@
-"""HAC support for ``staggered_did()`` -- validation floor only.
+"""HAC support for ``did_cs()`` -- validation floor only.
 
 IMPORTANT (honesty bar): staggered-DiD HAC inference is a *contested* area and
 no canonical Stata/R reference implements it. ``cov_type="HAC"`` on
-``staggered_did()`` is a documented **project convention** (Newey-West temporal
+``did_cs()`` is a documented **project convention** (Newey-West temporal
 correction on the aggregated influence function), NOT externally validated.
 These tests therefore assert only the *internal-consistency* floor:
 
@@ -12,7 +12,7 @@ These tests therefore assert only the *internal-consistency* floor:
   (d) ``cov_type="HAC"`` without ``lags`` raises a clear ``ValueError``.
 
 They do NOT assert parity with any external estimator. See
-``open_econs.models.causal.staggered_did`` for the full caveat.
+``open_econs.models.causal.did_cs`` for the full caveat.
 """
 
 import warnings
@@ -41,12 +41,12 @@ def _sim_staggered(tau=2.0, n=200, T=6, seed=0):
 
 def test_hac_lags0_equals_cluster_se():
     df = _sim_staggered(seed=1)
-    base = oe.staggered_did(
+    base = oe.did_cs(
         df, y="y", entity="entity", time="time", treatment="treat", cov_type="cluster"
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        hac = oe.staggered_did(
+        hac = oe.did_cs(
             df, y="y", entity="entity", time="time", treatment="treat",
             cov_type="HAC", lags=0,
         )
@@ -56,12 +56,12 @@ def test_hac_lags0_equals_cluster_se():
 
 def test_hac_inflates_se_under_autocorrelation():
     df = _sim_staggered(seed=2)
-    base = oe.staggered_did(
+    base = oe.did_cs(
         df, y="y", entity="entity", time="time", treatment="treat", cov_type="cluster"
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        hac = oe.staggered_did(
+        hac = oe.did_cs(
             df, y="y", entity="entity", time="time", treatment="treat",
             cov_type="HAC", lags=2,
         )
@@ -74,7 +74,7 @@ def test_hac_warns_experimental():
     df = _sim_staggered(seed=3)
     with warnings.catch_warnings(record=True) as record:
         warnings.simplefilter("always")
-        oe.staggered_did(
+        oe.did_cs(
             df, y="y", entity="entity", time="time", treatment="treat",
             cov_type="HAC", lags=1,
         )
@@ -87,7 +87,7 @@ def test_hac_warns_experimental():
 def test_invalid_cov_type_raises():
     df = _sim_staggered(seed=4)
     try:
-        oe.staggered_did(
+        oe.did_cs(
             df, y="y", entity="entity", time="time", treatment="treat",
             cov_type="hacx",
         )
@@ -101,7 +101,7 @@ def test_invalid_cov_type_raises():
 def test_hac_without_lags_raises():
     df = _sim_staggered(seed=5)
     try:
-        oe.staggered_did(
+        oe.did_cs(
             df, y="y", entity="entity", time="time", treatment="treat",
             cov_type="HAC",
         )
@@ -116,7 +116,7 @@ def test_hac_reg_method_proxy_runs():
     df = _sim_staggered(seed=6)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        hac = oe.staggered_did(
+        hac = oe.did_cs(
             df, y="y", entity="entity", time="time", treatment="treat",
             method="reg", cov_type="HAC", lags=1,
         )

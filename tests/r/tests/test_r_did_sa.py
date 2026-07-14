@@ -1,9 +1,9 @@
 """R parity tests for Sun & Abraham (2021) Interaction-Weighted DID.
 
-Validates OE's ``did_sun_abraham()`` against R ``fixest::sunab()`` (v0.14.2)
+Validates OE's ``did_sa()`` against R ``fixest::sunab()`` (v0.14.2)
 on a staggered DiD panel with 3 treated cohorts and never-treated entities.
 
-Fixture input: ``did_sun_abraham_input.csv`` (150 rows, 30 entities, 5 periods;
+Fixture input: ``did_sa_input.csv`` (150 rows, 30 entities, 5 periods;
 entities 0-4,20-29 never-treated; 5-9 cohort=2; 10-14 cohort=3; 15-19 cohort=4).
 
 R parity anchor: fixest::sunab() v0.14.2.  No Stata anchor exists for D13.
@@ -28,18 +28,18 @@ pytestmark = pytest.mark.r
 RTOL = 1e-6
 
 # Load R ground truth once per module (cached).
-R_SUNABRAHAM = read_r("did_sun_abraham")
+R_SUNABRAHAM = read_r("did_sa")
 
 INPUT_CSV = (
     Path(__file__).resolve().parents[2]
-    / "r" / "fixtures" / "inputs" / "did_sun_abraham_input.csv"
+    / "r" / "fixtures" / "inputs" / "did_sa_input.csv"
 )
 
 
-def _oe_result() -> oe.SunAbrahamResult:
-    """Run did_sun_abraham() on the shared staggered-DiD panel."""
+def _oe_result() -> oe.SaDiDResult:
+    """Run did_sa() on the shared staggered-DiD panel."""
     df = pd.read_csv(INPUT_CSV)
-    return oe.did_sun_abraham(
+    return oe.did_sa(
         data=df,
         y="y",
         cohort="cohort",

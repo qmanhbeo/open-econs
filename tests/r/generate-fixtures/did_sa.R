@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-# did_sun_abraham.R - R parity anchor for did_sun_abraham() using fixest::sunab().
+# did_sa.R - R parity anchor for did_sa() using fixest::sunab() (Sun & Abraham 2021).
 #
 # Sun & Abraham (2021) interaction-weighted estimator:
 # y ~ x + sunab(cohort, time) | entity + time
@@ -7,7 +7,7 @@
 # weights = cohort-period cell shares.
 # SEs: from full VCE of the regression (cluster-robust by entity).
 #
-# Uses staggered_did_multi_cohort_input.csv with:
+# Uses multi-cohort input data with:
 #   Entities 0-4: never-treated
 #   Entities 5-9: treated at time 2 (cohort = 2)
 #   Entities 10-14: treated at time 3 (cohort = 3)

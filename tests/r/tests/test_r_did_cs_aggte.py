@@ -34,30 +34,30 @@ pytestmark = pytest.mark.r
 RTOL = 1e-6
 
 # Load R ground truth once per module (cached).
-R_BAL = read_r("staggered_did_balanced")
-R_UNBAL = read_r("staggered_did_unbalanced")
+R_BAL = read_r("did_cs_balanced")
+R_UNBAL = read_r("did_cs_unbalanced")
 
 FIXTURES_DIR = Path(__file__).resolve().parents[2] / "stata" / "fixtures" / "inputs"
 
 
-def _oe_result_balanced() -> oe.StaggeredDiDResult:
+def _oe_result_balanced() -> oe.CsDiDResult:
     df = pd.read_csv(FIXTURES_DIR / "df_panel.csv")
     df = df[df["entity"] < 20].copy()
     df["treat"] = 0.0
     df.loc[(df["entity"] >= 10) & (df["time"] >= 3), "treat"] = 1.0
-    return oe.staggered_did(
+    return oe.did_cs(
         df, y="y", entity="entity", time="time", treatment="treat",
         covariates=["x", "z"], method="dripw",
         control_cohorts="never_treated",
     )
 
 
-def _oe_result_unbalanced() -> oe.StaggeredDiDResult:
+def _oe_result_unbalanced() -> oe.CsDiDResult:
     df = pd.read_csv(FIXTURES_DIR / "df_panel_unbalanced.csv")
     df = df[df["entity"] < 23].copy()
     df["treat"] = 0.0
     df.loc[(df["entity"] >= 15) & (df["time"] >= 3), "treat"] = 1.0
-    return oe.staggered_did(
+    return oe.did_cs(
         df, y="y", entity="entity", time="time", treatment="treat",
         covariates=["x", "z"], method="dripw",
         control_cohorts="never_treated",
@@ -299,7 +299,7 @@ class TestAggteInvalidType:
         df = df[df["entity"] < 20].copy()
         df["treat"] = 0.0
         df.loc[(df["entity"] >= 10) & (df["time"] >= 3), "treat"] = 1.0
-        result = oe.staggered_did(
+        result = oe.did_cs(
             df, y="y", entity="entity", time="time", treatment="treat",
             covariates=["x", "z"], method="dripw",
             control_cohorts="never_treated",

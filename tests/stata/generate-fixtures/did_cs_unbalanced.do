@@ -1,23 +1,25 @@
-*! staggered_did.do — Staggered DiD (SSC: csdid) — balanced cohorts
+*! did_cs_unbalanced.do — Callaway & Sant'Anna (2021) DiD — unbalanced cohorts
 clear all
 set more off
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel_unbalanced.csv", clear
 
-* Match the Python-side balanced test: keep entities 0-19 only.
-* The Python test filters `entity < 20`, which excludes the gvar=5
-* (treated-at-t=5) entities 20-29. They never turn on in the data
+* Match the Python-side unbalanced test: keep entities 0-22 only.
+* The Python test filters `entity < 23`, which excludes the gvar=5
+* (treated-at-t=5) entities 23-29. They never turn on in the data
 * (max time = 4), so csdid only ever sees the g=3 cohort after this drop.
-drop if entity >= 20
+drop if entity >= 23
 
 * gvar: 0 = never treated, 3 = treated at time 3
+* entity 0-14: never treated (15)
+* entity 15-22: treated at t=3 (8)
 gen gvar = 0
-replace gvar = 3 if entity >= 10 & entity < 20
+replace gvar = 3 if entity >= 15 & entity < 23
 
 * Run csdid with covariates (dripw, default).  saverif() dumps the per-entity
 * RIF dataset so we can recompute the full-sample aggregated SE the same way
 * open_econs does (equal-weight average over post-treatment cells, then the
 * cluster-robust influence-function variance V = sum((RIF-mean)^2)/N^2).
-csdid y x z, ivar(entity) time(time) gvar(gvar) saverif(tmp_rif_bal)
+csdid y x z, ivar(entity) time(time) gvar(gvar) saverif(tmp_rif_ub)
 
 * e(b) is 1x8: first 4 are ATT(g=3, t), last 4 are weights
 * (gvar=5 cohort dropped above, so only g=3 remains)
@@ -55,7 +57,7 @@ forvalues i = 1/8 {
 scalar s_N = e(N)
 
 * ---- Aggregated SE from per-entity RIF (open_econs method) ----
-use tmp_rif_bal.dta, clear
+use tmp_rif_ub.dta, clear
 * Post-treatment cells for cohort g=3 are t=3 (_g3_2_3) and t=4 (_g3_2_4).
 gen double agg_rif = (_g3_2_3 + _g3_2_4) / 2
 summ agg_rif
@@ -63,7 +65,7 @@ scalar mean_r = r(mean)
 gen double dev = agg_rif - mean_r
 egen double ssd = sum(dev^2)
 scalar agg_se = sqrt(ssd / (_N^2))
-erase tmp_rif_bal.dta
+erase tmp_rif_ub.dta
 drop _all
 
 clear
@@ -108,4 +110,4 @@ replace value = s_N              in 17
 replace name  = "agg_se"         in 18
 replace value = agg_se           in 18
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\staggered_did.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\did_cs_unbalanced.dta", replace

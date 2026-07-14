@@ -53,7 +53,7 @@ def main() -> None:
         m = df["firm"] == e
         treat[m.values] = (df.loc[m, "year"] >= ad[e]).astype(float).values
     df["treat"] = treat
-    print(oe.staggered_did(df, y="y", entity="firm", time="year", treatment="treat").summary())
+    print(oe.did_cs(df, y="y", entity="firm", time="year", treatment="treat").summary())
 
     # Regression discontinuity
     rx = rng.uniform(-1, 1, size=1000)

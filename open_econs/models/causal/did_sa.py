@@ -41,7 +41,7 @@ from open_econs.core.base import BaseModel
 from open_econs.models.linear.fe import _demean_two_way, _count_absorbed_dof
 
 
-class SunAbrahamResult(BaseModel):
+class SaDiDResult(BaseModel):
     """Result of Sun & Abraham (2021) Interaction-Weighted DID.
 
     Immutable result exposing a uniform interface: ``.tidy()`` (coefficients,
@@ -394,7 +394,7 @@ def _compute_sunab_aggregates(
     return period_coefs, period_ses, period_names, cohort_coefs, cohort_ses, cohort_names
 
 
-def did_sun_abraham(
+def did_sa(
     data: pd.DataFrame,
     y: str,
     cohort: str,
@@ -404,8 +404,8 @@ def did_sun_abraham(
     time: str | None = None,
     cluster: str | None = None,
     covariates: list[str] | None = None,
-) -> SunAbrahamResult:
-    """Sun & Abraham (2021) Interaction-Weighted Difference-in-Differences.
+) -> SaDiDResult:
+    """Sun & Abraham (2021) Interaction-Weighted Difference-in-Differences (did_sa).
 
     Implements the Sun & Abraham (2021) estimator using Frisch-Waugh-Lovell
     (FWL): entity and time FE are partialled out via iterative demeaning
@@ -441,7 +441,7 @@ def did_sun_abraham(
 
     Returns
     -------
-    SunAbrahamResult
+    SaDiDResult
     """
     call = _capture_call(
         y=y,
@@ -700,7 +700,7 @@ def did_sun_abraham(
         index=kept_names,
     )
 
-    return SunAbrahamResult(
+    return SaDiDResult(
         cohort_var=cohort,
         period_var=period,
         ref_period=ref_period,
