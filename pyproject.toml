@@ -22,6 +22,7 @@ dependencies = [
     "scipy>=1.11",
     "linearmodels>=6.0",
     "jinja2>=3.0",
+    "pyfixest==0.60.0",
 ]
 
 [project.optional-dependencies]
@@ -56,6 +57,7 @@ markers = [
     "stata: marks tests that compare against Stata-generated .dta fixtures (require Stata to regenerate; excluded by default historically, now run in the default suite against committed fixtures)",
     "r: marks tests that compare against R-generated output via Rscript (require R; excluded by default historically, now run in the default suite against committed fixtures)",
     "slow: marks tests whose runtime is materially higher than the typical test (e.g. multi-start / multi-method solver sweeps). They run in the default local suite (bare `pytest`) AND in a dedicated CI job, so coverage is unchanged; the split exists only to give a fast feedback path (CI 'fast' step) without dropping coverage.",
+    "synth_placebo: marks tests for synthetic control and placebo inference. Excluded from default runs via pytest -m 'not synth_placebo'.",
 ]
 
 [build-system]
