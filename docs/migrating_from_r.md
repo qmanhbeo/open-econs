@@ -20,7 +20,7 @@ mental model you build once transfers across methods — the same goal as the
 | `AER::ivreg(y ~ x \| z)` | `oe.iv("y ~ x \| z", data=df)` |
 | `fixest::did(y ~ treat * post)` | `oe.did("y ~ treat*post", data=df, treatment="treat", post="post")` |
 | `fixest::eventstudydid(...)` | `oe.event_study("y ~ treat*period", data=df, treatment="treat", post="post")` |
-| `did::att_gt` / `csdid` (staggered) | `oe.staggered_did(df, y="y", entity="firm", time="year", treatment="treat")` |
+| `did::att_gt` / `csdid` (staggered) | `oe.did_cs(df, y="y", entity="firm", time="year", treatment="treat")` |
 | `rdrobust::rdrobust(y, x, c=0)` | `oe.rdd(df, y="y", running="x", cutoff=0.0)` |
 | `rdl::density_test` (McCrary) | `oe.density_test(df, running="x", cutoff=0.0)` |
 | `MatchIt::matchit(treat ~ x1 + x2)` | `oe.psm(df, treatment="treat", covariates=["x1","x2"])` |
@@ -41,7 +41,7 @@ mental model you build once transfers across methods — the same goal as the
 
 ## v1.0 status notes
 
-- **`staggered_did` HAC is experimental.** `cov_type="HAC"` is a *project
+- **`did_cs` HAC is experimental.** `cov_type="HAC"` is a *project
   convention* (Newey-West on the aggregated influence function), **not**
   externally validated — there is no `fixest`/`Synth` reference for it. For
   publication prefer the default `cov_type="cluster"`; a `UserWarning` is raised

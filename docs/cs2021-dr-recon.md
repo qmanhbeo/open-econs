@@ -1,7 +1,7 @@
 # CS2021 doubly-robust (DR) staggered-DiD estimator — IF rewrite notes
 
 > Moved from `ROADMAP.md` during the 2026-07-13 trim. Technical detail behind
-> the v0.7 `staggered_did()` CS2021 DR estimator rewrite.
+> the v0.7 `did_cs()` CS2021 DR estimator rewrite.
 
 - **`_cell_dripw` reimplemented from R `DRDID` `drdid_panel`** (csdid default
   `dripw`); validated to machine precision vs csdid's saved per-entity RIF

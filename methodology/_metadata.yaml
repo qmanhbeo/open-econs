@@ -94,11 +94,15 @@ estimators:
       - roodman2009
     methodology: methodology/linear/arellano_bond.md
 
-  staggered_did:
-    name: Staggered Difference-in-Differences
+  did_cs:
+    name: Callaway-Sant'Anna Staggered DiD
+    aliases:
+      - staggered difference-in-differences
+      - CS2021 DiD
+      - group-time ATT
     category: causal_inference
     api:
-      - oe.staggered_did()
+      - oe.did_cs()
     context_api: []
     problem: treatment effects with staggered adoption
     estimator: Callaway-Sant'Anna group-time ATT
@@ -108,7 +112,7 @@ estimators:
       - did
     status: mature
     tier: 1
-    methodology: methodology/causal_inference/staggered_did.md
+    methodology: methodology/causal_inference/did_cs.md
 
   did:
     name: Two-Period Difference-in-Differences

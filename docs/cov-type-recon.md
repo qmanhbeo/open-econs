@@ -22,7 +22,7 @@ silent fallback to a default.
 - Estimators covered: `ols()`/`reg()`, `fe()`, `nls()`, `iv()`, `gmm()`,
   `mlogit()`, `logit()`, `probit()`, `did()`, `event_study()`,
   `PanelContext.pooled()`/`fe()`/`re()`/`driscoll_kraay()`. `oaxaca()`, `cem()`,
-  `staggered_did()` have **no** `cov_type` parameter (out of scope); defaults
+  `did_cs()` have **no** `cov_type` parameter (out of scope); defaults
   unchanged; no HAC support added where it did not already exist
   (`PanelContext.pooled()` intentionally excludes `"HAC"` because it has no
   `lags` param to drive Newey-West).

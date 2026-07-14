@@ -1,6 +1,6 @@
 # API Stability & Versioning Policy
 
-**Status:** in force as of v1.0.0. This document is the authoritative statement of
+**Status:** in force as of v1.0.0 (updated for v1.0.2). This document is the authoritative statement of
 what "stable" means for open-econs and supersedes looser wording in earlier
 roadmap entries.
 
@@ -11,7 +11,7 @@ The public API is **exactly** the names exported from `open_econs` via
 
 ```
 ols, reg, logit, probit, mlogit, fe, iv, oaxaca,
-did, event_study, balance, abond, staggered_did, density_test, cem,
+did, event_study, balance, abond, did_cs, density_test, cem,
 psm, rdd, rosenbaum_bounds, gmm, GMMResult,
 nls, NLSResult, synth, SynthResult,
 Context, PanelContext
@@ -83,9 +83,9 @@ the relevant estimators degrade to documented fallbacks where one exists.
 
 ## Known limitations carried into v1.0.0
 
-- `staggered_did(..., cov_type="HAC")` is a **project convention**, not an
+- `did_cs(..., cov_type="HAC")` is a **project convention**, not an
   externally validated variance estimator. Use `cov_type="cluster"` (default)
-  for publication. See `open_econs.models.causal.staggered_did`.
+  for publication. See `open_econs.models.causal.did_cs`.
 - `nlogit()` remains unimplemented (deferred; see roadmap North Star / recon
   doc).
 - Tutorial coverage at v1.0.0 covers OLS, FE, IV, and DiD; RDD, PSM, and

@@ -921,3 +921,11 @@ def did_cs(
         call=call,
         cov_type=cov_type,
     )
+
+
+def staggered_did(*args: Any, **kwargs: Any) -> object:
+    warnings.warn(
+        "`staggered_did` is deprecated; use `did_cs` instead.",
+        FutureWarning, stacklevel=2,
+    )
+    return did_cs(*args, **kwargs)

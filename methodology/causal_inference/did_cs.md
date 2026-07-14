@@ -1,5 +1,5 @@
 ---
-method: staggered_did
+method: did_cs
 aliases:
   - Callaway-Sant'Anna DiD
   - CS2021 DiD
@@ -8,7 +8,7 @@ aliases:
   - group-time ATT
 category: causal_inference
 api:
-  - oe.staggered_did()
+  - oe.did_cs()
 context_api: []
 problem:
   - heterogeneous treatment timing
@@ -28,7 +28,7 @@ references:
   - abadie2005
 ---
 
-# Callaway-Sant'Anna Staggered Difference-in-Differences in Python
+# Callaway-Sant'Anna Staggered Difference-in-Differences (`did_cs`)
 
 > **Estimator summary**: open-econs implements the Callaway & Sant'Anna (2021) group-time average treatment effect estimator for staggered DiD settings, using the doubly-robust (DR) DiD approach of Sant'Anna & Zhao (2020) when covariates are present, and a simple outcome-regression 2×2 OLS interaction when they are not. The estimator handles heterogeneous treatment timing, provides influence-function-based cluster-robust standard errors, and supports never-treated or not-yet-treated control groups.
 
@@ -160,7 +160,7 @@ Bootstrap is **not** the default; analytic influence-function SEs are used when 
 
 6. **No `csdid_stats` equivalent**: Stata's `csdid_stats` command provides various aggregation schemes. open-econs provides only the "simple" equal-weighted aggregation.
 
-7. **No `plot()` method**: The `StaggeredDiDResult` does not implement a `plot()` method. Users should extract the `event_study` DataFrame and plot manually.
+7. **No `plot()` method**: The `CsDiDResult` does not implement a `plot()` method. Users should extract the `event_study` DataFrame and plot manually.
 
 8. **No `pretrends` test**: The CS2021 pre-trends test (based on pre-treatment periods) is not implemented.
 
@@ -172,9 +172,9 @@ Bootstrap is **not** the default; analytic influence-function SEs are used when 
 
 | open-econs | Stata | Notes |
 |------------|-------|-------|
-| `oe.staggered_did(df, y="y", entity="id", time="t", treatment="treat", covariates=["x","z"])` | `csdid y x z, ivar(id) time(t) gvar(treat)` | Both default to doubly-robust `dripw` |
-| `oe.staggered_did(..., control_cohorts="never_treated")` | `csdid y x z, ivar(id) time(t) gvar(treat), never` | Restricts to never-treated controls |
-| `oe.staggered_did(..., method="reg")` | `csdid y, ivar(id) time(t) gvar(treat), method=reg` | Outcome-regression only |
+| `oe.did_cs(df, y="y", entity="id", time="t", treatment="treat", covariates=["x","z"])` | `csdid y x z, ivar(id) time(t) gvar(treat)` | Both default to doubly-robust `dripw` |
+| `oe.did_cs(..., control_cohorts="never_treated")` | `csdid y x z, ivar(id) time(t) gvar(treat), never` | Restricts to never-treated controls |
+| `oe.did_cs(..., method="reg")` | `csdid y, ivar(id) time(t) gvar(treat), method=reg` | Outcome-regression only |
 
 **Parameter mapping:**
 
@@ -193,9 +193,9 @@ Bootstrap is **not** the default; analytic influence-function SEs are used when 
 
 | open-econs | R | Notes |
 |------------|---|-------|
-| `oe.staggered_did(df, y="y", entity="id", time="t", treatment="treat", covariates=["x","z"])` | `did::att_gt(yname="y", tname="t", idname="id", gname="g", xformla=~x+z, data=df)` | Both default to doubly-robust |
-| `oe.staggered_did(..., method="dripw")` | `DRDID::drdid_panel(y~x+z, t=t, treated=D, id=id, data=df, method="trad")` | Same DR estimator |
-| `oe.staggered_did(..., control_cohorts="never_treated")` | `did::att_gt(..., control_group="never_treated")` | Restrict to never-treated controls |
+| `oe.did_cs(df, y="y", entity="id", time="t", treatment="treat", covariates=["x","z"])` | `did::att_gt(yname="y", tname="t", idname="id", gname="g", xformla=~x+z, data=df)` | Both default to doubly-robust |
+| `oe.did_cs(..., method="dripw")` | `DRDID::drdid_panel(y~x+z, t=t, treated=D, id=id, data=df, method="trad")` | Same DR estimator |
+| `oe.did_cs(..., control_cohorts="never_treated")` | `did::att_gt(..., control_group="never_treated")` | Restrict to never-treated controls |
 
 **Parameter mapping:**
 
@@ -217,7 +217,7 @@ Bootstrap is **not** the default; analytic influence-function SEs are used when 
 ```python
 import open_econs as oe
 
-result = oe.staggered_did(
+result = oe.did_cs(
     data=df,
     y="y",
     entity="id",
@@ -233,7 +233,7 @@ print(result.event_study)
 ### Staggered DiD without Covariates (Outcome Regression)
 
 ```python
-result = oe.staggered_did(
+result = oe.did_cs(
     data=df,
     y="y",
     entity="id",
@@ -246,7 +246,7 @@ result = oe.staggered_did(
 ### Never-Treated Control Group Only
 
 ```python
-result = oe.staggered_did(
+result = oe.did_cs(
     data=df,
     y="y",
     entity="id",
@@ -260,7 +260,7 @@ result = oe.staggered_did(
 ### Bootstrap Standard Errors
 
 ```python
-result = oe.staggered_did(
+result = oe.did_cs(
     data=df,
     y="y",
     entity="id",

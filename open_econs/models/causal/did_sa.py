@@ -29,6 +29,7 @@ Sun, Liyang, and Abraham, Sarah. 2021.
 
 from __future__ import annotations
 
+import warnings
 from datetime import datetime
 from typing import Any
 
@@ -727,3 +728,11 @@ def did_sa(
         cohort_ses=cohort_ses,
         cohort_names=cohort_names,
     )
+
+
+def did_sun_abraham(*args: Any, **kwargs: Any) -> object:
+    warnings.warn(
+        "`did_sun_abraham` is deprecated; use `did_sa` instead.",
+        FutureWarning, stacklevel=2,
+    )
+    return did_sa(*args, **kwargs)

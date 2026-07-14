@@ -69,7 +69,7 @@ Collapsed from v0.4.1–v0.4.3 (each superseded by the next):
 #### v0.6.x — Dynamic panels, RDD, Oaxaca & Stata-parity hardening *(shipped)*
 Landed across v0.6.1–v0.6.9 (patch-level numeric detail → `docs/v06x-parity-recon.md`):
 - `abond()` — Arellano-Bond difference GMM (one/two-step, Windmeijer SEs, Hansen J, AR(1)/AR(2)); matches Stata `xtabond2` at machine precision (collapsed + non-collapsed, all four flavors).
-- `staggered_did()` — upgraded from a simplified OLS approx to the full Callaway-Sant'Anna (2021) **doubly-robust** group-time estimator (`dripw` + `reg`); 18 cell-by-cell Stata-parity tests.
+- `did_cs()` — upgraded from a simplified OLS approx to the full Callaway-Sant'Anna (2021) **doubly-robust** group-time estimator (`dripw` + `reg`); 18 cell-by-cell Stata-parity tests.
 - `rdd()` — sharp and fuzzy RDD via triangular-kernel LLR; `rdrobust` backend (CCT) + built-in IK fallback; McCrary/CJM `density_test()`.
 - `oaxaca()` — Stata parity across all decomposition variants at machine precision.
 - Newey-West `hac_adjust` (Stata-style `N/(N−K)` df correction); panel FD fixture fix.
@@ -77,7 +77,7 @@ Landed across v0.6.1–v0.6.9 (patch-level numeric detail → `docs/v06x-parity-
 - Multi-way clustering and Newey-West HAC (`cov_type="HAC"`) support added.
 
 #### v0.7 — DR Estimator, RDD Refinements *(shipped)*
-- [x] `staggered_did` sample-alignment & SE-gap root cause → `docs/staggered-did-recon.md`.
+- [x] `did_cs` sample-alignment & SE-gap root cause → `docs/did-cs-recon.md`.
 - [x] **CS2021 doubly-robust (DR) estimator IF rewrite** (validated vs `csdid`/`did` R at machine precision; includes the `csdid_estat simple` bug warning) → `docs/cs2021-dr-recon.md`.
 - [x] RDD bandwidth selection (IK built-in + CCT `rdrobust` backend, silent IK fallback); McCrary/CJM density test.
 - ~~Built-in RD plot~~ — **descoped:** `rdrobust.rdplot()` already covers it; a wrapper adds no capability and conflicts with OE's "clean named outputs" scope (decision recorded 2026-07-11).
@@ -95,7 +95,7 @@ Landed across v0.6.1–v0.6.9 (patch-level numeric detail → `docs/v06x-parity-
 - [x] `nls()` — nonlinear least squares via `scipy.optimize.least_squares` with sympy analytic Jacobian (numerical fallback flagged, not silent); `white_cov()` for HC0-HC3; validated vs `curve_fit`/R `nls()`/Stata `nl`; `sympy` shipped as optional `[nls]` extra.
 - [x] `mlogit()` — multinomial logit (shipped, see v0.8).
 - [x] `synth()` — synthetic control (Abadie-Diamond-Hainmueller) core point estimator + `placebo_space()` / `placebo_time()` ADH permutation inference. Cross-os nondeterminism fixed (tiny L2 ridge on the inner QP) → `docs/synth-cross-os-solver-recon-update.md`.
-- [x] Newey-West HAC as a `cov_type` option (`ols()`/`fe()`/`nls()`/`PanelContext.driscoll_kraay()`); HAC rolled out to all five estimators (canonical for `iv()`/`gmm()`/`did()`/`event_study()`; **project convention, not externally validated** for `staggered_did()`) → `docs/staggered-did-recon.md` + `docs/cov-type-recon.md`.
+- [x] Newey-West HAC as a `cov_type` option (`ols()`/`fe()`/`nls()`/`PanelContext.driscoll_kraay()`); HAC rolled out to all five estimators (canonical for `iv()`/`gmm()`/`did()`/`event_study()`; **project convention, not externally validated** for `did_cs()`) → `docs/did-cs-recon.md` + `docs/cov-type-recon.md`.
 - [x] **Cross-estimator `cov_type` validation unified** (single `validate_cov_type` helper; `"hac"` alias only where `"HAC"` already valid) → `docs/cov-type-recon.md`.
 - [x] `PanelContext` intercept-detection bug fixed (tokenizes RHS, matches `1`/`0` as standalone terms).
 - [x] API freeze candidate — no breaking signature changes without a deprecation cycle (see `docs/api_stability.md`; enforced from v1.0.0).

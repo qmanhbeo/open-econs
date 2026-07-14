@@ -2,8 +2,8 @@
 
 Cell-by-cell ATT(g,t) and SE parity, plus aggregated ATT/SE parity, read live
 from Stata-generated .dta fixtures via ``read_stata``.  Every expected value is
-loaded once at module level (cached) from ``staggered_did.dta`` /
-``staggered_did_unbalanced.dta``; the aggregated SE is recomputed in Stata from
+loaded once at module level (cached) from ``did_cs.dta`` /
+``did_cs_unbalanced.dta``; the aggregated SE is recomputed in Stata from
 csdid's per-entity RIF using open_econs' exact aggregation formula.
 """
 
@@ -37,7 +37,7 @@ def _oe_se_gt(oe_r: oe.CsDiDResult) -> dict[tuple[int, int], float]:
     return {(int(r.cohort), int(r.time)): r.se for r in gt.itertuples()}
 
 
-class TestStaggeredDiDWithCovariates:
+class TestCsDiDWithCovariates:
     """Doubly-robust (dripw) with covariates x, z — parity with csdid.
 
     Only compares cells from cohort g=3 (g=5 has no post-treatment periods in
@@ -101,7 +101,7 @@ class TestStaggeredDiDWithCovariates:
         assert len(self.oe_r.att_group_time) == 2  # 2 post-treatment cells
 
 
-class TestStaggeredDiDWithCovariatesUnbalanced:
+class TestCsDiDWithCovariatesUnbalanced:
     """Doubly-robust (dripw) with covariates on the unbalanced-cohort fixture.
 
     The unbalanced fixture has 15 never-treated + 8 g=3 (treated at t=3) + 7
@@ -155,14 +155,14 @@ class TestStaggeredDiDWithCovariatesUnbalanced:
         # simple` IF aggregation (= 0.62720813), NOT `csdid_estat simple`
         # (which mis-reports 0.47824472 for this fixture).  Extracted live from
         # csdid's per-entity RIF via makerif2/aggte/make_tbl in
-        # staggered_did_unbalanced.do.
+        # did_cs_unbalanced.do.
         npt.assert_allclose(self.oe_r.att_se, S_U["agg_se"], rtol=RTOL)
 
     def test_unbalanced_cell_count(self):
         assert len(self.oe_r.att_group_time) == 2
 
 
-class TestStaggeredDiDNoCovariates:
+class TestCsDiDNoCovariates:
     """No covariates — matches OLS (reg) path, backward-compatible."""
 
     @pytest.fixture(autouse=True)

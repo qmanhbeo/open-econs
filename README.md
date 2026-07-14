@@ -122,7 +122,7 @@ If you know the Stata or R command, you already know the open-econs equivalent.
 | `mlogit`             | `oe.mlogit()` (multinomial logit) |
 | `oaxaca`             | `oe.oaxaca()`               |
 | `xtabond2`           | `oe.abond()`                |
-| `csdid`              | `oe.staggered_did()`        |
+| `csdid`              | `oe.did_cs()`               |
 | `rdrobust`           | `oe.rdd()`                  |
 | `teffects psmatch`   | `oe.psm()`                  |
 
@@ -132,7 +132,7 @@ If you know the Stata or R command, you already know the open-econs equivalent.
 | -------------------- | --------------------------- |
 | `fixest` / `plm`     | `oe.fe()` / `oe.PanelContext()` |
 | `AER::ivreg`         | `oe.iv()`                   |
-| `did`                | `oe.staggered_did()`        |
+| `did`                | `oe.did_cs()`               |
 | `MatchIt`            | `oe.psm()`                  |
 
 See [Migrating from Stata](docs/migrating_from_stata.md) for a
@@ -214,7 +214,7 @@ r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
 | `nls()` | Nonlinear least squares (Gauss-Newton via scipy, analytic Jacobian) | Beta |
 | `gmm()` | General linear GMM framework (reuses `iv()` formula grammar; Hansen J size/power) | Beta |
 | `abond()` | Arellano-Bond dynamic panel GMM (one/two-step, Windmeijer SEs, collapsed instruments) | Production |
-| `staggered_did()` | Callaway-Sant'Anna (2021) staggered DiD (doubly-robust `dripw` or `reg`) | Beta |
+| `did_cs()` | Callaway-Sant'Anna (2021) staggered DiD (doubly-robust `dripw` or `reg`) | Beta |
 | `rdd()` | Sharp / fuzzy regression discontinuity (local linear, triangular kernel) | Production |
 | `did()` / `event_study()` | Two-period DiD, event-study with pre-trend diagnostics | Production |
 | `psm()` | Propensity score matching (1:1 nearest-neighbor with replacement, AI 2012 SEs) | Production |

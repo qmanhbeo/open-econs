@@ -49,7 +49,7 @@
   to 1e-6.
 
 ## CS2021 DR staggered-DiD cell-by-cell parity (v0.6.8.2)
-- **`staggered_did()` now the full Callaway & Sant'Anna (2021) DR group-time
+- **`did_cs()` now the full Callaway & Sant'Anna (2021) DR group-time
   estimator** (was simplified OLS approx): `dripw` + `reg`.
 - **18 cell-by-cell Stata-parity tests**; ATT(g,t) coefficients match at 1e-6.
 - **Unbalanced-cohort fixture** added; weight-formula audit (cohort-proportional,

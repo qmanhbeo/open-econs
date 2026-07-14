@@ -1,7 +1,7 @@
-# `staggered_did()` — sample-alignment, SE-gap root cause, and HAC caveat
+# `did_cs()` — sample-alignment, SE-gap root cause, and HAC caveat
 
 > Moved from `ROADMAP.md` during the 2026-07-13 trim. Technical detail behind
-> the v0.7 sample-alignment fix and the v0.9 HAC rollout for `staggered_did()`.
+> the v0.7 sample-alignment fix and the v0.9 HAC rollout for `did_cs()`.
 
 ## Sample-alignment & SE-gap root cause (v0.7.0)
 
@@ -13,7 +13,7 @@
 
 ## HAC rollout caveat (v0.9)
 
-`staggered_did()` HAC is a **project convention** — a Newey-West temporal
+`did_cs()` HAC is a **project convention** — a Newey-West temporal
 correction on the aggregated influence function — and is **not externally
 validated** (staggered-DiD HAC is a contested area with no Stata/R reference).
 

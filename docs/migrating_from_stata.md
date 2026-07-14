@@ -20,7 +20,7 @@ every estimator, so the mental model you build once transfers across methods.
 | `xtabond / xtdpdsys` (dynamic panel) | `oe.abond("y ~ x", data=df, entity="firm", time="year")` |
 | `logit y x` / `probit y x` | `oe.logit("y ~ x", data=df)` / `oe.probit(...)` |
 | `did` (two-period) | `oe.did("y ~ treat*post", data=df, treatment="treat", post="post")` |
-| `did_multiplegt` / `csdid` (staggered) | `oe.staggered_did(df, y="y", entity="firm", time="year", treatment="treat")` |
+| `did_multiplegt` / `csdid` (staggered) | `oe.did_cs(df, y="y", entity="firm", time="year", treatment="treat")` |
 | `rdrobust y x, c(0)` | `oe.rdd(df, y="y", running="x", cutoff=0.0)` |
 | `nl (y = {a}*exp(-{b}*x)+{c}), initial(a 1 b 1 c 0)` | `oe.nls("y ~ a*exp(-b*x)+c", data=df, start_values={"a": 1.0, "b": 1.0, "c": 0.0})` |
 | `esttab` (LaTeX/HTML) | `result.to_latex()` / `result.to_html()` |
@@ -44,7 +44,7 @@ every estimator, so the mental model you build once transfers across methods.
   core point estimator + ADH placebo-in-space / placebo-in-time inference).
   It is no longer "planned"; see `docs/api_stability.md` for limitations
   (`synth.predict()` / `synth.plot()` remain `NotImplementedError` by design).
-- **`staggered_did` HAC is experimental.** `staggered_did(..., cov_type="HAC")`
+- **`did_cs` HAC is experimental.** `did_cs(..., cov_type="HAC")`
   is a *project convention* (Newey-West temporal correction on the aggregated
   influence function), **not** externally validated. For publication prefer the
   default `cov_type="cluster"`. A `UserWarning` is raised on HAC use.

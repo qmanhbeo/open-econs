@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.0.2] - 2026-07-14
+
+### DID Naming Convention Rename
+
+Systematic DID naming replacing the ambiguous "staggered_did" with author-name
+abbreviations:
+
+| Old | New | Literature Reference |
+|-----|-----|---------------------|
+| `staggered_did()` / `StaggeredDiDResult` | `did_cs()` / `CsDiDResult` | Callaway & Sant'Anna (2021) |
+| `did_sun_abraham()` / `SunAbrahamResult` | `did_sa()` / `SaDiDResult` | Sun & Abraham (2021) |
+
+### Deprecation shims
+
+The old names are preserved as deprecated aliases emitting `FutureWarning`:
+
+- `staggered_did` → `did_cs` (also `open_econs.models.causal.staggered_did`)
+- `did_sun_abraham` → `did_sa` (also `open_econs.models.causal.did_sun_abraham`)
+
+These will be removed in v2.0.0. Update your code to use the new names.
+
+### Documentation
+
+All documentation, methodology pages, tutorials, migration guides, and
+test class names updated to reflect the new naming convention.
+
+### Internal
+
+- 34 files touched: source, tests, R scripts, Stata scripts, fixture files, and input CSVs
+- `__init__.py` exports and `__all__` updated with deprecation shims
+- Stale `.log` artifacts removed from repo root
+
 ## [1.1.0] - 2026-07-12
 
 > **⚠ SUPERSEDES ORIGINAL SPIKE REPORT §5** — The original eval report

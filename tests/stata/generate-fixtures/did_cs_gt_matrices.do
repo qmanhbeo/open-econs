@@ -9,7 +9,7 @@ gen gvar = 0
 replace gvar = 3 if entity >= 10 & entity < 20
 
 * saverif() dumps the dataset WITH the per-obs RIF variables (_g3_*) to disk.
-csdid y x z, ivar(entity) time(time) gvar(gvar) saverif(staggered_did_rif_save)
+csdid y x z, ivar(entity) time(time) gvar(gvar) saverif(did_cs_rif_save)
 
 di as text "e(rif) = " e(rif)
 di as text "e(b_attgt)[1,3] = " e(b_attgt)[1,3] " e(b_attgt)[1,4] = " e(b_attgt)[1,4]
@@ -42,7 +42,7 @@ svmat double V_simple
 export delimited using "tests/stata/fixtures/expected/did_cs_gt_Vsimple.csv", replace
 drop V_simple*
 
-use staggered_did_rif_save.dta, clear
+use did_cs_rif_save.dta, clear
 ds _g3_*
 keep entity time gvar _g3_*
 export delimited using "tests/stata/fixtures/expected/did_cs_gt_rif.csv", replace

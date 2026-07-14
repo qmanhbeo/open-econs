@@ -1,6 +1,6 @@
 """R parity tests for Staggered DiD aggte() — dynamic/group/calendar aggregation.
 
-Validates OE's ``StaggeredDiDResult.aggte()`` against R ``did::aggte()`` on the
+Validates OE's ``CsDiDResult.aggte()`` against R ``did::aggte()`` on the
 same fixture data used by the existing staggered-DiD R parity tests.  Three
 aggregation types are tested: ``dynamic`` (event-time), ``group`` (cohort), and
 ``calendar`` (time period).

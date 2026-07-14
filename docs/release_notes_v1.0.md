@@ -20,9 +20,9 @@ completed. (v1.0.1 follows as a documentation-correction patch.)
 - **Benchmark suite** (`benchmarks/ols_fe.py`) comparing `ols()`/`fe()` against
   `statsmodels` / `linearmodels`.
 
-## ⚠️ `staggered_did()` HAC is experimental / non-canonical
+## ⚠️ `did_cs()` HAC is experimental / non-canonical
 
-`staggered_did()` now accepts `cov_type="HAC"` with a Newey-West temporal
+`did_cs()` now accepts `cov_type="HAC"` with a Newey-West temporal
 correction applied to the aggregated influence function. **This is a project
 convention, not an externally validated method.** Staggered-DiD HAC is a
 contested area with no Stata/R reference implementation, so unlike the other

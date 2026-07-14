@@ -161,18 +161,18 @@ available in R's `sandwich::NeweyWest` but not in OE.
   marginal; the risk is real.
 - **Decision:** D10 (2026-07-14).
 
-### D11: staggered_did() Aggregation Modes — `.aggte()` Delivered
+### D11: did_cs() Aggregation Modes — `.aggte()` Delivered
 
 - **What:** Expose `aggte()`-style dynamic/group/calendar aggregation
-  modes in `staggered_did()`. R's `did::aggte()` supports
+  modes in `did_cs()`. R's `did::aggte()` supports
   `type = "dynamic"` (event-time ATTs), `type = "group"` (cohort-specific
   ATTs), and `type = "calendar"` (calendar-time ATTs).
-- **Status:** Delivered (2026-07-14). `StaggeredDiDResult.aggte(type=)`
+- **Status:** Delivered (2026-07-14). `CsDiDResult.aggte(type=)`
   implements all three types with R parity at `rtol=1e-6`. Four bugs
   found and fixed during validation (wrong divisor, wrong RIF index,
   wrong two-stage aggregation, missing centering in per-level group SE).
   See CHANGELOG for details.
-- **Remaining:** `did_sun_abraham()` and `did_gardner()` extensions
+- **Remaining:** `did_sa()` and `did_gardner()` extensions
   still queued (citations verified: Sun & Abraham 2021, Gardner 2022).
 
 ### D12: did_gardner() — Gardner (2022) Two-Stage DID — Delivered
@@ -185,13 +185,13 @@ available in R's `sandwich::NeweyWest` but not in OE.
 - **Key finding:** Two-stage IF formula `IF = IF_fs - IF_ss` with
   `gamma = (X10'X10)^{-1} (X1'X2)` (original x1, not zeroed-out x10).
   Naive single-stage VCE underestimates SE by ~17%.
-- **Remaining:** `did_sun_abraham()` still queued for next session.
+- **Remaining:** `did_sa()` still queued for next session.
 
-### D13: did_sun_abraham() — Sun & Abraham (2021) Interaction-Weighted DID — Delivered (R parity)
+### D13: did_sa() — Sun & Abraham (2021) Interaction-Weighted DID — Delivered (R parity)
 
-- **What:** `did_sun_abraham(data, y, cohort, period, ref_period, entity, time,
+- **What:** `did_sa(data, y, cohort, period, ref_period, entity, time,
   cluster, covariates)` implements the Sun & Abraham (2021) interaction-weighted
-  estimator with cluster-robust SEs. Returns `SunAbrahamResult` with ATT/SE/t/p,
+  estimator with cluster-robust SEs. Returns `SaDiDResult` with ATT/SE/t/p,
   period-level and cohort-level aggregated views, full 9×9 VCE.
 - **Status:** Delivered (2026-07-14). R parity at `rtol=1e-6` against
   `fixest::sunab()` v0.14.2. 23 tests, 0 regressions.

@@ -52,7 +52,7 @@ def _oe_result() -> oe.SaDiDResult:
     )
 
 
-class TestSunAbrahamBasic:
+class TestSaDiDBasic:
     """R parity: Sun-Abraham ATT and SE."""
 
     @pytest.fixture(autouse=True)
@@ -86,7 +86,7 @@ class TestSunAbrahamBasic:
         npt.assert_allclose(self.oe.sigma2, self.r["sigma2"], rtol=RTOL)
 
 
-class TestSunAbrahamCoefficients:
+class TestSaDiDCoefficients:
     """R parity: Sun-Abraham raw coefficient vector (9 elements)."""
 
     @pytest.fixture(autouse=True)
@@ -105,7 +105,7 @@ class TestSunAbrahamCoefficients:
         )
 
 
-class TestSunAbrahamVCE:
+class TestSaDiDVCE:
     """R parity: Sun-Abraham clustered VCE (9x9 matrix)."""
 
     @pytest.fixture(autouse=True)
@@ -127,7 +127,7 @@ class TestSunAbrahamVCE:
         npt.assert_allclose(self.V_oe, self.V_r, rtol=RTOL)
 
 
-class TestSunAbrahamCollinearVars:
+class TestSaDiDCollinearVars:
     """R parity: collinear variable detection."""
 
     @pytest.fixture(autouse=True)
@@ -153,7 +153,7 @@ class TestSunAbrahamCollinearVars:
         assert oe_collin == r_collin
 
 
-class TestSunAbrahamDof:
+class TestSaDiDDof:
     """Regression guard: nparams, absorbed DOF, residual df."""
 
     @pytest.fixture(autouse=True)
@@ -183,7 +183,7 @@ class TestSunAbrahamDof:
         assert n_est - (k + n_absorbed) == 47
 
 
-class TestSunAbrahamAggregates:
+class TestSaDiDAggregates:
     """R parity: period-level and cohort-level aggregated views."""
 
     @pytest.fixture(autouse=True)
@@ -226,7 +226,7 @@ class TestSunAbrahamAggregates:
         )
 
 
-class TestSunAbrahamSummary:
+class TestSaDiDSummary:
     """Smoke test: summary() and tidy() return without error."""
 
     @pytest.fixture(autouse=True)

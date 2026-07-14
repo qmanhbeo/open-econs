@@ -46,7 +46,7 @@ def _oe_se_gt(oe_r: oe.CsDiDResult) -> dict[tuple[int, int], float]:
     return {(int(r.cohort), int(r.time)): r.se for r in gt.itertuples()}
 
 
-class TestStaggeredDiDRParityBalanced:
+class TestCsDiDRParityBalanced:
     """R parity: doubly-robust (dripw) with covariates x, z — balanced panel.
 
     Validates against R ``did::att_gt()`` + ``aggte(type="simple")`` on the
@@ -96,7 +96,7 @@ class TestStaggeredDiDRParityBalanced:
         assert len(self.oe_r.att_group_time) == 2
 
 
-class TestStaggeredDiDRParityUnbalanced:
+class TestCsDiDRParityUnbalanced:
     """R parity: doubly-robust (dripw) with covariates — unbalanced panel.
 
     Validates against R ``did::att_gt(allow_unbalanced_panel=TRUE)`` on the

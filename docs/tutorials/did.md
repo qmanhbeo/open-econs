@@ -48,7 +48,7 @@ es.tidy()            # one coefficient per relative-time period
 
 ## 4. Staggered adoption
 
-For rolling treatment timing, use `staggered_did()` (csdid-style aggregated
+For rolling treatment timing, use `did_cs()` (csdid-style aggregated
 influence function). It takes **column names** (not a formula), and the
 `treatment` column must be a *time-varying* adoption indicator (0 before
 adoption, 1 from adoption onward) so that different entities form different
@@ -67,7 +67,7 @@ y = 1.0 + 0.4 * time + 1.5 * treat + rng.normal(size=len(firm))
 
 sdf = pd.DataFrame({"firm": firm, "time": time, "treat": treat, "y": y})
 
-res_s = oe.staggered_did(
+res_s = oe.did_cs(
     sdf, y="y", entity="firm", time="time", treatment="treat",
     cov_type="cluster",          # default; preferred for publication
 )
@@ -76,9 +76,9 @@ res_s.att               # overall pooled ATT
 res_s.att_group_time    # per-cohort x lead table
 ```
 
-### staggered_did HAC is experimental
+### did_cs HAC is experimental
 
-`staggered_did(..., cov_type="HAC", lags=L)` is a **project convention**, not an
+`did_cs(..., cov_type="HAC", lags=L)` is a **project convention**, not an
 externally validated estimator: it applies a Newey-West Bartlett correction for
 common-time shocks to the aggregated influence function. It is **not** symmetric
 with `iv()`/`gmm()`/`did()`/`event_study()` HAC (those rest on canonical

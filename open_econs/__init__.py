@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+import warnings as _warnings
+from typing import Any
+
 from ._version import __version__
 from ._internal.errors import VcovTypeNotSupportedError
 from .models.linear.ols import ols
@@ -26,6 +31,23 @@ from .core.panel_context import PanelContext
 
 reg = ols
 
+
+def staggered_did(*args: Any, **kwargs: Any) -> object:
+    _warnings.warn(
+        "`staggered_did` is deprecated; use `did_cs` instead.",
+        FutureWarning, stacklevel=2,
+    )
+    return did_cs(*args, **kwargs)
+
+
+def did_sun_abraham(*args: Any, **kwargs: Any) -> object:
+    _warnings.warn(
+        "`did_sun_abraham` is deprecated; use `did_sa` instead.",
+        FutureWarning, stacklevel=2,
+    )
+    return did_sa(*args, **kwargs)
+
+
 __all__ = [
     "ols", "reg", "logit", "probit", "mlogit", "fe", "iv", "oaxaca",
     "did", "event_study", "balance", "abond", "did_cs", "density_test", "cem",
@@ -33,6 +55,7 @@ __all__ = [
     "nls", "NLSResult",
     "synth", "SynthResult", "AggteResult", "CsDiDResult", "did_gardner", "GardnerResult",
     "did_sa", "SaDiDResult",
+    "staggered_did", "did_sun_abraham",
     "placebo_space", "placebo_time",
     "VcovTypeNotSupportedError",
     "Context", "PanelContext", "__version__",

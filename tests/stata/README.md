@@ -142,7 +142,7 @@ Do NOT guess the API. Read the source:
 - `oe.fe()` drops intercept after demeaning — only non-intercept coefficients returned.
 - `oe.balance()` returns a DataFrame with column `Difference` (not `mean_diff`).
 - `oe.event_study()` requires a `"{treatment}_event_time"` column in the data.
-- `oe.staggered_did()` is OLS-based, **not** Callaway & Sant'Anna doubly-robust.
+- `oe.did_cs()` is OLS-based, **not** Callaway & Sant'Anna doubly-robust.
 - `oe.iv()` formula: `"y ~ exog | endog ~ instruments"` (new syntax).
 
 ### 7. Match defaults exactly
