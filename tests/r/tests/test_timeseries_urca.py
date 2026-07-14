@@ -46,11 +46,17 @@ pytestmark = pytest.mark.r
 
 # Tight tolerance for the statistic-only cross-tool anchors that genuinely agree
 # to <=1e-15 (ADF, KPSS matched-bandwidth, ZA all match R urca to floating-point
-# precision). See the v1.1.0 tolerance-standard re-audit. PP vs R is NOT tightened
-# here -- it cannot reach 1e-6 and is handled as a documented exception in the
-# follow-up commit (R's ur.pp uses the dependent-variable variance in the PP
-# correction term; OE/arch/Stata use the regressor variance).
+# precision). See the v1.1.0 tolerance-standard re-audit.
 RTOL_TIGHT = 1e-6
+
+# Documented exception (rule 2 ceiling intentionally exceeded — see
+# docs/timeseries-backend-recon.md, "PP-vs-R formula divergence"). R's ur.pp
+# Z-tau statistic uses the *dependent-variable* (y_t) variance in the long-run
+# correction term, whereas arch/Stata use the *regressor* (y_{t-1}) variance
+# (textbook Hamilton). Both engines are internally self-consistent (OE==Stata to
+# 8e-9; R==R's own formula to 1e-15); the two quantities differ by ~1.4e-5 (c) /
+# ~5.9e-6 (ct), which is the genuine formula-level gap, not tolerable noise.
+PP_R_RTOL = 2e-5
 
 INPUT_CSV = (
     Path(__file__).resolve().parents[2]
@@ -95,24 +101,34 @@ class TestADFUr:
 
 
 class TestPPUr:
-    """PP vs R ``ur.pp`` -- statistic equality (cross-tool).
+    """PP vs R ``ur.pp`` -- statistic equality (cross-tool, DOCUMENTED EXCEPTION).
 
     R ``ur.pp`` is called with ``lag="short"`` (bandwidth floor(4*(n/100)^0.25));
     OE mirrors that exact bandwidth via ``bandwidth="fixed"`` so the comparison
-    is a like-for-like computational-equivalence check.
+    is a like-for-like computational-equivalence check on the *bandwidth*.
+
+    However, R's ``ur.pp`` Z-tau statistic uses the **dependent-variable** (y_t)
+    variance in the long-run correction term, whereas arch (and Stata) use the
+    **regressor** (y_{t-1}) variance -- the textbook Hamilton form. The two
+    quantities are mathematically distinct and differ by ~1.4e-5 (c) / ~5.9e-6
+    (ct); OE matches Stata to 8e-9, R matches its own formula to 1e-15. This is a
+    source-confirmed convention difference (NOT tolerable noise) documented in
+    docs/timeseries-backend-recon.md; the PP-vs-R assertions therefore use
+    ``PP_R_RTOL`` (2e-5), an intentional, evidenced exception to rule 2's 1e-6
+    ceiling.
     """
 
     def test_c_statistic(self):
         y = _y()
         bw = _r_short_bandwidth(y)
         oe_r = oe.pp(y, trend="c", bandwidth="fixed", lags=bw)
-        npt.assert_allclose(oe_r.stat, R_PP_C["stat"], rtol=1e-4)
+        npt.assert_allclose(oe_r.stat, R_PP_C["stat"], rtol=PP_R_RTOL)
 
     def test_ct_statistic(self):
         y = _y()
         bw = _r_short_bandwidth(y)
         oe_r = oe.pp(y, trend="ct", bandwidth="fixed", lags=bw)
-        npt.assert_allclose(oe_r.stat, R_PP_CT["stat"], rtol=1e-4)
+        npt.assert_allclose(oe_r.stat, R_PP_CT["stat"], rtol=PP_R_RTOL)
 
 
 class TestKPSSMatchedBandwidth:

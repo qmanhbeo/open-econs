@@ -11,12 +11,22 @@ confirmed per standing rule 1).
 
 Tolerance
 ---------
-All three engines (OE/arch, Stata ``arch``, ``rugarch``) agree to within
-*optimizer noise* (~2-3 decimals on a value ~0.16).  They are valid, equally
-correct MLE solutions that differ only by optimizer convergence, so a 2%
-relative tolerance is the principled cross-tool bound (standing rule 2: we
-assert the documented noise envelope, not a relaxed pass).  The Stata-side and
-R-side tests each carry this same tolerance against their respective anchor.
+**Documented exception to the rule-2 1e-6 ceiling (see
+docs/timeseries-backend-recon.md, "GARCH omega-beta ridge exception").**  The
+cross-tool coefficient spread is ~1-1.5% (beta), which exceeds 1e-6.  This is
+NOT optimizer noise: arch is deterministic to ~1e-7 across starting values and
+tight tolerances, so the gap is *not* arch scattering.  The root cause is the
+GARCH(1,1) **omega-beta ridge** -- omega and beta are near-collinear in the
+variance recursion ``h_t = omega + alpha*e^2 + beta*h_{t-1}``, so the likelihood
+is flat along the ridge: reducing omega and raising beta (or vice versa) leaves
+the log-likelihood essentially unchanged.  Demonstrated: the three parameter
+sets (OE/arch, Stata ``arch``, ``rugarch``) are all on the same likelihood ridge
+-- their log-likelihoods agree to ~2e-6 relative -- and perturbing arch's optimum
+along the ridge by 1% changes the LL by only ~1.6e-6.  A secondary contributor
+is the presample/backcast variance initialization, which shifts the *reported*
+LL by ~1.4e-4 relative between arch and Stata/R.  The 2e-2 relative tolerance is
+the genuine cross-tool envelope with margin; it is an intentional, evidenced
+exception and is flagged to the project lead.
 """
 
 from __future__ import annotations

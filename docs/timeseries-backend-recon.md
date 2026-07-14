@@ -173,16 +173,17 @@ unit-root CV decision (§1,§2) is settled.**
 - Report **MacKinnon (1994) p-values** as the cross-check anchor (agrees with
   Stata) and label the CV table's vintage explicitly in `summary()`.
 
+*Recon performed 2026-07-14. No source files under `open_econs/` were modified
+by this recon except this document.*
+
 ---
 
-## 6. v1.1.0 tolerance-standard re-audit (2026-07-15, part 1 of 2)
+## 6. v1.1.0 tolerance-standard re-audit (2026-07-15)
 
 The v1.1.0 suite shipped under a looser tolerance standard. With rule 2 tightened
 to a hard **1e-6** ceiling, every cross-tool assertion was re-opened and actually
-attempted to be closed before being accepted. This commit records the assertions
-that tightened cleanly to <= 1e-6. The three cases that genuinely cannot reach
-1e-6 (PP-vs-R, ARIMA coefficients/constant, GARCH) are root-caused and committed
-as a separate, documented-exception commit.
+attempted to be closed before being accepted. Findings below. Tightened assertions
+were committed separately from the documented exceptions (rule 4).
 
 ### 6.1 Confirmed <= 1e-6, tightened (no exception needed)
 
@@ -195,13 +196,82 @@ as a separate, documented-exception commit.
 | ZA vs R (ur.za) | stat | 9e-15 / 1e-14 | rtol 1e-4 -> 1e-6 |
 | DFGLS (OE == arch identity) | stat | 1e-12 abs | unchanged (already <= 1e-6) |
 | KPSS self-consistency guard | own default | 1e-9 | unchanged (already <= 1e-6) |
-| ARIMA LL vs Stata / R | loglik | ~2e-9 | rtol 1e-4 -> 1e-6 |
 
 OE matches Stata on ADF/PP to <=8e-9 and matches R (urca) on ADF/KPSS/ZA to
 floating-point precision. These are now asserted at the maximally-tight 1e-6.
 
+### 6.2 PP-vs-R formula divergence (DOCUMENTED EXCEPTION, exceeds 1e-6)
+
+OE vs R `ur.pp` Z-tau differs by **1.4e-5 (c) / 5.9e-6 (ct)** -- above 1e-6.
+
+**Root cause (source-confirmed, not tolerable noise).** R's `ur.pp` Z-tau
+statistic uses the **dependent-variable** (y_t) variance in the long-run
+correction term, whereas `arch` (and Stata `pperron`) use the **regressor**
+(y_{t-1}) variance -- the textbook Hamilton form. Verified by replicating both
+formulas exactly:
+- arch/Stata form: Z_tau = sqrt(gamma0/lam2)*((rho-1)/sigma) - 0.5*((lam2-gamma0)/lam)*(n*sigma/s)
+  where n*sigma/s = n/sqrt(sum((y_l1 - mean)^2)) (regressor variance).
+- R `ur.pp` form: ... - lambda.prime*sqrt(sig)/sqrt(myybar) where
+  myybar = (1/n^2)*sum((y_t - mean(y_t))^2) (dependent-variable variance).
+
+Replicating arch's exact formula reproduces OE/arch to 1e-12; replicating R's
+exact formula reproduces the R fixture to 1e-15. The two are mathematically
+distinct estimators. OE and Stata agree to 8e-9, so OE is on the textbook side;
+R's `ur.pp` is a known variant. The PP-vs-R assertions therefore use
+PP_R_RTOL = 2e-5 (genuine envelope + margin) -- an intentional, evidenced
+exception to the 1e-6 ceiling.
+
+### 6.3 ARIMA flat-likelihood exception (DOCUMENTED EXCEPTION, exceeds 1e-6)
+
+Log-likelihood agrees across OE / Stata / R to **~2e-9** (tightened to 1e-6).
+Coefficients do NOT: AR1 rel 3.7e-5 (vs Stata) / 2.3e-5 (vs R); MA1 rel 6.2e-5 /
+3.7e-5; const abs ~1.8e-5 (Stata) / 1.1e-5 (R). All above 1e-6.
+
+**Root cause (demonstrated, not "optimizer noise").** The ARMA(1,1) likelihood
+is flat in the AR/MA subspace near the optimum. Evaluated via statsmodels
+mod.loglike at the Stata/R coefficient points: shifting the coefficients by the
+observed ~4e-5 changes the log-likelihood by only **2.3e-9** (gradient ~6e-5 per
+unit). Tightening statsmodels convergence (maxiter up to 1e5, tol=1e-14, lbfgs)
+does NOT move OE's point at all -- it is already at its convergence floor; Stata
+and R are at *their* distinct floors (they even differ from each other by ~1e-5
+on ar1). The coefficient is simply not identified to 1e-6 by the likelihood; the
+LL -- the genuine MLE invariant -- is the tight cross-tool quantity and it
+matches to 2e-9. Coefficient assertions use RTOL_COEF = 1e-4, const uses
+ATOL_CONST = 1e-4 (genuine envelope + margin) -- intentional, evidenced
+exceptions.
+
+### 6.4 GARCH omega-beta ridge exception (DOCUMENTED EXCEPTION, exceeds 1e-6)
+
+Cross-tool coefficient spread ~1-1.5% (beta rel 1.5e-2 vs Stata / 1.0e-2 vs R);
+reported LL spread ~1.4e-4 relative. Both above 1e-6.
+
+**Root cause (demonstrated, NOT the prior "optimizer noise" claim).** The prior
+v1.1.0 handoff attributed the 2e-2 gap to "optimizer noise across three
+independent MLE implementations." This is REFUTED by evidence: `arch` is
+**deterministic to ~1e-7** across different starting values and tight tolerances
+(options={'maxiter':20000,'ftol':1e-14}), so the gap is not arch scattering. The
+true cause is the GARCH(1,1) **omega-beta ridge**: omega and beta are
+near-collinear in h_t = omega + alpha*e^2 + beta*h_{t-1}, so the likelihood is
+flat along the ridge. Evaluated via a manual Gaussian GARCH LL (unconditional
+backcast) at the three committed param sets:
+- arch LL = -826.4805, Stata LL = -826.4806 (1.1e-7 rel), R LL = -826.4823
+  (2.1e-6 rel). All three are on the same likelihood ridge.
+- Perturbing arch's optimum along the ridge (omega -1%, beta +compensating)
+  changes the LL by only 1.6e-6 relative.
+
+A secondary contributor is the presample/backcast variance initialization, which
+shifts the *reported* LL by ~1.4e-4 relative between `arch` and Stata/R. The 2e-2
+relative tolerance is the genuine cross-tool envelope with margin; it is an
+intentional, evidenced exception to the 1e-6 ceiling and is flagged to the
+project lead.
+
+**Flag to lead:** three evidenced exceptions to the 1e-6 ceiling exist
+(6.2 PP-vs-R, 6.3 ARIMA coeffs/const, 6.4 GARCH coeffs/LL). Each is root-caused
+to a specific, demonstrated source-level cause (a formula-level convention in R's
+ur.pp; a flat likelihood in ARIMA; the omega-beta ridge + presample init in
+GARCH) -- none is an unexplained tolerance relax. The genuine MLE invariant
+(log-likelihood) is <=2e-9 for ARIMA and ~2e-6 for GARCH; only the *coefficients*
+diverge, because the likelihood does not identify them that tightly.
+
 *Audit performed 2026-07-15. Only test tolerances and this document were modified;
 no `open_econs/` source was changed.*
-
-*Recon performed 2026-07-14. No source files under `open_econs/` were modified
-by this recon except this document.*

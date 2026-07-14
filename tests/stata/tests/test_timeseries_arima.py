@@ -34,12 +34,23 @@ from ..stata_runner import read_stata
 
 pytestmark = pytest.mark.stata
 
-# LL agrees across OE / Stata / R to ~2e-9, so 1e-6 is the principled bound
-# (tightened here). The AR/MA coefficients and constant cannot reach 1e-6 (the
-# ARMA likelihood is flat in the AR/MA subspace near the optimum) and are handled
-# as a documented exception in the follow-up commit.
+# LL agrees across OE / Stata / R to ~2e-9, so 1e-6 is the principled bound.
 RTOL_LL = 1e-6
-RTOL = 1e-4
+
+# Documented exception (rule 2 ceiling intentionally exceeded -- see
+# docs/timeseries-backend-recon.md, "ARIMA flat-likelihood exception"). The
+# ARMA(1,1) likelihood is flat in the AR/MA subspace near the optimum: shifting
+# the coefficients by the observed ~4e-5 changes the log-likelihood by only
+# ~2e-9. Independent optimizers (statsmodels / Stata / R) therefore land at
+# numerically distinct points in this flat basin (Stata vs R even differ by ~1e-5
+# on ar1). The coefficient is not identified to 1e-6 by the likelihood; 1e-4
+# bounds the genuine cross-tool spread with margin.
+RTOL_COEF = 1e-4
+
+# The constant is a near-zero parameter (~0.009); relative tolerance is
+# inappropriate and it too is subject to the same flat-likelihood spread
+# (genuine cross-tool absolute gap ~1.8e-5). 1e-4 absolute bounds it with margin.
+ATOL_CONST = 1e-4
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ARMA_INPUT = REPO_ROOT / "tests" / "r" / "fixtures" / "inputs" / "arma_input.csv"
@@ -65,19 +76,16 @@ class TestARIMAStata:
     """ARMA(1,1) coefficients + log-likelihood vs Stata ``arima``."""
 
     def test_const(self):
-        # The constant is a near-zero parameter (~0.009); relative tolerance is
-        # inappropriate. The three engines agree to ~2e-5 absolute, so we assert
-        # an absolute bound (the genuine agreement, not a relaxed pass).
         f = _fit()
-        npt.assert_allclose(f["cons"], S_ARIMA["cons"], rtol=0, atol=1e-4)
+        npt.assert_allclose(f["cons"], S_ARIMA["cons"], rtol=0, atol=ATOL_CONST)
 
     def test_ar1(self):
         f = _fit()
-        npt.assert_allclose(f["ar1"], S_ARIMA["ar1"], rtol=RTOL)
+        npt.assert_allclose(f["ar1"], S_ARIMA["ar1"], rtol=RTOL_COEF)
 
     def test_ma1(self):
         f = _fit()
-        npt.assert_allclose(f["ma1"], S_ARIMA["ma1"], rtol=RTOL)
+        npt.assert_allclose(f["ma1"], S_ARIMA["ma1"], rtol=RTOL_COEF)
 
     def test_loglik(self):
         f = _fit()

@@ -10,10 +10,17 @@ freely estimates ``omega`` via full MLE -- identical to ``arch`` and to OE's
 
 Tolerance
 ---------
-All three engines agree to within optimizer noise (~2-3 decimals).  The 2%
-relative tolerance is the principled cross-tool bound (see the Stata-side
-module docstring for the full rationale; standing rule 2).  The R-side anchor
-is the ``rugarch`` fit; the Stata-side anchor is ``tests/stata/...``.
+**Documented exception to the rule-2 1e-6 ceiling (see
+docs/timeseries-backend-recon.md, "GARCH omega-beta ridge exception").**  Root
+cause is the GARCH(1,1) omega-beta ridge (omega and beta are near-collinear in
+the variance recursion, so the likelihood is flat along the ridge); the three
+engines' parameter sets are all on the same likelihood ridge (LLs agree to
+~2e-6 relative) and the cross-tool coefficient spread is ~1-1.5% (beta), which
+exceeds 1e-6.  This is NOT optimizer noise: arch is deterministic to ~1e-7
+across starting values.  The 2e-2 relative tolerance is the genuine cross-tool
+envelope with margin; it is an intentional, evidenced exception and is flagged
+to the project lead.  (The Stata-side module docstring carries the full
+rationale.)
 """
 
 from __future__ import annotations
