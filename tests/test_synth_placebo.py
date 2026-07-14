@@ -28,6 +28,9 @@ from open_econs.models.causal.synth import synth
 from open_econs.models.causal.placebo import PlaceboSpaceResult
 from .r.r_runner import read_r, R_FIXTURES_DIR, r_available
 
+# All synth placebo tests are excluded from default runs via the synth_placebo marker.
+pytestmark = pytest.mark.synth_placebo
+
 # This test was previously re-gated to R-present machines (see the commit for
 # docs/synth-cross-os-solver-recon-update.md for full context). The cross-OS
 # SLSQP nondeterminism has been resolved by L2-regularizing the inner QP when

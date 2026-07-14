@@ -44,6 +44,9 @@ from open_econs.models.causal.synth import synth
 from open_econs.core.results import SynthResult
 from .r.r_runner import read_r, R_FIXTURES_DIR, r_available
 
+# All synth tests are excluded from default runs via the synth_placebo marker.
+pytestmark = pytest.mark.synth_placebo
+
 # ── committed-fixture parity ───────────────────────────────────────────
 # Two of the R-marked tests (test_synth_rank_deficient_qp_same_objective_
 # different_w and test_placebo_space_parity_r) were previously ALSO gated on
