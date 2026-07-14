@@ -5,7 +5,7 @@ clear all
 set more off
 capture ssc install xtabond2
 
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_panel.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 xtset entity time
 
 postfile handle str32 name double value ///

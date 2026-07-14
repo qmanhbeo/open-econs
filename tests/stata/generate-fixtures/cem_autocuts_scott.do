@@ -2,7 +2,7 @@
 clear all
 set more off
 
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_cem_autocuts.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_cem_autocuts.csv", clear
 
 cap noi cem x1 x2 x3, treatment(t) autocuts(scott)
 if _rc != 0 {

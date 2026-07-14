@@ -1,7 +1,7 @@
 *! did_cluster.do — DiD with cluster SEs
 clear all
 set more off
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_did.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_did.csv", clear
 gen treat_post = treat * post
 regress y treat post treat_post, cluster(unit)
 

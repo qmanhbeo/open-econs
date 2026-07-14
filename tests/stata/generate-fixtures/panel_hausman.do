@@ -2,7 +2,7 @@
 *! Stores the DISPLAYED chi2, not e(chi2) which is a ghost variable.
 clear all
 set more off
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_panel.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 xtset entity time
 
 quietly xtreg y x z, fe

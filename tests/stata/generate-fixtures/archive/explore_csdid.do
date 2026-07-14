@@ -1,7 +1,7 @@
 *! explore_csdid.do — Explore csdid_estat output capture
 clear all
 set more off
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_panel.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 
 * gvar: 0 = never treated, 3 = treated at time 3, 5 = treated at time 5
 gen gvar = 0

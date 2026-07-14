@@ -1,7 +1,7 @@
 *! staggered_did_unbalanced.do — Staggered DiD with unbalanced cohorts (SSC: csdid)
 clear all
 set more off
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_panel_unbalanced.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel_unbalanced.csv", clear
 
 * Match the Python-side unbalanced test: keep entities 0-22 only.
 * The Python test filters `entity < 23`, which excludes the gvar=5

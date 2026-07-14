@@ -3,7 +3,7 @@ clear all
 set more off
 log using "C:\Users\manhn\Desktop\open-econs\tests\stata\do\abond_ground_truth.log", replace text
 
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_panel.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 xtset entity time
 
 *--- COLLAPSED Run B: lag(2 4) 1-step, nolevel, small ---

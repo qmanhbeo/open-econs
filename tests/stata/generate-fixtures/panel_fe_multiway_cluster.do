@@ -1,7 +1,7 @@
 *! panel_fe_multiway_cluster.do — FE with multiway cluster SEs (reghdfe)
 clear all
 set more off
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_panel.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 
 * Two-way cluster on entity and time, absorb both as FE
 reghdfe y x z, absorb(entity time) vce(cluster entity time)

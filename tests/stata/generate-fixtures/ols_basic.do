@@ -1,7 +1,7 @@
 *! ols_basic.do — OLS with classical SEs
 clear all
 set more off
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_ols.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_ols.csv", clear
 regress y x1 x2
 
 * Store results

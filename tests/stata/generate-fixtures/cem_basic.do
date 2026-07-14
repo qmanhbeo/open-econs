@@ -8,7 +8,7 @@
 clear all
 set more off
 
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_cem.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_cem.csv", clear
 
 * Display data summary
 sum x1, detail

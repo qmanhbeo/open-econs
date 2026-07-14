@@ -2,7 +2,7 @@
 clear all
 set more off
 capture ssc install rdrobust
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_rdd.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_rdd.csv", clear
 rdrobust y_sharp x, c(0)
 
 scalar s_bw   = e(h_l)

@@ -2,7 +2,7 @@
 * Computes Average Marginal Effects (AME) to match Stata's default margins
 clear all
 set more off
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_logit.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_logit.csv", clear
 
 * Estimate probit
 probit y x1 x2

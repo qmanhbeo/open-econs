@@ -17,14 +17,14 @@
 
 clear all
 set more off
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_psm.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_psm.csv", clear
 
 * ---- Generate weights (treated = 1, control ~ Unif[0.5, 2.5]) ----
 set seed 20240711
 gen w = cond(t == 1, 1, runiform() * 2 + 0.5)
 
 * ---- Export dataset with weights so Python reads the exact same values ----
-export delimited using "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_balance_weighted.csv", replace
+export delimited using "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_balance_weighted.csv", replace
 
 * ===== x1 =====
 * Weighted treated mean (all weights=1 → same as unweighted)

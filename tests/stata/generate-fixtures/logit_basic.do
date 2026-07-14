@@ -1,7 +1,7 @@
 *! logit_basic.do — Binary logit
 clear all
 set more off
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_logit.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_logit.csv", clear
 logit y x1 x2
 
 scalar s_N    = e(N)

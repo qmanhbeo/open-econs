@@ -6,7 +6,7 @@
 *! so the model is algebraically identical.
 clear all
 set more off
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_event_study.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_event_study.csv", clear
 
 * ===== Model 1: no covariates  ==============================================
 quietly regress y post if treated == 1, vce(hc2)

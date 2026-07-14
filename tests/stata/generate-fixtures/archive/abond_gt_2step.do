@@ -6,7 +6,7 @@ log using "C:\Users\manhn\Desktop\open-econs\tests\stata\do\abond_gt_2step.log",
 * Force "favor speed" so svmat saves e(Z) as well as e(X)/e(Y)/e(H)
 mata: mata set matafavor speed, perm
 
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_panel.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 xtset entity time
 
 foreach spec in onestep twostep robust twosteprobust {

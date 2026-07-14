@@ -1,7 +1,7 @@
 *! staggered_did.do — Staggered DiD (SSC: csdid) — balanced cohorts
 clear all
 set more off
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_panel.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 
 * Match the Python-side balanced test: keep entities 0-19 only.
 * The Python test filters `entity < 20`, which excludes the gvar=5

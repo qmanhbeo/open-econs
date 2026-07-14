@@ -2,7 +2,7 @@
 clear all
 set more off
 capture ssc install rddensity
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_rdd_density.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_rdd_density.csv", clear
 
 * Manipulation test at cutoff 0 (density discontinuity)
 rddensity x, c(0)

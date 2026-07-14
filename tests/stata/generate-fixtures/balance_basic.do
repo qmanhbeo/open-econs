@@ -1,7 +1,7 @@
 *! balance_basic.do — Covariate balance (Welch t-tests, Treated - Control)
 clear all
 set more off
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_ols.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_ols.csv", clear
 gen treat = (province == "north")
 
 * Welch (unequal-variance) t-test matching scipy.stats.ttest_ind(equal_var=False)

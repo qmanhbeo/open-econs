@@ -3,7 +3,7 @@
 *! caliper(1.0) removes the caliper constraint (PS in [0,1]).
 clear all
 set more off
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_psm.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_psm.csv", clear
 
 teffects psmatch (y) (t x1 x2, logit), ate caliper(1.0)
 

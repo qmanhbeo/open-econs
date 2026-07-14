@@ -2,7 +2,7 @@
 *! (SSC: oaxaca v4.1.1, Ben Jann)
 clear all
 set more off
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_oaxaca.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_oaxaca.csv", clear
 
 * --- three-fold default (group 2 coefficients as reference) ---
 oaxaca y edu age, by(female)

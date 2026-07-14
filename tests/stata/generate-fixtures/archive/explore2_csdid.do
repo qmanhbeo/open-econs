@@ -1,7 +1,7 @@
 *! explore2_csdid.do — Deeper exploration of csdid storage
 clear all
 set more off
-import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_panel.csv", clear
+import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 
 gen gvar = 0
 replace gvar = 3 if entity >= 10 & entity < 20
