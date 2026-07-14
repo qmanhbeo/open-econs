@@ -28,6 +28,17 @@ from .models.causal.synth import synth, SynthResult
 from .models.causal.placebo import placebo_space, placebo_time
 from .core.context import Context
 from .core.panel_context import PanelContext
+from .models.timeseries import (
+    TimeSeriesContext,
+    adf,
+    arma,
+    arima,
+    dfgls,
+    garch,
+    kpss,
+    pp,
+    zivot_andrews,
+)
 
 reg = ols
 
@@ -58,5 +69,7 @@ __all__ = [
     "staggered_did", "did_sun_abraham",
     "placebo_space", "placebo_time",
     "VcovTypeNotSupportedError",
-    "Context", "PanelContext", "__version__",
+    "Context", "PanelContext", "TimeSeriesContext", "__version__",
+    "adf", "pp", "kpss", "dfgls", "zivot_andrews",
+    "garch", "arima", "arma",
 ]
