@@ -23,9 +23,10 @@ committed input ``.csv`` files that *both* the script and the Python test read,
 live under this package:
 
     tests/r/
-      do/            <label>.R            (scripts; read argv[1]=input csv, argv[2]=output json)
-      fixtures/      <label>_input.csv    (committed input, read by BOTH sides)
-                    <label>.json          (committed expected output, ground truth)
+      generate-fixtures/   <label>.R            (scripts; read argv[1]=input csv, argv[2]=output json)
+      fixtures/
+        inputs/            <label>_input.csv    (committed input, read by BOTH sides)
+        expected/          <label>.json         (committed expected output, ground truth)
 """
 
 from __future__ import annotations
@@ -48,6 +49,8 @@ R_EXE = os.environ.get(
 THIS_DIR = Path(__file__).resolve().parent
 R_SCRIPT_DIR = THIS_DIR / "generate-fixtures"
 R_FIXTURES_DIR = THIS_DIR / "fixtures"
+R_INPUTS_DIR = R_FIXTURES_DIR / "inputs"
+R_EXPECTED_DIR = R_FIXTURES_DIR / "expected"
 
 
 class RError(RuntimeError):
@@ -65,7 +68,7 @@ def _check_drift_r(label: str) -> None:
     Mirrors ``tests/stata/stata_runner._check_drift`` exactly (strict ``>``).
     """
     r_path = R_SCRIPT_DIR / f"{label}.R"
-    json_path = R_FIXTURES_DIR / f"{label}.json"
+    json_path = R_EXPECTED_DIR / f"{label}.json"
     if not r_path.exists() or not json_path.exists():
         return
     r_mtime = r_path.stat().st_mtime
@@ -105,8 +108,8 @@ def run_r(label: str) -> None:
     if not r_path.exists():
         raise FileNotFoundError(f"R script not found: {r_path}")
 
-    in_csv = R_FIXTURES_DIR / f"{label}_input.csv"
-    out_json = R_FIXTURES_DIR / f"{label}.json"
+    in_csv = R_INPUTS_DIR / f"{label}_input.csv"
+    out_json = R_EXPECTED_DIR / f"{label}.json"
     result = subprocess.run(
         [R_EXE, str(r_path), str(in_csv), str(out_json)],
         capture_output=True,
@@ -127,7 +130,7 @@ def read_r(label: str) -> dict:
     """
     run_r(label)
     _check_drift_r(label)
-    json_path = R_FIXTURES_DIR / f"{label}.json"
+    json_path = R_EXPECTED_DIR / f"{label}.json"
     if not json_path.exists():
         raise FileNotFoundError(
             f"No .json fixture found: {json_path}.  "

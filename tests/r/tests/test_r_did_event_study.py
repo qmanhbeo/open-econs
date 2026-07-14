@@ -27,7 +27,7 @@ R_DID = read_r("did_basic")
 R_DID_CL = read_r("did_cluster")
 R_ES = read_r("event_study")
 
-FIXTURES_DIR = Path(__file__).resolve().parents[2] / "stata" / "fixtures"
+FIXTURES_DIR = Path(__file__).resolve().parents[2] / "stata" / "fixtures" / "inputs"
 
 
 class TestDiDRParityBasic:
