@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Literal
+from typing import Literal
 
 import numpy as np
 import pandas as pd
 
-from open_econs._version import __version__
 from open_econs.core.call_capture import capture_call as _capture_call
 from open_econs.models.timeseries.results import UnitRootResult
 
