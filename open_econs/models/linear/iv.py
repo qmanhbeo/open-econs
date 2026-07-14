@@ -317,10 +317,10 @@ def iv(
         )
 
     # Determine FE columns
+    fe_parts: list[str] = []
     if fixed_effects is not None:
         fe_parts = list(fixed_effects)
     else:
-        fe_parts: list[str] = []
         if entity is not None:
             fe_parts.append(entity)
         if time_fe is not None:
@@ -499,7 +499,10 @@ def _iv_pyfixest_path(
     if original_data is not None:
         extra_cols = list(fe_parts)
         if cluster is not None:
-            extra_cols.append(cluster)
+            if isinstance(cluster, list):
+                extra_cols.extend(cluster)
+            else:
+                extra_cols.append(cluster)
         if cov_type == "HAC" and time is not None:
             extra_cols.append(time)
         for col in extra_cols:

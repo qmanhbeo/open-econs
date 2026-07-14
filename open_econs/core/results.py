@@ -254,7 +254,7 @@ f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
         pval = float(_stats.chi2.sf(stat, q))
 
         class WaldTestResult:
-            def __init__(self, statistic, pvalue, df):
+            def __init__(self, statistic: float, pvalue: float, df: int) -> None:
                 self.statistic = statistic
                 self.pvalue = pvalue
                 self.df = df
@@ -284,7 +284,7 @@ f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
         pval = float(_stats.f.sf(f_stat, q, dfd))
 
         class FTestResult:
-            def __init__(self, fvalue, pvalue, df_num, df_denom):
+            def __init__(self, fvalue: float, pvalue: float, df_num: int, df_denom: int) -> None:
                 self.fvalue = fvalue
                 self.pvalue = pvalue
                 self.df_num = df_num

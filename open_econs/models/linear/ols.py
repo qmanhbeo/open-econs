@@ -200,6 +200,7 @@ def ols(
         )
 
     if multiway:
+        assert clusters is not None
         return _ols_multiway_cluster_path(
             formula=formula,
             XX=XX,
@@ -219,7 +220,7 @@ def ols(
         XX=XX,
         yy=yy,
         data=data,
-        cluster=cluster,
+        cluster=cluster if isinstance(cluster, str) else None,
         cov_type=cov_type,
         weights=weights,
         original_n=original_n,

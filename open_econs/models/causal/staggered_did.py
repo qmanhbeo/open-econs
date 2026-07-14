@@ -214,7 +214,7 @@ class StaggeredDiDResult(BaseModel):
                 all_entities = cell_rif.index.values
                 break
         has_rifs = all_entities is not None
-        n_entities = len(all_entities) if has_rifs else 0
+        n_entities = len(all_entities) if all_entities is not None else 0
 
         rif_by_level = {}  # level_val → pd.Series (N-entities)
         if has_rifs:

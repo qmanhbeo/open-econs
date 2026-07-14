@@ -201,10 +201,10 @@ def fe(
         raise errors.empty_data_error(original_n, dropped, [])
 
     # ---- determine the FE columns ----
+    fe_parts: list[str] = []
     if fixed_effects is not None:
         fe_parts = list(fixed_effects)
     else:
-        fe_parts: list[str] = []
         if entity is not None:
             fe_parts.append(entity)
         if time is not None:
@@ -523,8 +523,10 @@ def _fe_hac_path(
 
     ssr = float(np.sum(fitted.resid ** 2))
     if entity is not None:
+        assert entity_arr is not None
         y_for_r2 = _demean(yy.values.ravel().astype(float), entity_arr)
     elif time is not None:
+        assert time_arr is not None
         y_for_r2 = _demean(yy.values.ravel().astype(float), time_arr)
     else:
         y_for_r2 = yy.values.ravel().astype(float)
