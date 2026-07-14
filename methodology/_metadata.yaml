@@ -114,6 +114,45 @@ estimators:
     tier: 1
     methodology: methodology/causal_inference/did_cs.md
 
+  did_sa:
+    name: Sun & Abraham (2021) Interaction-Weighted DiD
+    aliases:
+      - interaction-weighted DiD
+      - event-study DiD
+      - Sun-Abraham estimator
+    category: causal_inference
+    api:
+      - oe.did_sa()
+    context_api: []
+    problem: treatment effects with staggered adoption and heterogeneous effects
+    estimator: Sun & Abraham (2021) interaction-weighted event-study estimator
+    stata_equivalent: []
+    r_equivalent:
+      - fixest::sunab
+    status: mature
+    tier: 1
+    methodology: methodology/causal_inference/did_sa.md
+
+  did_gardner:
+    name: Gardner (2022) Two-Stage DiD
+    aliases:
+      - DID2S
+      - two-stage differences-in-differences
+      - Gardner estimator
+    category: causal_inference
+    api:
+      - oe.did_gardner()
+    context_api: []
+    problem: treatment effects with staggered adoption
+    estimator: Gardner (2022) two-stage difference-in-differences (DID2S)
+    stata_equivalent: []
+    r_equivalent:
+      - did2s::did2s
+    status: mature
+    tier: 1
+    methodology: methodology/causal_inference/did_gardner.md
+
+
   did:
     name: Two-Period Difference-in-Differences
     category: causal_inference

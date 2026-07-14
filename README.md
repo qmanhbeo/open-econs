@@ -215,6 +215,8 @@ r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
 | `gmm()` | General linear GMM framework (reuses `iv()` formula grammar; Hansen J size/power) | Beta |
 | `abond()` | Arellano-Bond dynamic panel GMM (one/two-step, Windmeijer SEs, collapsed instruments) | Production |
 | `did_cs()` | Callaway-Sant'Anna (2021) staggered DiD (doubly-robust `dripw` or `reg`) | Beta |
+| `did_sa()` | Sun & Abraham (2021) interaction-weighted event-study DiD (cluster-robust VCE) | Beta |
+| `did_gardner()` | Gardner (2022) two-stage DiD (DID2S, cluster-robust IF SEs) | Beta |
 | `rdd()` | Sharp / fuzzy regression discontinuity (local linear, triangular kernel) | Production |
 | `did()` / `event_study()` | Two-period DiD, event-study with pre-trend diagnostics | Production |
 | `psm()` | Propensity score matching (1:1 nearest-neighbor with replacement, AI 2012 SEs) | Production |

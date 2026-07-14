@@ -86,7 +86,78 @@ Newey-West). A `UserWarning` is raised on use, and `lags` is required. At
 `lags=0` it reduces exactly to the cluster-robust SE. Prefer `cov_type="cluster"`
 for publication.
 
-## 5. Parity note
+## 5. Sun & Abraham (interaction-weighted)
+
+For an event-study specification with explicit cohort information, use
+`did_sa()` (Sun & Abraham 2021). It needs a `cohort` column (the
+period each entity first becomes treated; `NA` for never-treated) and a
+calendar `period` column, plus a `ref_period` (default `-1`) to drop.
+
+```python
+# cohort: period of first treatment (NA = never treated)
+# period:  calendar time
+df_sa = pd.DataFrame({
+    "entity":   np.repeat(np.arange(30), 5),
+    "period":   np.tile([1, 2, 3, 4, 5], 30),
+    "cohort":   np.tile([np.nan, np.nan, 2, 3, 4] + [np.nan]*25, 1)[:150],
+    "x":       rng.normal(size=150),
+    "y":       1.0 + rng.normal(size=150),
+})
+
+res_sa = oe.did_sa(
+    df_sa, y="y", cohort="cohort", period="period",
+    ref_period=-1, entity="entity", time="period",
+    cluster="entity", covariates=["x"],
+)
+res_sa.att             # overall ATT (cohort-weighted period aggregate)
+res_sa.att_se
+res_sa.tidy()          # 9 interaction coefficients w/ SE, t, p
+res_sa.period_coefs   # period-level aggregates
+res_sa.cohort_coefs   # cohort-specific ATTs
+```
+
+### did_sa has no Stata anchor
+
+`did_sa()` matches R `fixest::sunab()` (v0.14.2) at `rtol=1e-6`.
+There is **no Stata equivalent** — Stata's `eventstudyinteract` (Sun) and
+`csdid` are distinct packages with different defaults. Do not treat them as
+parity anchors.
+
+## 6. Gardner (two-stage)
+
+For the two-stage DID2S estimator (Gardner 2022), use `did_gardner()`.
+It takes two formula strings: `first_stage` (estimated on **untreated**
+observations only) and `second_stage` (estimated on **all** observations,
+typically just the treatment indicator).
+
+```python
+df_g = pd.DataFrame({
+    "entity":   np.repeat(np.arange(80), 6),
+    "time":     np.tile([2015, 2016, 2017, 2018, 2019, 2020], 80),
+    "treat":    (np.tile([2015, 2016, 2017, 2018, 2019, 2020], 80) >=
+                  np.repeat([2017, 2018, 2019, 9999, 2017, 2018], 80)).astype(int),
+    "x":       rng.normal(size=480),
+    "y":       1.0 + rng.normal(size=480),
+})
+
+res_g = oe.did_gardner(
+    df_g, y="y",
+    first_stage="0 + factor(entity) + factor(time)",
+    second_stage="treat",
+    treatment="treat",
+    cluster="entity",
+)
+res_g.att             # ATT (coefficient on treatment)
+res_g.att_se
+res_g.tidy()         # coefficient table
+```
+
+### did_gardner has no Stata anchor
+
+`did_gardner()` matches R `did2s::did2s()` (v1.2.1, non-bootstrap)
+at `rtol=1e-6`. There is **no Stata equivalent** with numerical parity.
+
+## 7. Parity note
 
 Static DiD matches Stata's `did` (two-period) and R's `fixest::feols(y ~ treat*post)`.
 Staggered DiD matches `csdid`'s aggregated ATT; the HAC convention does **not**

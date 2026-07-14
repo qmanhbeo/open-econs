@@ -9,7 +9,7 @@ key attributes → output interpretation → honest parity note.
 | [OLS](ols.md) | `oe.ols` | Stata `reg` / R `lm` |
 | [Fixed Effects](fe.md) | `oe.fe` | Stata `xtreg, fe` / R `fixest::feols` |
 | [IV](iv.md) | `oe.iv` | Stata `ivregress` / R `AER::ivreg` |
-| [DiD](did.md) | `oe.did`, `oe.event_study`, `oe.did_cs` | Stata `did` / R `fixest` / `csdid` |
+| [DiD](did.md) | `oe.did`, `oe.event_study`, `oe.did_cs`, `oe.did_sa`, `oe.did_gardner` | Stata `did` / R `fixest` / `csdid` / `fixest::sunab` / `did2s` |
 | [RDD](rdd.md) | `oe.rdd`, `oe.density_test` | R `rdrobust` / Stata `rddensity` |
 | [PSM](psm.md) | `oe.psm`, `oe.cem`, `oe.balance`, `oe.rosenbaum_bounds` | R `MatchIt` / `Matching` / Stata `teffects psmatch` / `rbounds` |
 | [Synthetic Control](synth_control.md) | `oe.synth`, `oe.placebo_space`, `oe.placebo_time` | R `Synth` / Stata `synth` |
