@@ -108,7 +108,8 @@ def fe(
     Notes
     -----
     This function uses ``pyfixest.feols`` as the compute backend for
-    non-HAC covariance types (HC0, HC1, nonrobust, CRV1, CRV3).  The
+    non-HAC covariance types (HC0, HC1, nonrobust, CRV1).  CRV3 is **not**
+    supported — see ``FUTURE_WORK.md`` (section "pyfixest CRV3").  The
     ``entity=``/``time=`` and ``fixed_effects=`` kwargs are mapped internally
     to ``pyfixest``'s ``| f1 + f2 + ...`` formula syntax.  The HAC path
     retains the original ``statsmodels``-based implementation.

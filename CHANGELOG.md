@@ -101,7 +101,7 @@ correct finite-sample adjustment.
 
 ### Internal
 
-- `fe()` compute backend replaced with `pyfixest.feols` for HC0/HC1/nonrobust/CRV1/CRV3.
+- `fe()` compute backend replaced with `pyfixest.feols` for HC0/HC1/nonrobust/CRV1. CRV3 is not supported (see `FUTURE_WORK.md`).
 - HAC path retains original statsmodels implementation (pyfixest does not support HAC with absorbed FE).
 - `pyfixest==0.60.0` pinned in `pyproject.toml`.
 - Added `_count_absorbed_dof()` helper for correct N-way FE degrees-of-freedom calculation.
