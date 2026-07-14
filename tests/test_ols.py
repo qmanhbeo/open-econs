@@ -226,13 +226,13 @@ class TestOLS:
 
     def test_wald_test_works(self, df_ols):
         r = oe.ols("income ~ education + age", data=df_ols, cov_type="nonrobust")
-        w = r.wald_test("x1 = x2")
+        w = r.wald_test("education = age")
         assert hasattr(w, "pvalue")
         assert hasattr(w, "statistic")
 
     def test_f_test_works(self, df_ols):
         r = oe.ols("income ~ education + age", data=df_ols, cov_type="nonrobust")
-        f = r.f_test("x1 = x2")
+        f = r.f_test("education = age")
         assert hasattr(f, "pvalue")
         assert hasattr(f, "fvalue")
 
