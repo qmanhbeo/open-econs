@@ -13,6 +13,7 @@ from .models.nonlinear.nls import nls, NLSResult
 from .models.causal.did import did, event_study
 from .models.causal.balance import balance
 from .models.causal.staggered_did import staggered_did, AggteResult
+from .models.causal.did_gardner import did_gardner, GardnerResult
 from .models.causal.cem import cem
 from .models.causal.psm import psm
 from .models.causal.sensitivity import rosenbaum_bounds
@@ -29,7 +30,7 @@ __all__ = [
     "did", "event_study", "balance", "abond", "staggered_did", "density_test", "cem",
     "psm", "rdd", "rosenbaum_bounds", "gmm", "GMMResult",
     "nls", "NLSResult",
-    "synth", "SynthResult", "AggteResult",
+    "synth", "SynthResult", "AggteResult", "did_gardner", "GardnerResult",
     "placebo_space", "placebo_time",
     "VcovTypeNotSupportedError",
     "Context", "PanelContext", "__version__",
