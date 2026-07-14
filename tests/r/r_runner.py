@@ -66,6 +66,8 @@ def _check_drift_r(label: str) -> None:
     """Fail loudly if a .R file is newer than its .json -- the fixture is stale.
 
     Mirrors ``tests/stata/stata_runner._check_drift`` exactly (strict ``>``).
+    A 1-second tolerance avoids false positives from ``git checkout`` setting
+    identical sub-second mtimes on all checked-out files.
     """
     r_path = R_SCRIPT_DIR / f"{label}.R"
     json_path = R_EXPECTED_DIR / f"{label}.json"
@@ -73,7 +75,7 @@ def _check_drift_r(label: str) -> None:
         return
     r_mtime = r_path.stat().st_mtime
     json_mtime = json_path.stat().st_mtime
-    if r_mtime > json_mtime:
+    if r_mtime > json_mtime + 1.0:
         raise RuntimeError(
             f"STALE FIXTURE: {label}.R (mtime {time.ctime(r_mtime)}) is newer "
             f"than {label}.json (mtime {time.ctime(json_mtime)}).  "

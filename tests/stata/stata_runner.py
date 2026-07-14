@@ -48,14 +48,18 @@ def stata_available() -> bool:
 
 
 def _check_drift(label: str) -> None:
-    """Fail loudly if a .do file is newer than its .dta — the fixture is stale."""
+    """Fail loudly if a .do file is newer than its .dta — the fixture is stale.
+
+    A 1-second tolerance avoids false positives from ``git checkout`` setting
+    similar sub-second mtimes on all checked-out files.
+    """
     do_path = DO_DIR / f"{label}.do"
     dta_path = EXPECTED_DIR / f"{label}.dta"
     if not do_path.exists() or not dta_path.exists():
         return
     do_mtime = do_path.stat().st_mtime
     dta_mtime = dta_path.stat().st_mtime
-    if do_mtime > dta_mtime:
+    if do_mtime > dta_mtime + 1.0:
         raise RuntimeError(
             f"STALE FIXTURE: {label}.do (mtime {time.ctime(do_mtime)}) is newer "
             f"than {label}.dta (mtime {time.ctime(dta_mtime)}).  "
