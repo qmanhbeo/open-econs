@@ -235,4 +235,54 @@ available in R's `sandwich::NeweyWest` but not in OE.
 
 ---
 
-*Last updated: 2026-07-14, test layout migration delivered.*
+## Time-Series Backend (v1.1.0) — Flagged Gaps
+
+Two parity gaps in `open_econs/models/timeseries/` were identified during the
+v1.1.0 finish-line but intentionally **not** resolved this session (judgment
+calls 1–3 from the handoff). They are documented here, not papered over with
+relaxed tolerances (standing rule 2).
+
+### TS-1: Legacy CV-Table Parity (Fuller / ERS / ZA small-N tables)
+
+- **What:** OE's unit-root / stationarity tests surface the backend's *native*
+  critical-value tables (arch: MacKinnon 2010 for ADF/PP/DF-GLS, Hobijn et al.
+  2004 for KPSS, arch 100k-rep Monte Carlo for ZA). Stata prints Fuller (1976)
+  for ADF/PP and ERS (1996) / Cheung-Lai (1995) for DF-GLS; R `urca` prints
+  Kwiatkowski et al. (1992) for KPSS and Zivot-Andrews (1992) for ZA. In small
+  samples these tables diverge, so the CV vintage is *labelled* (never hidden)
+  in every `summary()` (decision 1).
+- **Why flagged:** replicating the exact small-N tables is a finite-sample
+  table-reproduction exercise, not a numerical-method fix. The asymptotic test
+  is identical across tools; only the tabulated quantiles differ.
+- **Implementation path:** port the explicit tabulated quantiles for
+  Fuller (1976) ADF, ERS (1996) DF-GLS, and ZA (1992) so OE can optionally
+  emit the Stata/R-vintage CVs alongside (or instead of) the MacKinnon/Hobijn
+  tables. Keep the `cv_vintage` label as the source of truth.
+- **Parity anchor today:** the **MacKinnon (1994) p-value** is the one
+  cross-tool point of genuine agreement and is asserted against Stata in
+  `tests/stata/tests/test_timeseries_adf_pp.py`; the statistic is asserted
+  against R (`urca`) in `tests/r/tests/test_timeseries_urca.py`.
+
+### TS-2: DFGLS Lag-Selection Port (Ng-Perron vs arch AIC)
+
+- **What:** OE's `dfgls()` uses arch's default AIC lag selection on the
+  GLS-detrended series. Stata `dfgls` uses Ng-Perron sequential-t / SIC / MAIC.
+  The GLS detrending (ERS cbar) and the default max-lag *ceiling* match
+  exactly, but the lag-selection *method* differs by design.
+- **Why flagged:** porting Ng-Perron sequential testing is a non-trivial
+  method implementation, out of scope for the v1.1.0 finish-line. The reported
+  DF-GLS statistic therefore cannot be asserted equal to Stata's, and the
+  current tests deliberately do **not** cross-check the statistic against
+  Stata (no relaxed tolerance).
+- **Implementation path:** implement Ng-Perron sequential-t / SIC / MAIC
+  inside `dfgls()` (new `method="ng-perron"` option), gated behind an explicit
+  argument so the arch-AIC default is preserved. The GLS-detrending and
+  max-lag-ceiling code is shared with arch and already verified.
+- **Parity anchor today:** `tests/non_stata_nor_r/test_timeseries_dfgls.py`
+  asserts an exact OE-vs-arch **backend identity** (same args → identical
+  statistic) plus a same-backend CV-vintage regression guard. The Stata gap is
+  tracked here until the port lands.
+
+---
+
+*Last updated: 2026-07-14, v1.1.0 time-series finish-line (tests + flagged gaps).*
