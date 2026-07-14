@@ -12,7 +12,7 @@ from .models.linear.gmm import gmm, GMMResult
 from .models.nonlinear.nls import nls, NLSResult
 from .models.causal.did import did, event_study
 from .models.causal.balance import balance
-from .models.causal.staggered_did import staggered_did
+from .models.causal.staggered_did import staggered_did, AggteResult
 from .models.causal.cem import cem
 from .models.causal.psm import psm
 from .models.causal.sensitivity import rosenbaum_bounds
@@ -29,7 +29,7 @@ __all__ = [
     "did", "event_study", "balance", "abond", "staggered_did", "density_test", "cem",
     "psm", "rdd", "rosenbaum_bounds", "gmm", "GMMResult",
     "nls", "NLSResult",
-    "synth", "SynthResult",
+    "synth", "SynthResult", "AggteResult",
     "placebo_space", "placebo_time",
     "VcovTypeNotSupportedError",
     "Context", "PanelContext", "__version__",
