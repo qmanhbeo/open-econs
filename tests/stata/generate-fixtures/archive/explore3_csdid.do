@@ -1,7 +1,7 @@
 *! explore3_csdid.do — Inspect csdid internals for IF extraction
 clear all
 set more off
-log using "C:\Users\manhn\Desktop\open-econs\tests\stata\do\explore3_csdid.log", replace text
+log using "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\explore3_csdid.log", replace text
 
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_panel.csv", clear
 drop if entity >= 20

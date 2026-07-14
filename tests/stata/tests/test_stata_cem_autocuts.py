@@ -24,7 +24,7 @@ import pandas as pd
 import pytest
 
 from open_econs.models.causal.cem import cem
-from ..stata_runner import DO_DIR, FIXTURES_DIR, STATA_EXE, run_do
+from ..stata_runner import DO_DIR, EXPECTED_DIR, FIXTURES_DIR, STATA_EXE, run_do
 
 pytestmark = pytest.mark.stata
 
@@ -52,20 +52,20 @@ class TestCemAutocutsParity:
     def test_strata(self, df, method):
         r = cem(df, treatment="t", covariates=["x1", "x2", "x3"],
                 autocuts=method)
-        stata = pd.read_stata(DO_DIR / f"cem_autocuts_{method}.dta")
+        stata = pd.read_stata(EXPECTED_DIR / f"cem_autocuts_{method}.dta")
         npt.assert_array_equal(r.strata.values, stata["cem_strata"].values)
 
     def test_weights(self, df, method):
         r = cem(df, treatment="t", covariates=["x1", "x2", "x3"],
                 autocuts=method)
-        stata = pd.read_stata(DO_DIR / f"cem_autocuts_{method}.dta")
+        stata = pd.read_stata(EXPECTED_DIR / f"cem_autocuts_{method}.dta")
         npt.assert_allclose(r.weights.values, stata["cem_weights"].values,
                             rtol=1e-12)
 
     def test_matched(self, df, method):
         r = cem(df, treatment="t", covariates=["x1", "x2", "x3"],
                 autocuts=method)
-        stata = pd.read_stata(DO_DIR / f"cem_autocuts_{method}.dta")
+        stata = pd.read_stata(EXPECTED_DIR / f"cem_autocuts_{method}.dta")
         npt.assert_array_equal(r.matched.values, stata["cem_matched"].values)
 
     def test_summary_counts(self, df, method):
@@ -86,7 +86,7 @@ class TestCemAutocutsParity:
         n_strata = int(np.unique(r.strata.values).size)
         n_mstrata = r.n_matched_strata
 
-        stata = pd.read_stata(DO_DIR / f"cem_autocuts_{method}.dta")
+        stata = pd.read_stata(EXPECTED_DIR / f"cem_autocuts_{method}.dta")
         # KNOWN ISSUE: same precedence bug as n_t_matched above (`==` binds tighter than
         # `&`), so this mirrors the Python side symmetrically. Non-blocking; documented in
         # ROADMAP.md (known issues). Do NOT "fix" silently without re-checking intent.

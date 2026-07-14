@@ -53,4 +53,4 @@ replace value = s_se0  in 11
 replace value = s_se1  in 12
 replace value = s_se2  in 13
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\ols_basic.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\ols_basic.dta", replace

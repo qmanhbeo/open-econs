@@ -133,4 +133,4 @@ replace value = v0m_x2   in 20
 replace value = m1m_x2   in 21
 replace value = m0m_x2   in 22
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\balance_weighted.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\balance_weighted.dta", replace

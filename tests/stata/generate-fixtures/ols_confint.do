@@ -36,4 +36,4 @@ replace value = s_b2                  in 7
 replace value = s_b2 - tval * s_se2   in 8
 replace value = s_b2 + tval * s_se2   in 9
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\ols_confint.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\ols_confint.dta", replace

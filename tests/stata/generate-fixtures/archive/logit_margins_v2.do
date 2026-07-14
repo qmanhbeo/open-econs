@@ -33,4 +33,4 @@ replace name = "me_x2" in 2
 replace value = s_me1  in 1
 replace value = s_me2  in 2
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\logit_margins.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\logit_margins.dta", replace

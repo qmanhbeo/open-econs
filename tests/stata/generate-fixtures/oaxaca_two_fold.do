@@ -86,4 +86,4 @@ local s weight0_unexplained
 replace name = "`s'" in 12
 replace value = `s' in 12
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\oaxaca_two_fold.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\oaxaca_two_fold.dta", replace

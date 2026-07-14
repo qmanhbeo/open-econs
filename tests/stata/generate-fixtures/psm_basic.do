@@ -43,4 +43,4 @@ replace value = s_min_match  in 6
 replace value = s_max_match  in 7
 replace value = el(e(V), 1, 1) in 8
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\psm_basic.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\psm_basic.dta", replace

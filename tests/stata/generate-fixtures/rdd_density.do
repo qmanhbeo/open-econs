@@ -51,4 +51,4 @@ replace value = s_fhat_r    in 10
 replace value = s_fhat_l_p  in 11
 replace value = s_fhat_r_p  in 12
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\rdd_density.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\rdd_density.dta", replace

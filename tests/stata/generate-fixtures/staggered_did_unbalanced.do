@@ -110,4 +110,4 @@ replace value = s_N              in 17
 replace name  = "agg_se"         in 18
 replace value = agg_se           in 18
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\staggered_did_unbalanced.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\staggered_did_unbalanced.dta", replace

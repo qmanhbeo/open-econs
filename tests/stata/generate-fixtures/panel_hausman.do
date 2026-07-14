@@ -41,4 +41,4 @@ replace name = "p"    in 2
 replace value = s_chi2 in 1
 replace value = s_p    in 2
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\panel_hausman.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\panel_hausman.dta", replace

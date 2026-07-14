@@ -58,4 +58,4 @@ local s threefold_rev_interaction
 replace name = "`s'" in 8
 replace value = `s' in 8
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\oaxaca_three_fold.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\oaxaca_three_fold.dta", replace

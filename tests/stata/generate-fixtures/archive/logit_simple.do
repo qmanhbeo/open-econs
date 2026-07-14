@@ -7,7 +7,7 @@ margins, dydx(x1 x2)
 
 * Export using postfile
 tempname memhold
-postfile `memhold' str20 var value using "C:\Users\manhn\Desktop\open-econs\tests\stata\do\margins_out.dta", replace
+postfile `memhold' str20 var value using "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\margins_out.dta", replace
 post `memhold' ("x1") (r(b)[1,1])
 post `memhold' ("x2") (r(b)[1,2])
 postfile `memhold' close

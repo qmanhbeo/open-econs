@@ -19,4 +19,4 @@ replace value = s_se0 in 1
 replace value = s_se1 in 2
 replace value = s_se2 in 3
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\ols_robust.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\ols_robust.dta", replace

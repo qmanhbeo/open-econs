@@ -23,4 +23,4 @@ replace value = s_b_int in 2
 replace value = s_b_did in 3
 replace value = s_se_did in 4
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\did_basic.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\did_basic.dta", replace

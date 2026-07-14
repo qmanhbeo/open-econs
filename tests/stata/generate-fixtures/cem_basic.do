@@ -20,7 +20,7 @@ dis "x1 range: [`x1_min', `x1_max']"
 cem x1(-2 -1 0 1 2) x2(0.5) x3(#0), treatment(t) showbreaks
 
 * Save full dataset with CEM variables
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\cem_basic.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\cem_basic.dta", replace
 
 * Also save scalars for quick reference
 egen double N_T_matched = total(t & cem_matched)
@@ -58,7 +58,7 @@ replace value = s_sum_w_c      in 4
 replace value = s_n_strata     in 5
 replace value = s_n_ms         in 6
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\cem_basic_scalars.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\cem_basic_scalars.dta", replace
 
 dis _newline(1) "--- CEM Summary ---"
 dis "N_T_matched = " s_N_T_matched

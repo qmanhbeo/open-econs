@@ -41,4 +41,4 @@ replace value = s_sez    in 8
 replace value = s_fstat  in 9
 replace value = 0        in 10
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\panel_fe_multiway_cluster.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\panel_fe_multiway_cluster.dta", replace

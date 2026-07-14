@@ -16,4 +16,4 @@ tab cem_strata
 tab cem_matched
 
 * Save full dataset with CEM variables
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\cem_autocuts_sturges.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\cem_autocuts_sturges.dta", replace

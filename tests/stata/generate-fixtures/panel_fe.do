@@ -32,4 +32,4 @@ replace value = s_bz   in 5
 replace value = s_sex  in 6
 replace value = s_sez  in 7
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\panel_fe.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\panel_fe.dta", replace

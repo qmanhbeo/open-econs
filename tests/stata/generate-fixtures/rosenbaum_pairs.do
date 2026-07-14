@@ -50,4 +50,4 @@ replace value = g2_sigm  in 5
 replace value = g3_sigp  in 6
 replace value = g3_sigm  in 7
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\rosenbaum_pairs.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\rosenbaum_pairs.dta", replace

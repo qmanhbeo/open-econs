@@ -10,4 +10,4 @@ if _rc != 0 {
     exit _rc
 }
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\cem_autocuts_scott.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\cem_autocuts_scott.dta", replace

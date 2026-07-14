@@ -40,4 +40,4 @@ replace value = s_t2  in 6
 replace value = s_df2 in 7
 replace value = s_p2  in 8
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\balance_basic.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\balance_basic.dta", replace

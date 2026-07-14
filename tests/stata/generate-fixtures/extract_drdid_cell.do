@@ -18,7 +18,7 @@ drdid y x z, ivar(entity) time(time) treatment(tr) drimp stub(__) replace pscore
 * __att is the per-observation influence function (raw)
 keep entity time __att
 rename __att att_cell33
-save "tests/stata/generate-fixtures/drdid_cell33.dta", replace
+save "tests/stata/fixtures/expected/drdid_cell33.dta", replace
 restore
 
 * Cell (g=3, pre=2, post=4)
@@ -27,7 +27,7 @@ keep if gsel & inlist(time,2,4)
 drdid y x z, ivar(entity) time(time) treatment(tr) drimp stub(__) replace pscoretrim(0.995)
 keep entity time __att
 rename __att att_cell34
-save "tests/stata/generate-fixtures/drdid_cell34.dta", replace
+save "tests/stata/fixtures/expected/drdid_cell34.dta", replace
 restore
 
 di "done"

@@ -9,7 +9,7 @@ import pytest
 
 import open_econs as oe
 
-from ..stata_runner import DO_DIR, _check_drift, read_stata, run_do
+from ..stata_runner import EXPECTED_DIR, _check_drift, read_stata, run_do
 
 pytestmark = pytest.mark.stata
 
@@ -120,7 +120,7 @@ class TestOLSPredict:
         oe_pred = oe_r.predict().values[:10]
         run_do("ols_predict")
         _check_drift("ols_predict")
-        stata_pred = pd.read_stata(DO_DIR / "ols_predict.dta")
+        stata_pred = pd.read_stata(EXPECTED_DIR / "ols_predict.dta")
         npt.assert_allclose(oe_pred, stata_pred["yhat"].values, rtol=1e-6)
 
 

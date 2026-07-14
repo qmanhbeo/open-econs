@@ -120,4 +120,4 @@ replace value = me_se_2_x2     in 29
 replace value = me_se_3_x1     in 30
 replace value = me_se_3_x2     in 31
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\mlogit_basic.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\mlogit_basic.dta", replace

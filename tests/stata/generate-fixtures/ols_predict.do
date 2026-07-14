@@ -6,4 +6,4 @@ regress y x1 x2
 predict yhat, xb
 keep if _n <= 10
 keep yhat
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\ols_predict.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\ols_predict.dta", replace

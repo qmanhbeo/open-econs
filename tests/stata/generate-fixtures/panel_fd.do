@@ -29,4 +29,4 @@ replace value = s_bz  in 3
 replace value = s_sex in 4
 replace value = s_sez in 5
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\panel_fd.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\panel_fd.dta", replace

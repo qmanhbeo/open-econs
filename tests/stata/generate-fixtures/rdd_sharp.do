@@ -20,4 +20,4 @@ replace value = s_bw   in 1
 replace value = s_coef in 2
 replace value = s_se   in 3
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\rdd_sharp.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\rdd_sharp.dta", replace

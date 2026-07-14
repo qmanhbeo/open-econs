@@ -82,4 +82,4 @@ foreach n of local names {
     local i = `i' + 1
 }
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\event_study.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\event_study.dta", replace

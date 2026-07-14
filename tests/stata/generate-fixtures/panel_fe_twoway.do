@@ -35,4 +35,4 @@ replace value = s_bz   in 6
 replace value = s_sex  in 7
 replace value = s_sez  in 8
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\panel_fe_twoway.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\panel_fe_twoway.dta", replace

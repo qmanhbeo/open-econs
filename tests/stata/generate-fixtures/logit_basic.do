@@ -31,4 +31,4 @@ replace value = s_se0  in 5
 replace value = s_sex1 in 6
 replace value = s_sex2 in 7
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\logit_basic.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\logit_basic.dta", replace

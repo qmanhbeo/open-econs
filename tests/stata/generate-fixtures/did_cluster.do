@@ -14,4 +14,4 @@ gen double value = .
 replace name = "se_treatXpost" in 1
 replace value = s_se_did in 1
 
-save "C:\Users\manhn\Desktop\open-econs\tests\stata\do\did_cluster.dta", replace
+save "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\did_cluster.dta", replace

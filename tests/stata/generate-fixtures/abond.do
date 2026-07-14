@@ -9,7 +9,7 @@ import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_pane
 xtset entity time
 
 postfile handle str32 name double value ///
-    using "C:\Users\manhn\Desktop\open-econs\tests\stata\do\abond.dta", replace
+    using "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\expected\abond.dta", replace
 
 *==============================================================================
 * COLLAPSED FLAVOURS  (gmm(L.y, lag(2 4) collapse))
