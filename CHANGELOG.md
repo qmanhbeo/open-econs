@@ -187,6 +187,39 @@ All pass at `rtol=1e-6` against R `did` v2.5.1.
 R fixture scripts (`staggered_did_balanced.R`, `staggered_did_unbalanced.R`)
 extended with `aggte()` calls and regenerated.
 
+### D12 Delivery: `did_gardner()` — Gardner (2022) Two-Stage DID
+
+`did_gardner(data, y, first_stage, second_stage, treatment, cluster=)`
+implements the Gardner (2022) DID2S estimator with cluster-robust SEs via
+two-stage influence functions.  Returns a `GardnerResult` (immutable,
+`.tidy()`, `.summary()`, `.vcov()`).
+
+**R parity anchor:** `did2s::did2s()` v1.2.1, non-bootstrap path.
+
+**Key source finding — two-stage IF:** A naive single-stage cluster-robust
+VCE (second-stage residuals only) underestimates the SE because it ignores
+first-stage estimation uncertainty.  R's `did2s` computes the full two-stage
+IF:
+
+    IF = IF_fs - IF_ss
+    IF_ss = (X2'X2)^{-1} X2' second_u     (second-stage OLS IF)
+    IF_fs = (X2'X2)^{-1} gamma' X10' first_u  (first-stage IF)
+    gamma = (X10'X10)^{-1} (X1'X2)          (cross-regression coefficient)
+    X10 = X1 with treated rows zeroed out
+
+**Bug fixed during implementation:** Initial Python implementation used
+`gamma = (X10'X10)^{-1} (X10'X2)` (zeroed-out treated rows in both sides
+of the cross-regression).  R's source uses `Matrix::crossprod(x1, x2)` —
+the **original** `x1` (all observations) on the right side, not `x10`.
+This produced SE = 0.4191 instead of the correct 0.5026.  Source-confirmed
+by re-reading R's `did2s:::did2s()`.
+
+**Test coverage:** 14 tests in `test_r_did_gardner.py` — ATT, SE, t-stat,
+p-value, R², σ², coefficients, VCE clustered, tidy/summary smoke tests.
+All pass at `rtol=1e-6` against R `did2s` v1.2.1.
+
+**Test suite:** 781 passed (up from 767), 0 failed, 0 regressions.
+
 ---
 
 *Future work items (HC4/HC4m/HC5, non-Bartlett HAC kernels, pyfixest

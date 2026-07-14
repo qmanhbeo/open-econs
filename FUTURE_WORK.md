@@ -175,6 +175,18 @@ available in R's `sandwich::NeweyWest` but not in OE.
 - **Remaining:** `did_sun_abraham()` and `did_gardner()` extensions
   still queued (citations verified: Sun & Abraham 2021, Gardner 2022).
 
+### D12: did_gardner() — Gardner (2022) Two-Stage DID — Delivered
+
+- **What:** `did_gardner(data, y, first_stage, second_stage, treatment, cluster=)`
+  implements the Gardner (2022) DID2S estimator with cluster-robust SEs via
+  two-stage influence functions.  Returns `GardnerResult`.
+- **Status:** Delivered (2026-07-14). R parity at `rtol=1e-6` against
+  `did2s::did2s()` v1.2.1 (non-bootstrap). 14 tests, 0 regressions.
+- **Key finding:** Two-stage IF formula `IF = IF_fs - IF_ss` with
+  `gamma = (X10'X10)^{-1} (X1'X2)` (original x1, not zeroed-out x10).
+  Naive single-stage VCE underestimates SE by ~17%.
+- **Remaining:** `did_sun_abraham()` still queued for next session.
+
 ---
 
 ## Test Layout — Deferred Migrations
@@ -197,4 +209,4 @@ available in R's `sandwich::NeweyWest` but not in OE.
 
 ---
 
-*Last updated: 2026-07-14, layout migration complete (4-role taxonomy).*
+*Last updated: 2026-07-14, Gardner DID2S delivered (D12), Sun-Abraham queued.*
