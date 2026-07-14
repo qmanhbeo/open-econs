@@ -166,8 +166,19 @@ genuine gaps the backends don't cover.
 #### v1.2 — Count & limited dependent variable models *(committed)*
 New `open_econs/models/limited/` module:
 - `poisson()`, `nbreg()` (NB1/NB2), `ologit()` / `oprobit()` (ordered)
+- **`poisson()` / `nbreg()` MUST be FE-backed via the existing HDFE demeaning
+  core** (Correia 2016 / Guimarães & Portugal, the `fixest::fepois` convention —
+  iterative projection of the score onto the fixed-effects hyperplane) **not a
+  bare statsmodels GLM wrapper reaching point-estimate parity only.** Validation
+  target is Stata `ppmlhdfe` and R `fixest::fepois` **at the option level**
+  (absorb, vcov, IRR, dof), not just coefficient equality. The demeaning core
+  already exists in the `fe`/`feols` path; the count models must reuse it.
 - `tobit()` — MLE (statsmodels has no Tobit); validate vs R `censReg` / `AER::tobit`
 - `heckman()` — selection model (two-step + MLE); validate vs R `sampleSelection`
+- `feglm` binomial FE absorption — **decision required, NOT in v1.2 as scoped**;
+  flag in `FUTURE_WORK.md`. Stata `felogit`/`feprobit` (conditional/Chamberlain)
+  and `fixest::feglm(binomial)` (IRLS-with-demeaning) are different estimators
+  sharing a name; do not implement either until resolved.
 - First-class `.margins()` / `.predict()`; parity vs Stata `poisson` / `nbreg` /
   `tobit` / `heckman` / `ologit` / `oprobit`
 - Ships at **Beta** in the maturity table; `tobit` / `heckman` backend recon
