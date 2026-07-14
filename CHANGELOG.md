@@ -2,6 +2,13 @@
 
 ## [1.1.0] - 2026-07-12
 
+> **⚠ SUPERSEDES ORIGINAL SPIKE REPORT §5** — The original eval report
+> claimed that pyfixest applies `√(n/(n−k))` to HC2, creating a
+> discrepancy with Stata. Source verification during the ols() phase
+> (2026-07-13) found this claim is **incorrect**. See [D1 Correction]
+> below. The original report's §5 table should be read with this
+> correction in mind.
+
 ### Breaking Changes
 
 #### `fe()`: HC2/HC3 on fixed-effects models now raises `VcovTypeNotSupportedError`
@@ -88,21 +95,54 @@ For `fe()` with `cluster=`, pyfixest's CRV1 is used (matching Stata's
 between Stata's default (no SSC) and `small` variant (with SSC). Not
 implemented now — noted for `ols()` phase.
 
-### ols() HAC Default Flag (Noted, Not Fixed)
+### ols() Covariance Decisions (Resolved)
+
+#### Default `cov_type` changed to `HC2`
+
+`ols()` defaults to `cov_type="HC2"` rather than Stata's bare `nonrobust`
+default. This is a deliberate product decision, not a parity deviation:
+defaulting to non-robust standard errors is widely considered poor applied
+practice — it silently understates uncertainty under heteroskedasticity,
+the single most common applied-econometrics footgun. Users who want exact
+Stata-default parity should pass `cov_type='nonrobust'` explicitly. This
+preserves both the parity promise (the option to exactly match Stata is one
+keyword away) and sound econometric defaults.
+
+#### HAC `adjust=False` (matches NW1987, R, statsmodels)
 
 OE's `ols()` HAC path defaults to uncorrected Newey-West (`adjust=False`),
-which deviates from Stata's `newey` command (always applies `N/(N-K)`).
-This is independent of the pyfixest integration and should be the first
-thing investigated when the `ols()` phase kicks off.
+matching the original Newey & West (1987) specification, R's
+`sandwich::NeweyWest(adjust=FALSE)`, and statsmodels. This deviates from
+Stata's `newey` command (which always applies `N/(N-K)`). The `adjust=True`
+option is available for users who need Stata's correction.
+
+#### Category B: F-stat Convention (Source-Confirmed, Correctness Fix)
+
+**Stata's `regress, robust` does not report the ANOVA F-statistic.** The
+Stata manual (`regress.pdf`, Methods and Formulas section) states:
+*"When vce(robust) is specified, the ANOVA test is not valid, and the
+statistic corresponds to a Wald test based on the robustly estimated
+variance matrix."*
+
+This is a genuine source-confirmed correctness finding, not a cosmetic
+change. OE's `_compute_f_stat()` was previously using the ANOVA form
+(residual sum of squares decomposition), which is only valid under
+homoskedasticity. It now uses the Wald form `F = (Rβ̂)'(RVR')⁻¹(Rβ̂)/q`
+where V is the actual cov_type-dependent VCE from the fit. This matches
+Stata's behaviour: ANOVA F under `vce(ols)`, Wald F under `vce(robust)`.
+
+The pyfixest backend's `_f_statistic` was also verified (tests ALL
+coefficients, q=k, not slopes-only q=k-1) and is not used — OE computes
+its own Wald F to ensure the correct reference distribution.
 
 ### D1 Correction: HC2/HC3 dof Scaling — Spike Report Superseded
 
 **The original spike/eval report (§5) claimed that pyfixest applies
-`√(n/(n−k))` to HC2, creating a discrepancy with Stata. Source verification
-during the ols() phase (2026-07-13) found this claim is incorrect.**
+`√(n/(n−k))` to HC2, creating a discrepancy with Stata. This claim is
+incorrect and has been superseded.**
 
-All four independently verified sources converge on the same HC2/HC3 formula
-with **no extra dof factor**:
+All four independently verified sources converge on the same HC2/HC3
+formula with **no extra dof factor**:
 
 | Source | HC2 formula | HC3 formula |
 |---|---|---|
@@ -112,6 +152,8 @@ with **no extra dof factor**:
 | OE `white_cov()` `cov.py:129-209` | `e²/(1−h)` | `e²/(1−h)²` |
 
 **D1 is closed as a non-issue: no HC2/HC3 correction is needed anywhere.**
-The `√(n/(n−k))` claim did not survive contact with actual source and has
-been superseded. The original eval report's §5 table should be read with
-this correction in mind.
+
+---
+
+*Future work items (HC4/HC4m/HC5, non-Bartlett HAC kernels, pyfixest
+nid/CRV3, SSC toggle) are logged in `FUTURE_WORK.md`.*
