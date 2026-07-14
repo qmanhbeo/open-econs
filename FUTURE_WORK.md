@@ -216,22 +216,23 @@ available in R's `sandwich::NeweyWest` but not in OE.
 
 ## Test Layout — Deferred Migrations
 
-### Root-Level Test Files → `non-stata-nor-r/`
+### Root-Level Test Files → `non_stata_nor_r/`
 
 - **What:** ~20 unit/cross-check test files at the `tests/` root
   (`test_cem.py`, `test_psm.py`, `test_nls.py`, `test_synth.py`,
   `test_synth_placebo.py`, `test_did.py`, `test_event_study.py`,
   `test_fe.py`, `test_ols.py`, `test_iv.py`, etc.) should migrate to
-  `tests/non-stata-nor-r/` per the finalized 4-role taxonomy.
+  `tests/non_stata_nor_r/` per the finalized 4-role taxonomy.
 - **Why deferred:** Large scope (~20 files), complex cross-references
   to both Stata and R fixture directories, purely cosmetic (no parity
   impact), real regression risk if paths break. The Stata/R parity
   tests (the core product per standing rule 2) are already correctly
   organized; this is polish, not substance.
-- **Status:** Deferred. Track as its own work item; do not fold into
-  parity-related sessions.
+- **Status:** Delivered (2026-07-14). 36 files migrated, 4 relative
+  imports fixed (`from .r.r_runner` → `from ..r.r_runner`), full suite
+  804 passed, 0 regressions.
 - **Decision:** 2026-07-14, layout migration session.
 
 ---
 
-*Last updated: 2026-07-14, Sun-Abraham D13 delivered (R parity), Gardner D12 delivered.*
+*Last updated: 2026-07-14, test layout migration delivered.*
