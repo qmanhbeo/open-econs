@@ -122,15 +122,20 @@ class TestIVHAC:
         return pd.DataFrame({"y": y, "x": x, "z": z, "time": t})
 
     def test_just_identified_matches_ols(self, df_hac):
+        # Non-FE IV HAC goes through linearmodels (debiased=False by default),
+        # which does not apply N/(N-K).  OE's ols() HAC also defaults to
+        # uncorrected NW (hac_adjust=False).  Compare same-convention: both
+        # uncorrected.
         r_iv = oe.iv("y ~ 1 | x ~ z", data=df_hac, cov_type="HAC", lags=2, time="time")
         r_ols = oe.ols("y ~ x", data=df_hac, cov_type="HAC", lags=2, time="time")
-        # iv() names coefficients 'exog'/'endog', ols() names 'Intercept'/'x'
         np.testing.assert_allclose(
             r_iv.std_errors.values, r_ols.std_errors.values,
             atol=1e-12, rtol=1e-10,
         )
 
     def test_just_identified_hac_adjust(self, df_hac):
+        # Both sides with hac_adjust=True: linearmodels debiased=True (IV)
+        # and OE newey_west_cov(adjust=True) (OLS).  Both apply N/(N-K).
         r_iv = oe.iv("y ~ 1 | x ~ z", data=df_hac, cov_type="HAC", lags=2,
                       time="time", hac_adjust=True)
         r_ols = oe.ols("y ~ x", data=df_hac, cov_type="HAC", lags=2,
