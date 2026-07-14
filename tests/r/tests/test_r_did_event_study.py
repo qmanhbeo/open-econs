@@ -16,7 +16,7 @@ import pytest
 
 import open_econs as oe
 
-from .r.r_runner import read_r
+from ..r_runner import read_r
 
 pytestmark = pytest.mark.r
 
@@ -27,7 +27,7 @@ R_DID = read_r("did_basic")
 R_DID_CL = read_r("did_cluster")
 R_ES = read_r("event_study")
 
-FIXTURES_DIR = Path(__file__).resolve().parent / "stata" / "fixtures"
+FIXTURES_DIR = Path(__file__).resolve().parents[2] / "stata" / "fixtures"
 
 
 class TestDiDRParityBasic:

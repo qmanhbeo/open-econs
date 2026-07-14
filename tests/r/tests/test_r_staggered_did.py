@@ -25,7 +25,7 @@ import pytest
 
 import open_econs as oe
 
-from .r.r_runner import read_r
+from ..r_runner import read_r
 
 pytestmark = pytest.mark.r
 
@@ -57,7 +57,7 @@ class TestStaggeredDiDRParityBalanced:
     @pytest.fixture(autouse=True)
     def _run(self):
         df = pd.read_csv(
-            Path(__file__).resolve().parent / "stata" / "fixtures" / "df_panel.csv"
+            Path(__file__).resolve().parents[2] / "stata" / "fixtures" / "df_panel.csv"
         )
         # Balanced: keep entities 0-19 (gvar=5 entities 20-29 excluded)
         df = df[df["entity"] < 20].copy()
@@ -106,7 +106,7 @@ class TestStaggeredDiDRParityUnbalanced:
     @pytest.fixture(autouse=True)
     def _run(self):
         df = pd.read_csv(
-            Path(__file__).resolve().parent / "stata" / "fixtures" / "df_panel_unbalanced.csv"
+            Path(__file__).resolve().parents[2] / "stata" / "fixtures" / "df_panel_unbalanced.csv"
         )
         df = df[df["entity"] < 23].copy()
         df["treat"] = 0.0
