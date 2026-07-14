@@ -98,7 +98,7 @@ def arima(
         nobs=int(res.nobs),
         residuals=pd.Series(res.resid, name="resid"),
         fitted_values=pd.Series(res.fittedvalues, name="fitted"),
-        order=tuple(order),
+        order=order,
         method=method,
         call=call,
     )

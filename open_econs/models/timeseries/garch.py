@@ -12,15 +12,34 @@ from arch import arch_model
 from arch.univariate.base import ARCHModelResult
 
 
+# arch 8.0.0 renamed several model identifiers and dropped standalone spellings:
+#   * GJR-GARCH is selected via `vol="GARCH"` with `o > 0` (no `vol="GJR"` name).
+#   * no ARMA mean model exists (only Constant/Zero/AR/ARX/HAR/HARX/LS).
+# arch's type stubs only list the Capital spellings, so we keep open_econs's
+# lowercase API and map to arch's canonical identifiers at the call site.
+_MEAN_MAP: dict[str, Literal["Constant", "Zero", "LS", "AR", "ARX", "HAR", "HARX", "constant", "zero"]] = {
+    "constant": "Constant",
+    "zero": "Zero",
+    "ar": "AR",
+    "harx": "HARX",
+}
+_VOL_MAP: dict[str, Literal["GARCH", "ARCH", "EGARCH", "FIGARCH", "APARCH", "HARCH"]] = {
+    "GARCH": "GARCH",
+    "EGARCH": "EGARCH",
+    "ARCH": "ARCH",
+    "HARCH": "HARCH",
+}
+
+
 def garch(
     y: pd.Series | np.ndarray,
     *,
     p: int = 1,
     q: int = 1,
     o: int = 0,
-    mean: Literal["constant", "zero", "ar", "arma", "harx"] = "constant",
+    mean: Literal["constant", "zero", "ar", "harx"] = "constant",
     lags: int | None = None,
-    vol: Literal["GARCH", "EGARCH", "GJR", "ARCH", "HARCH", "Constant"] = "GARCH",
+    vol: Literal["GARCH", "EGARCH", "ARCH", "HARCH"] = "GARCH",
     dist: Literal["normal", "t", "skewt", "ged"] = "normal",
     power: float = 2.0,
     **fit_kwargs: Any,
@@ -39,12 +58,14 @@ def garch(
         Order of the ARCH term.
     o : int, default 0
         Order of the asymmetry (leverage) term (GJR/EGARCH).
-    mean : {"constant", "zero", "ar", "arma", "harx"}, default "constant"
+    mean : {"constant", "zero", "ar", "harx"}, default "constant"
         Mean model.
     lags : int, optional
-        Lag(s) for an ``"ar"`` / ``"arma"`` mean model.
-    vol : {"GARCH", "EGARCH", "GJR", "ARCH", "HARCH", "Constant"}, default "GARCH"
-        Volatility process.
+        Lag(s) for an ``"ar"`` / ``"harx"`` mean model.
+    vol : {"GARCH", "EGARCH", "ARCH", "HARCH"}, default "GARCH"
+        Volatility process.  GJR-GARCH is obtained with ``vol="GARCH"`` and
+        ``o > 0`` (arch 8.0.0 folded the standalone ``"GJR"`` spelling into the
+        asymmetric GARCH model).
     dist : {"normal", "t", "skewt", "ged"}, default "normal"
         Error distribution.  Defaults to Normal, matching Stata ``arch`` and
         ``rugarch``.
@@ -71,9 +92,9 @@ def garch(
 
     am = arch_model(
         s.values,
-        mean=mean,
+        mean=_MEAN_MAP[mean],
         lags=lags,
-        vol=vol,
+        vol=_VOL_MAP[vol],
         p=p,
         o=o,
         q=q,
