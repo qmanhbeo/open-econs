@@ -307,7 +307,6 @@ f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
         b = np.array([self.coefficients[c] for c in common], dtype=float)
 
         names = list(common)
-        k = len(names)
 
         if isinstance(r_matrix, str):
             R, r_vec = self._constraint_string_to_matrix(r_matrix, names)
@@ -322,7 +321,6 @@ f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
         self, constraint: str, names: list[str],
     ) -> tuple[np.ndarray, np.ndarray]:
         """Parse ``"var1 = var2"`` or ``"var1 = 0"`` into R, r."""
-        import re as _re
         parts = constraint.split("=")
         if len(parts) != 2:
             raise ValueError(

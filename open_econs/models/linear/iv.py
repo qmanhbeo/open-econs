@@ -300,13 +300,9 @@ def iv(
             data = data.sort_values(time)
 
     parsed = _parse_iv_formula(formula, data)
-    y_arr = parsed["y"]
-    X_full = parsed["X"]
     has_inner_endog = parsed["has_inner_endog"]
-    instr_matrix = parsed["instr_matrix"]
-    exog_idx = parsed["exog_idx"]
-    endog_idx = parsed["endog_idx"]
     endog_vars = parsed["endog_vars"]
+    exog_idx = parsed["exog_idx"]
     exog_vars_in_formula = [parsed["coef_names"][i] for i in exog_idx
                             if parsed["coef_names"][i] != "Intercept"]
 
@@ -425,16 +421,6 @@ def _iv_pyfixest_path(
         if c not in seen:
             seen.add(c)
             unique_cols.append(c)
-
-    from formulaic import Formula
-
-    original_n = len(parsed.get("original_data", pd.DataFrame()))
-    dropped = parsed["dropped"]
-
-    # Reconstruct a clean working DataFrame from the original data
-    # We need the original data to access FE/cluster columns
-    # The parsed data has aligned index, so use that
-    keep = data_index
 
     # We need the original data for FE/cluster/time columns
     # Since we don't have it directly, reconstruct from parsed
@@ -771,10 +757,6 @@ def _iv_linearmodels_path(
         hansen_j = float("nan")
         hansen_p = float("nan")
 
-    n_absorbed = _count_absorbed_dof(
-        pd.DataFrame({"__dummy": np.ones(len(parsed["index"]))}, index=parsed["index"]),
-        fe_parts,
-    ) if fe_parts else 0
     df_resid_adj = max(int(fitted.df_resid), 1)
 
     return IVResult(

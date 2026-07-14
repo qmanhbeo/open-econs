@@ -215,7 +215,6 @@ def fe(
     # ---- HAC path: retain the original statsmodels implementation ----
     # (pyfixest does not support HAC with absorbed FE)
     use_hac = cov_type == "HAC"
-    use_cluster = cluster is not None
 
     if use_hac and len(fe_parts) > 2:
         raise ValueError(
@@ -344,7 +343,6 @@ def _fe_pyfixest_path(
     ci_df = fit.confint()
 
     # pyfixest reports slopes only — map directly.
-    n_cols = len(kept_columns)
     coef_arr = np.array([coef_dict.get(c, 0.0) for c in kept_columns])
     se_arr = np.array([se_dict.get(c, np.nan) for c in kept_columns])
     t_arr = np.array([tstat_dict.get(c, np.nan) for c in kept_columns])

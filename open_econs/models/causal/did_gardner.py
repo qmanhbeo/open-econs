@@ -171,7 +171,6 @@ def _gardner_two_stage_vce(
     from numpy.linalg import inv
 
     n, k2 = X2.shape
-    k1 = X1.shape[1]
 
     # (X2'X2)^{-1}
     XtX2_inv = inv(X2.T @ X2)
@@ -297,7 +296,6 @@ def did_gardner(
     # Fit first stage
     from numpy.linalg import lstsq
     beta1, _, _, _ = lstsq(X1, y1, rcond=None)
-    fitted1 = X1 @ beta1
 
     # Predict for ALL observations
     # Need to build X1_full for all observations
@@ -335,7 +333,7 @@ def did_gardner(
     se2 = np.sqrt(np.maximum(np.diag(V), 0.0))
 
     # t-stats and p-values
-    from scipy.stats import norm as _norm, t as _t_dist
+    from scipy.stats import t as _t_dist
     df_r = n - k
     t_arr = np.where(se2 > 0, beta2 / se2, np.nan)
     p_arr = 2.0 * _t_dist.sf(np.abs(t_arr), df=df_r)
@@ -344,11 +342,6 @@ def did_gardner(
     t_crit = _t_dist.ppf(0.975, df=df_r)
     ci_lower = beta2 - t_crit * se2
     ci_upper = beta2 + t_crit * se2
-
-    # R-squared from first stage (on untreated)
-    ss_resid_1 = float(np.sum((y1 - fitted1) ** 2))
-    ss_tot_1 = float(np.sum((y1 - np.mean(y1)) ** 2))
-    r_squared_1 = 1.0 - ss_resid_1 / ss_tot_1 if ss_tot_1 > 0 else 0.0
 
     # R-squared from second stage
     ss_resid_2 = float(np.sum(second_u ** 2))

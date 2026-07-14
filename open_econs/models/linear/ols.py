@@ -178,7 +178,6 @@ def ols(
     clusters = list(cluster) if isinstance(cluster, (list, tuple)) else None
     multiway = clusters is not None and len(clusters) > 1
     use_hac = cov_type == "HAC"
-    use_single_cluster = isinstance(cluster, str)
 
     if use_hac:
         return _ols_hac_path(
@@ -273,7 +272,6 @@ def _ols_pyfixest_path(
         # Pass the original formula through to pyfixest.  Build `work` from
         # the original data columns (pyfixest will re-expand C() itself).
         pf_fml = formula
-        work_cols = [c for c in data.columns if c != y_name or c in yy.columns]
         work = data.loc[XX.index].copy()
         if y_name not in work.columns:
             work[y_name] = yy.values.ravel()

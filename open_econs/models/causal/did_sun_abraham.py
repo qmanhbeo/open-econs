@@ -209,13 +209,6 @@ def _build_sunab_dummies(
     # Compute relative time: period - cohort
     rel_period = np.where(never_treated, np.nan, period - cohort)
 
-    # Identify unique cohorts (excluding never-treated)
-    unique_cohorts = np.unique(cohort[~never_treated])
-
-    # Identify unique relative periods (excluding never-treated and ref_period)
-    valid_mask = ~never_treated & (rel_period != ref_period)
-    unique_rel_periods = np.unique(rel_period[valid_mask])
-
     # Build dummy matrix for OBSERVED cohort-period combinations only.
     # Unobserved combinations (e.g. time::-4:cohort::2) must not create
     # all-zero columns, which would distort collinearity detection.
@@ -685,7 +678,6 @@ def did_sun_abraham(
     ci_upper = beta + t_crit * se_all
 
     # ── R-squared (fixest convention: SST over ALL observations) ────────
-    ss_resid = float(np.sum(residuals ** 2))
     sst_all = float(np.sum((y_arr - np.mean(y_arr)) ** 2, dtype=float))
     # R² = 1 - sigma2 * (n - nparams) / (SST_all / (n - 1))
     #    = 1 - SSR * (n - 1) / (SST_all * (n - nparams))
