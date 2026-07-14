@@ -19,6 +19,7 @@ fixtures. The `-m "not stata and not r"` expression is kept only as an opt-in
 |--------|---------|
 | `@pytest.mark.stata` | Compares against a Stata-generated `.dta` fixture. |
 | `@pytest.mark.r` | Compares against R output produced via `Rscript`. |
+| `@pytest.mark.synth_placebo` | Synthetic control and placebo inference tests. Excluded from default runs. |
 
 ### Parity scope and counts
 
@@ -63,23 +64,24 @@ that deselects the parity tests.
 ### 1. Default — full suite, fixture-only (routine iteration)
 
 ```bash
-pytest            # or: pytest tests/
+pytest -m "not synth_placebo"            # or: pytest -m "not synth_placebo" tests/
 ```
 
-- Runs **every** test in the suite, including the `stata`/`r` parity tests.
+- Runs every test **except** synth-placebo tests, including the `stata`/`r` parity tests.
 - All parity tests read committed `.dta` fixtures only; `run_do()` is gated
   behind `OE_REGENERATE_FIXTURES`, so no Stata or R binary is launched and no
   fixture file is rewritten on disk.
-- This is the mode for everyday local work — it now exercises the full suite,
+- This is the mode for everyday local work — it exercises the full suite,
   so parity regressions surface without a separate command.
 
-### 2. Fast mode — skip parity tests (quick local iteration)
+### 2. Fast mode — skip parity and synth-placebo tests (quick local iteration)
 
 ```bash
-pytest -m "not stata and not r"
+pytest -m "not stata and not r and not synth_placebo"
 ```
 
-- Deselects every `stata`/`r` test, so only the fast, non-parity tests run.
+- Deselects every `stata`/`r` test and every `synth_placebo` test, so only the
+  fast, non-parity tests run.
 - Same fixture-only behaviour as the default; just a smaller, quicker subset.
 - Use this when iterating on non-parity code and you don't need the parity
   assertions on every run.
