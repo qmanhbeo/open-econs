@@ -17,7 +17,7 @@ import pytest
 import open_econs as oe
 from open_econs.models.causal.rdd import _RDENSITY
 
-from ..stata_runner import FIXTURES_DIR, read_stata
+from ..stata_runner import INPUTS_DIR, read_stata
 
 pytestmark = pytest.mark.stata
 
@@ -41,7 +41,7 @@ def _load_stata_density_fixture() -> None:
 
 
 def _load() -> pd.DataFrame:
-    return pd.read_csv(FIXTURES_DIR / "df_rdd_density.csv")
+    return pd.read_csv(INPUTS_DIR / "df_rdd_density.csv")
 
 
 @pytest.mark.skipif(not _RDENSITY, reason="rddensity package not installed")

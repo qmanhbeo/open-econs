@@ -16,12 +16,12 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from .stata_runner import FIXTURES_DIR
+from .stata_runner import INPUTS_DIR
 
 
 def _load_csv(name: str) -> pd.DataFrame:
-    """Load a fixed CSV from the fixtures directory."""
-    path = FIXTURES_DIR / f"{name}.csv"
+    """Load a fixed CSV from the inputs directory."""
+    path = INPUTS_DIR / f"{name}.csv"
     if not path.exists():
         raise FileNotFoundError(f"Fixture not found: {path}")
     return pd.read_csv(path)

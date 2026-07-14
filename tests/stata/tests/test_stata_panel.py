@@ -11,7 +11,7 @@ import pytest
 
 import open_econs as oe
 
-from ..stata_runner import FIXTURES_DIR, read_stata
+from ..stata_runner import INPUTS_DIR, read_stata
 
 pytestmark = pytest.mark.stata
 
@@ -163,7 +163,7 @@ class TestFEVcovIndexConsistency:
     @pytest.fixture(autouse=True)
     def _data(self):
         self.df = pd.read_csv(
-            str(FIXTURES_DIR / "df_panel.csv")
+            str(INPUTS_DIR / "df_panel.csv")
         )
 
     def test_entity_only(self):
@@ -244,7 +244,7 @@ class TestFixedEffectsKwarg:
     @pytest.fixture(autouse=True)
     def _data(self):
         self.df = pd.read_csv(
-            str(FIXTURES_DIR / "df_panel.csv")
+            str(INPUTS_DIR / "df_panel.csv")
         )
 
     def test_1way_matches_entity(self):

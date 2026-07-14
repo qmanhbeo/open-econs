@@ -24,11 +24,11 @@ import pandas as pd
 import pytest
 
 from open_econs.models.causal.cem import cem
-from ..stata_runner import DO_DIR, EXPECTED_DIR, FIXTURES_DIR, STATA_EXE, run_do
+from ..stata_runner import DO_DIR, EXPECTED_DIR, INPUTS_DIR, STATA_EXE, run_do
 
 pytestmark = pytest.mark.stata
 
-FIXTURE = FIXTURES_DIR / "df_cem_autocuts.csv"
+FIXTURE = INPUTS_DIR / "df_cem_autocuts.csv"
 
 AUTOCUTS_METHODS = ["sturges", "fd", "scott", "ss"]
 

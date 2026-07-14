@@ -16,7 +16,7 @@ import pytest
 
 import open_econs as oe
 
-from ..stata_runner import FIXTURES_DIR, read_stata
+from ..stata_runner import INPUTS_DIR, read_stata
 
 pytestmark = pytest.mark.stata
 
@@ -117,7 +117,7 @@ class TestStaggeredDiDWithCovariatesUnbalanced:
 
     @pytest.fixture(autouse=True)
     def _run(self):
-        df = pd.read_csv(FIXTURES_DIR / "df_panel_unbalanced.csv")
+        df = pd.read_csv(INPUTS_DIR / "df_panel_unbalanced.csv")
         # Exclude gvar=5 entities (23-29) — they have no post-treatment periods
         df = df[df["entity"] < 23].copy()
         df["treat"] = 0.0

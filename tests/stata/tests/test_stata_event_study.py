@@ -15,7 +15,7 @@ pytestmark = pytest.mark.stata
 
 S_ES = read_stata("event_study")
 
-FIXTURE_CSV = "tests/stata/fixtures/df_event_study.csv"
+FIXTURE_CSV = "tests/stata/fixtures/inputs/df_event_study.csv"
 
 
 @pytest.fixture(scope="module")

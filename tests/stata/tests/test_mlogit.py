@@ -15,7 +15,7 @@ import pytest
 
 import open_econs as oe
 
-from ..stata_runner import FIXTURES_DIR, read_stata
+from ..stata_runner import INPUTS_DIR, read_stata
 from ...r.r_runner import read_r
 
 S = read_stata("mlogit_basic")
@@ -26,7 +26,7 @@ def _suffix(v: str) -> str:
 
 
 def _load_df() -> pd.DataFrame:
-    return pd.read_csv(FIXTURES_DIR / "df_mlogit.csv")
+    return pd.read_csv(INPUTS_DIR / "df_mlogit.csv")
 
 
 @pytest.mark.stata
