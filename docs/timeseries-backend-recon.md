@@ -1,0 +1,177 @@
+# Time-Series Backend Recon (`arch` / `statsmodels.tsa` vs Stata / R)
+
+**Status:** Source-verified recon, pre-build. Written during the Step-3 source
+recon for v1.1.0. **No wrapper code has been written yet.** This document records
+the convention gaps discovered between the wrapped backends (`arch.unitroot`,
+`statsmodels.tsa.arima.model.ARIMA`, `arch.arch_model`) and the Stata/R reference
+tools, so the parity strategy can be decided **before** any code is committed.
+
+**Standing-rule reminder:** wrapping is an implementation strategy, not a parity
+exemption. Every gap below must be *either* root-caused-and-fixed,
+corrected-for in the OE wrapper, or documented as a source-confirmed intentional
+convention. None may be silently absorbed.
+
+**Tools verified (all present):**
+- Stata 17 base: `dfuller.ado` (v1.5.0), `pperron.ado` (v1.2.0), `dfgls.ado`
+  (v1.2.3), `arima.ado`, `arch.ado`. **KPSS is NOT in Stata 17 base** (community
+  SSC only). **No standalone `garch.ado`** — GARCH is `arch` with `garch()`.
+- R 4.6.1: `urca` (ur.df / ur.pp / ur.kpss / ur.za) installed. `forecast` /
+  `rugarch` **NOT installed** (defaults below are documented, not source-verified
+  in this environment).
+- `arch` 8.0.0: `unitroot` (ADF / DFGLS / PhillipsPerron / KPSS / ZivotAndrews /
+  VarianceRatio), `arch_model`.
+- `statsmodels` 0.14.6: `tsa.arima.model.ARIMA`.
+
+---
+
+## 1. Unit-root tests — critical-value-table vintage is the crux
+
+### 1.1 ADF (`adf()`)
+
+| Dimension | `arch.unitroot.ADF` | Stata `dfuller` | R `ur.df` |
+|---|---|---|---|
+| Regression | Δy = ρ·yₜ₋₁ + ΣβᵢΔyₜ₋ᵢ + (const/trend) | identical (case2=const, case4=trend, case1=none, case3=drift) | identical (`type` none/drift/trend) |
+| Statistic | t on yₜ₋₁ (τ) | t on yₜ₋₁ ("Z(t)") — **only Z(t), never Z(ρ)** | τ (t on yₜ₋₁) |
+| **Default lags** | **auto AIC**, `max_lags = 12·(n/100)^¼` (Schwert) | **0** (no automatic lag selection) | **fixed 1** (`selectlags="Fixed"`) |
+| **Critical VALUES** | **MacKinnon (2010)** `tau_2010` response surface | **Fuller (1976)** finite-sample table (no citation string) | **Fuller-style** banded finite-sample table |
+| **p-value** | **MacKinnon (1994)** response surface (`tau_small/large_p`) | **MacKinnon (1994)** (`MacP`, matching coeffs) | **none returned** |
+
+**Conflict (real, must decide):** arch's displayed *critical values* come from
+MacKinnon (2010); Stata prints Fuller (1976) tables; R prints banded Fuller.
+These agree at large N (same asymptotic limit) but **diverge in small samples**.
+arch's *p-value* matches Stata's "MacKinnon approximate p-value" (both MacKinnon
+1994). So the **p-value is a clean cross-check anchor**, but the **printed CV
+table is not identical** to Stata's. This is the exact silent-mismatch risk the
+wrap strategy was flagged for.
+
+**Decision required:** which CV source does `adf()` treat as authoritative for the
+printed 1/5/10% table, and do we expose both MacKinnon (2010) values (backend)
+and offer a Fuller (1976) path to match Stata's printed numbers? Recommended:
+report the MacKinnon (1994) **p-value** as the primary parity anchor (matches
+Stata), and document that the printed CVs are MacKinnon (2010). Lag default must
+be set deliberately (see §5).
+
+### 1.2 Phillips-Perron (`pp()`)
+
+| Dimension | `arch.unitroot.PhillipsPerron` | Stata `pperron` | R `ur.pp` |
+|---|---|---|---|
+| Regression | y on yₜ₋₁ (+trend), **no aug lags** | y on yₜ₋₁ (+trend), levels | y on yₜ₋₁ (+trend) |
+| Kernel | **Bartlett** (Newey-West, `cov_nw`) | **Bartlett** (NW) | **Bartlett** (NW) — *not* QS |
+| **Default bandwidth** | `12·(n/100)^¼` (Schwert, fixed) | `int(4·(T/100)^(2/9))` | `trunc(4·(n/100)^0.25)` ("short") |
+| Statistic default | **Z(t)** (`test_type="tau"`) | **Z(t)** (+ Z(ρ) also printed) | **Z(alpha)** (`type="Z-alpha"`) |
+| **Critical VALUES** | MacKinnon **ADF** tables (adf-t / adf-z) | **Fuller (1976)** | inline PP 1/n response surface |
+| p-value | MacKinnon (1994) | MacKinnon (1994) on Z(t) | none |
+
+**Conflict:** bandwidth exponent differs (2/9 Stata vs 1/4 R/arch); R default
+stat is Z-alpha not Z-tau; **CV vintage differs** (arch reuses MacKinnon ADF
+tables; Stata uses Fuller 1976; R uses a PP response surface). Another
+silent-mismatch surface.
+
+### 1.3 KPSS (`kpss()`)
+
+| Dimension | `arch.unitroot.KPSS` | R `ur.kpss` | Stata |
+|---|---|---|---|
+| Null | stationary | stationary | (community only) |
+| Type default | `"c"` (level) | `"mu"` (level) | — |
+| **CV vintage** | **Hobijn et al. (2004)** generalized (arch's own 100M-rep sim) | **Kwiatkowski et al. (1992)** original asymptotic (0.347/0.463/0.574/0.739 @10/5/2.5/1%) | — |
+| **Default bandwidth** | Hobijn (1998) data-dependent (`n^(2/9)` rule) | `trunc(4·(n/100)^0.25)` | — |
+
+**Conflict:** CV values are numerically close but from **different sources**
+(Hobijn 2004 vs KPSS 1992). e.g. level 5%: arch ≈ 0.4614 vs KPSS 1992 = 0.463.
+Small but real divergence; the printed 1% differs slightly more. Decision needed
+on which to present as authoritative.
+
+### 1.4 DFGLS (`dfgls()`)
+
+| Dimension | `arch.unitroot.DFGLS` | Stata `dfgls` |
+|---|---|---|
+| GLS detrend | ERS, cbar = −7.0 (c) / −13.5 (ct) | ERS, cbar = −7.0 / −13.5 (matches) |
+| **Default lags** | auto AIC, max `12·(n/100)^¼`, **Perron-Qu OLS-detrended lag select** | Schwert `int(12·(n/100)^0.25)`, Ng-Perron sequential-t / SIC / MAIC |
+| **CV vintage** | MacKinnon `dfgls` tables (arch sim) | ERS (1996) / Fuller / Cheung-Lai (1995) |
+
+**Conflict:** CV vintage differs (arch MacKinnon-dfgls vs Stata ERS1996/Fuller).
+Lag-selection method differs (AIC vs Ng-Perron sequential-t). Closer than ADF but
+still not identical at small N.
+
+### 1.5 Zivot-Andrews (`zivot_andrews()`)
+
+| Dimension | `arch.unitroot.ZivotAndrews` | R `ur.za` |
+|---|---|---|
+| Break models | "c" / "t" / "ct" | "intercept" / "trend" / "both" |
+| **Default lags** | ADF(ct) AIC selection | **0** (`lag=NULL`→0) |
+| **CV vintage** | **arch Monte Carlo** (100k reps, 2000 obs) | **Zivot-Andrews (1992)** asymptotic |
+| p-value | none | none |
+
+**Conflict:** CVs are from **different sources** (arch's own MC vs ZA1992
+asymptotic) and can differ non-trivially. Default lag 0 (R) vs AIC (arch).
+
+---
+
+## 2. ARIMA / ARMA (`arima()` / `arma()`)
+
+| Dimension | `statsmodels.ARIMA` | Stata `arima` | R `stats::arima` |
+|---|---|---|---|
+| **Default method** | **pure ML** (state-space Kalman, `method='statespace'`) | **pure ML** (Kalman, `ml model ... maximize`) | **CSS-ML** (`method="CSS-ML"` default) |
+| Constant/mean | constant **in** if d=0; **dropped** if d>0/D>0 | **in** by default (`noconstant` to drop) | `include.mean=TRUE` |
+| Dist / trend | `trend=None`→`'c'` (d=0) else `'n'` | constant by default | mean in |
+| Optimizer | Newton/BFGS (statespace) | `bhhh 5 bfgs 10`, `vce opg` | `optim` BFGS, `transform.pars` |
+
+**Conflict (real):** **R defaults to CSS-ML; statsmodels and Stata default to
+pure ML.** To match R's `arima()` output, OE must either force a CSS-ML-equivalent
+path or document that `arima()` follows Stata/statsmodels ML by default. Known
+historical **MA/AR sign-convention** mismatches between statsmodels and
+R/Stata also require an empirical coefficient check before parity is claimed.
+
+**No GARCH/ARIMA variance-targeting issue** — see §3.
+
+---
+
+## 3. GARCH (`garch()`) — CLEAN, low-risk
+
+| Dimension | `arch.arch_model` | Stata `arch` (+`garch()`) | R `rugarch` (documented) |
+|---|---|---|---|
+| Default volatility | **GARCH(1,1)** (`vol="GARCH", p=1, q=1`) | user must specify `arch()/garch()` | `garchOrder=c(1,1)` |
+| Default mean | Constant (in) | constant in | `include.mean=TRUE` |
+| **Default distribution** | **Normal** | **Gaussian** | **"norm"** |
+| **Variance targeting** | **none — ω estimated freely (full MLE)** | **none — ω estimated freely** | **default FALSE — ω estimated freely** |
+| Estimator | MLE, all params joint | MLE (BHHH/BFGS, `vce opg`) | MLE |
+
+**Finding:** **No variance-targeting divergence.** arch (confirmed: zero
+`variance_targeting` hits in source; ω is parameter[0]), Stata `arch`, and
+rugarch all estimate the variance constant freely. All default to Gaussian. The
+only divergence is the GARCH lag default (arch/rugarch = (1,1); Stata requires
+explicit `garch(1)`), which is trivially reconciled by always passing the order.
+**GARCH is therefore the lowest-risk v1.1.0 item and can ship first once the
+unit-root CV decision (§1,§2) is settled.**
+
+---
+
+## 4. Required product decisions (gating wrapper code)
+
+1. **ADF critical-value source.** Backend supplies MacKinnon (2010) values; Stata
+   prints Fuller (1976); R prints banded Fuller. p-values agree (MacKinnon 1994).
+   *Pick one authoritative CV source for the printed table, or expose both.*
+2. **KPSS / DFGLS / ZA critical-value source.** Different simulation bases
+   (Hobijn 2004 / MacKinnon-dfgls / arch-MC) vs (KPSS 1992 / ERS1996 / ZA1992).
+   *Decide authoritative source per test.*
+3. **Lag / bandwidth DEFAULTS.** No two tools agree for ADF (0 / AIC-auto /
+   fixed-1) or PP/KPSS bandwidth (exponents 2/9 vs 1/4). *Decide OE defaults and
+   whether to mirror Stata (0 lags) or arch (auto).*
+4. **ARIMA estimation method default.** Match Stata/statsmodels (pure ML) or R
+   (CSS-ML)? *Pick; document the other as an option.*
+5. **R `forecast`/`rugarch`** are not installed here — their defaults above are
+   documented, not source-verified. *Install and re-verify before claiming R
+   parity for GARCH/ARIMA.*
+
+## 5. Recommended wrapper posture (pending decision)
+
+- Expose **every** relevant knob (`lags`, `trend`, `test_type`, `kernel`,
+  `bandwidth`, `method`) so the user can dial in Stata/R-equivalent behavior
+  rather than being locked to the backend default.
+- Make `adf()`/`pp()` default to **Stata-equivalent** lag behavior where a
+  reviewer expects Stata parity, but document the arch auto-lag alternative.
+- Report **MacKinnon (1994) p-values** as the cross-check anchor (agrees with
+  Stata) and label the CV table's vintage explicitly in `summary()`.
+
+*Recon performed 2026-07-14. No source files under `open_econs/` were modified
+by this recon except this document.*
