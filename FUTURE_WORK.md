@@ -147,4 +147,34 @@ available in R's `sandwich::NeweyWest` but not in OE.
 
 ---
 
-*Last updated: 2026-07-14, ols() phase closure.*
+## did() Phase — Backend and Extension Items
+
+### D10: did()/event_study() pyfixest Backend Swap (Deprioritized)
+
+- **What:** Route `did()` and `event_study()` through pyfixest for
+  maintenance consistency. Both currently use statsmodels OLS, which
+  produces correct results with full Stata parity. A pyfixest swap here
+  is cosmetic (same OLS math, different library) with real regression
+  risk for no user-facing benefit.
+- **Status:** Approved as deprioritized. Do not pursue unless the user
+  explicitly wants to unify all estimators on pyfixest. The benefit is
+  marginal; the risk is real.
+- **Decision:** D10 (2026-07-14).
+
+### D11: staggered_did() Aggregation Modes (Future Enhancement)
+
+- **What:** Expose `aggte()`-style dynamic/group/calendar aggregation
+  modes in `staggered_did()`. R's `did::aggte()` supports
+  `type = "dynamic"` (event-time ATTs), `type = "group"` (cohort-specific
+  ATTs), and `type = "calendar"` (calendar-time ATTs). OE's
+  `staggered_did()` currently only returns the simple pooled ATT and
+  per-cell ATTs.
+- **Status:** Approved as future enhancement, explicitly out of scope
+  for the current phase. These are additive scope beyond what's needed
+  to close the parity gap (D9).
+- **Reference:** R `did::aggte(type = "dynamic"|"group"|"calendar")`.
+- **Decision:** D11 (2026-07-14).
+
+---
+
+*Last updated: 2026-07-14, did() R parity anchors complete.*
