@@ -23,6 +23,7 @@ dependencies = [
     "linearmodels>=6.0",
     "jinja2>=3.0",
     "pyfixest==0.60.0",
+    "arch>=7.0",
 ]
 
 [project.optional-dependencies]

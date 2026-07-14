@@ -120,19 +120,48 @@ time-series, limited-DV, and diagnostics gaps while making the Stata/R parity
 suite and per-estimator maturity explicit.
 
 #### v1.1 — Time-series econometrics *(committed)*
-The largest gap flagged by the reviewer (macro / finance / energy users look for
-a `tsset` equivalent immediately). New `open_econs/models/timeseries/` module plus
-a `tsset` equivalent on `PanelContext` / `TimeSeriesContext` (remembered time
-ordering + lag operators):
-- Univariate: `arima()` / `arma()` (AIC/BIC, `.forecast()`)
-- Unit-root: `adf()`, `pp()`, `kpss()` (statistic, p-value, critical values)
-- Cointegration: `johansen()` (trace + max-eigenvalue), `engle_granger()`
-- Multivariate: `var()` (`.irf()`, `.fevd()`, `.granger()` Granger causality), `vecm()`
-- ARDL/ECM: `ardl()` (bounds test), `ecm()`
+
+**Backend strategy: wrap-and-verify over `statsmodels.tsa` + `arch` (hard
+dependencies), not a from-scratch numerical reimplementation.** This is the same
+trust story open-econs already tells with PyFixest for `feols`/`iv`: reuse
+battle-tested numerics, add the Stata/R-parity verification layer, the OE
+named-output contract (`.tidy()`, `.summary()`, immutable results), and fill
+genuine gaps the backends don't cover.
+
+> **Wrapping is an implementation strategy, NOT a parity exemption.** Every
+> wrapped function still requires the same source-verified parity discipline as
+> a from-scratch build — critical-value-table vintage, lag-selection defaults,
+> small-sample corrections, deterministic-term handling. A wrapped ADF that
+> silently uses different critical values than Stata's `dfuller` is exactly the
+> bug standing rule #2 exists to prevent. Source verification is never skipped
+> because the numerics are borrowed.
+
+- **New `open_econs/models/timeseries/` module** wrapping:
+  - `statsmodels.tsa` — `ARIMA`/`SARIMAX` (state-space ARIMA w/ `.forecast()`),
+    `VAR` (`.irf()`, `.fevd()`, `.test_causality()`), `VECM` + `coint_johansen`
+    (Johansen trace/max-eigenvalue), `ARDL`/`UECM` (Pesaran-Shin-Smith 2001
+    `.bounds_test()`, all 5 deterministic-term cases).
+  - `arch` — `unitroot` (`ADF`, `DFGLS`, `PhillipsPerron`, `KPSS`,
+    `ZivotAndrews`); `unitroot.cointegration` (`engle_granger`,
+    `phillips_ouliaris`); `arch_model` (full GARCH family).
+- **`TimeSeriesContext`** — the `tsset` equivalent: remembers time ordering,
+  frequency, and lag-operator conventions (mirrors how `PanelContext` remembers
+  entity/time structure).
+- **GARCH added to v1.1 scope** (real scope addition, not a North-Star item):
+  `garch()` / `TimeSeriesContext.garch()` via `arch_model`. Heavily wanted by
+  the macro/finance/energy users v1.1 targets; nearly free under the wrap
+  strategy. See `pyproject.toml` — `arch` is a hard dependency at the same tier
+  as `pyfixest`/`linearmodels`/`statsmodels`, not an optional `[timeseries]` extra.
 - Parity vs Stata `dfuller` / `pperron` / `kpss` / `vecrank` / `var` /
-  `vargranger` / `fcast` and R `urca` / `vars`
-- Sub-milestones (all under committed v1.1): 1.1.0 unit-root + ARIMA;
-  1.1.1 VAR/VECM + IRF/FEVD + Granger; 1.1.2 ARDL/ECM
+  `vargranger` / `fcast` / `arima` / `arch` and R `urca` / `vars` /
+  `forecast` / `rugarch`.
+- **Sub-milestones (all under committed v1.1):**
+  - **1.1.0** — unit-root tests (`adf()`/`pp()`/`kpss()`/`dfgls()`/`zivot_andrews()`
+    via `arch.unitroot`) + `arima()`/`arma()` (via `statsmodels.tsa.arima.model.ARIMA`)
+    + `garch()` (via `arch_model`).
+  - **1.1.1** — VAR/VECM + IRF/FEVD/Granger (via `statsmodels.tsa.vector_ar`) +
+    Johansen cointegration.
+  - **1.1.2** — ARDL/ECM via `statsmodels.tsa.ardl` (`ARDL`, `UECM`, `.bounds_test()`).
 
 #### v1.2 — Count & limited dependent variable models *(committed)*
 New `open_econs/models/limited/` module:
