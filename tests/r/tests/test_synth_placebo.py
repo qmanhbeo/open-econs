@@ -26,7 +26,7 @@ import pytest
 
 from open_econs.models.causal.synth import synth
 from open_econs.models.causal.placebo import PlaceboSpaceResult
-from ..r.r_runner import read_r, R_INPUTS_DIR, r_available
+from ..r_runner import read_r, R_INPUTS_DIR, r_available
 
 # All synth placebo tests are excluded from default runs via the synth_placebo marker.
 pytestmark = pytest.mark.synth_placebo
