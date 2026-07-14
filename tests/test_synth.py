@@ -42,7 +42,7 @@ import pytest
 
 from open_econs.models.causal.synth import synth
 from open_econs.core.results import SynthResult
-from .r.r_runner import read_r, R_FIXTURES_DIR, r_available
+from .r.r_runner import read_r, R_INPUTS_DIR, r_available
 
 # All synth tests are excluded from default runs via the synth_placebo marker.
 pytestmark = pytest.mark.synth_placebo
@@ -479,7 +479,7 @@ def test_synth_ground_truth_recovery(_synth_panel, _synth_result):
 
 @pytest.mark.r
 def test_synth_parity_r_default():
-    p = _panel_from_csv(R_FIXTURES_DIR / "synth_parity_default_input.csv")
+    p = _panel_from_csv(R_INPUTS_DIR / "synth_parity_default_input.csv")
     rdata = read_r("synth_parity_default")
     r = _fit(p)
 
@@ -530,7 +530,7 @@ def test_synth_parity_r_explicit():
     then a single point, so R ``Synth`` and our engine recover the same ``W``.
     """
     p = _panel_from_csv(
-        R_FIXTURES_DIR / "synth_parity_explicit_input.csv",
+        R_INPUTS_DIR / "synth_parity_explicit_input.csv",
         predictors=[f"x{k+1}" for k in range(12)],
     )
     rdata = read_r("synth_parity_explicit")
@@ -622,7 +622,7 @@ def test_synth_rank_deficient_qp_same_objective_different_w():
     Documented explicitly rather than silently dropped (roadmap standard #7).
     """
     p = _panel_from_csv(
-        R_FIXTURES_DIR / "synth_parity_underdetermined_input.csv",
+        R_INPUTS_DIR / "synth_parity_underdetermined_input.csv",
         predictors=["x1", "x2"],
     )
     rdata = read_r("synth_parity_underdetermined")
@@ -669,7 +669,7 @@ def test_synth_parity_stata_explicit():
     """Explicit-predictor case (P=12 >= N=12) validated against the committed
     R reference, since no Stata binary is available on free runners."""
     p = _panel_from_csv(
-        R_FIXTURES_DIR / "synth_parity_explicit_input.csv",
+        R_INPUTS_DIR / "synth_parity_explicit_input.csv",
         predictors=[f"x{k+1}" for k in range(12)],
     )
     rdata = read_r("synth_parity_explicit")

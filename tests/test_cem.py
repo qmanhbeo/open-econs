@@ -28,8 +28,8 @@ from open_econs.models.causal.cem import (
     cem,
 )
 
-FIXTURE = "tests/stata/fixtures/df_cem.csv"
-STATA_DTA = Path("tests/stata/generate-fixtures/cem_basic.dta")
+FIXTURE = "tests/stata/fixtures/inputs/df_cem.csv"
+STATA_DTA = Path("tests/stata/fixtures/expected/cem_basic.dta")
 
 # Expected values verified against Stata cem (see cem_basic.log):
 #   Number of strata: 36
@@ -254,7 +254,7 @@ class TestAutocutsFormulas:
 
 @pytest.fixture
 def df_autocuts():
-    return pd.read_csv("tests/stata/fixtures/df_cem_autocuts.csv")
+    return pd.read_csv("tests/stata/fixtures/inputs/df_cem_autocuts.csv")
 
 
 def test_cem_autocuts_smoke(df_autocuts):

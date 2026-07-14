@@ -13,7 +13,7 @@ from open_econs.models.causal.psm import (
 )
 
 
-FIXTURE = "tests/stata/fixtures/df_psm.csv"
+FIXTURE = "tests/stata/fixtures/inputs/df_psm.csv"
 
 
 @pytest.fixture

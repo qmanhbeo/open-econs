@@ -26,7 +26,7 @@ import pytest
 
 from open_econs.models.causal.synth import synth
 from open_econs.models.causal.placebo import PlaceboSpaceResult
-from .r.r_runner import read_r, R_FIXTURES_DIR, r_available
+from .r.r_runner import read_r, R_INPUTS_DIR, r_available
 
 # All synth placebo tests are excluded from default runs via the synth_placebo marker.
 pytestmark = pytest.mark.synth_placebo
@@ -420,7 +420,7 @@ def test_placebo_space_requires_data_frame():
 @pytest.mark.slow
 def test_placebo_space_parity_r():
     p = _panel_from_csv(
-        R_FIXTURES_DIR / "synth_placebo_space_input.csv",
+        R_INPUTS_DIR / "synth_placebo_space_input.csv",
         predictors=[f"x{k}" for k in range(1, 13)],
     )
     r = _fit(p, predictors=p["predictors"])

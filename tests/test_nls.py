@@ -29,7 +29,7 @@ from scipy.optimize import curve_fit
 
 import open_econs as oe
 from open_econs.models.nonlinear.nls import NLSResult
-from .r.r_runner import read_r, R_FIXTURES_DIR
+from .r.r_runner import read_r, R_INPUTS_DIR
 
 # ── committed-fixture parity ──────────────────────────────────────────────
 # R nls() iid parity reads a committed fixture (tests/r/fixtures/nls_iid.json)
@@ -148,7 +148,7 @@ class TestRnlsParity:
         # tests/r/generate-fixtures/nls_iid.R via read_r.  The input CSV
         # (tests/r/fixtures/nls_iid_input.csv) is the same file the .R script
         # reads, so both engines fit identical data.
-        df = pd.read_csv(R_FIXTURES_DIR / "nls_iid_input.csv")
+        df = pd.read_csv(R_INPUTS_DIR / "nls_iid_input.csv")
         rdata = read_r("nls_iid")
 
         r_oe = oe.nls("y ~ a*exp(-b*x)+c", df, {"a": 1.0, "b": 1.0, "c": 0.0},
@@ -184,7 +184,7 @@ class TestStataNlParity:
     @pytest.mark.r
     def test_stata_nl_iid_and_robust(self):
         # Validate against the committed R reference (no Stata binary on CI).
-        df = pd.read_csv(R_FIXTURES_DIR / "nls_iid_input.csv")
+        df = pd.read_csv(R_INPUTS_DIR / "nls_iid_input.csv")
         rdata = read_r("nls_iid")
 
         r_non = oe.nls("y ~ a*exp(-b*x)+c", df, {"a": 1.0, "b": 1.0, "c": 0.0},
