@@ -288,7 +288,7 @@ def _logdet_symm(m: np.ndarray) -> float:
     return float(logdet)
 
 
-def _count_deterministic_params(sm_result, trend: str) -> int:
+def _count_deterministic_params(sm_result: Any, trend: str) -> int:
     """Count the number of deterministic parameters in the VAR."""
     # The trend column(s) in the lagged regressor matrix
     k_trend_map = {"n": 0, "c": 1, "ct": 2, "ctt": 3}
@@ -596,7 +596,7 @@ def _select_rank_ic(
     """Select cointegration rank by minimizing IC over ranks 0..neqs."""
     from statsmodels.tsa.vector_ar.vecm import VECM
 
-    ic_results = {"aic": [], "bic": [], "hqic": []}
+    ic_results: dict[str, list[float]] = {"aic": [], "bic": [], "hqic": []}
 
     for r in range(neqs + 1):
         if r == 0:
@@ -834,7 +834,7 @@ def vecm_fit(
         k_ar=sm_result.k_ar,
         coint_rank=coint_rank,
         deterministic=deterministic,
-        residuals=pd.DataFrame(sm_result.resid, columns=names) if hasattr(sm_result, "resid") else None,
+        residuals=np.array(sm_result.resid) if hasattr(sm_result, "resid") else np.empty((0, data.shape[1])),
         _sm_result=sm_result,
         call=call,
     )
@@ -960,7 +960,15 @@ def vec2var(
 class _MinimalVARResult:
     """Minimal VARResults-compatible object for vec2var output."""
 
-    def __init__(self, params, sigma_u, k_ar, neqs, coefs, llf):
+    def __init__(
+        self,
+        params: np.ndarray,
+        sigma_u: np.ndarray,
+        k_ar: int,
+        neqs: int,
+        coefs: np.ndarray,
+        llf: float,
+    ) -> None:
         self.params = params
         self.sigma_u = sigma_u
         self.sigma_u_mle = sigma_u
@@ -972,22 +980,32 @@ class _MinimalVARResult:
         self.n_totobs = 0
         self.names = [f"y{i}" for i in range(neqs)]
 
-    def test_causality(self, caused, causing=None, kind="f", signif=0.05):
+    def test_causality(
+        self,
+        caused: int | str | list,
+        causing: int | str | list | None = None,
+        kind: str = "f",
+        signif: float = 0.05,
+    ) -> Any:
         raise NotImplementedError(
             "Granger causality on vec2var output requires a full VAR refit. "
             "Use var_fit() with the VAR representation instead."
         )
 
-    def test_inst_causality(self, causing, signif=0.05):
+    def test_inst_causality(
+        self,
+        causing: int | str | list,
+        signif: float = 0.05,
+    ) -> Any:
         raise NotImplementedError(
             "Instantaneous causality on vec2var output requires a full VAR refit."
         )
 
-    def irf(self, periods=10, **kwargs):
+    def irf(self, periods: int = 10, **kwargs: Any) -> Any:
         raise NotImplementedError("IRF not available on vec2var output without full VAR refit.")
 
-    def fevd(self, periods=10, **kwargs):
+    def fevd(self, periods: int = 10, **kwargs: Any) -> Any:
         raise NotImplementedError("FEVD not available on vec2var output without full VAR refit.")
 
-    def summary(self):
+    def summary(self) -> str:
         return "VAR representation of VECM (partial results -- use var_fit for full VAR)"

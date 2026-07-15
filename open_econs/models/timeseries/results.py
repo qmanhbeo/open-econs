@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
+import numpy as np
 import pandas as pd
 
 from open_econs.core.base import BaseModel
+
+if TYPE_CHECKING:
+    from statsmodels.tsa.vector_ar.var_model import VARResults as _VARResults
+    from statsmodels.tsa.vector_ar.vecm import VECMResults as _VECMResults
 
 
 class UnitRootResult(BaseModel):
@@ -240,9 +247,9 @@ class VARResult(BaseModel):
         neqs: int,
         nobs: int,
         n_totobs: int,
-        coefs: object,
-        sigma_u: object,
-        params: object,
+        coefs: np.ndarray,
+        sigma_u: np.ndarray,
+        params: np.ndarray,
         llf: float,
         aic: float,
         bic: float,
@@ -251,10 +258,10 @@ class VARResult(BaseModel):
         aic_lutstats: float,
         bic_lutstats: float,
         hqic_lutstats: float,
-        residuals: object,
+        residuals: np.ndarray,
         names: list[str],
         trend: str,
-        _sm_result: object,
+        _sm_result: _VARResults,
         call: dict,
     ) -> None:
         self.k_ar = int(k_ar)
@@ -293,21 +300,21 @@ class VARResult(BaseModel):
     def test_causality(
         self, caused: int | str | list, causing: int | str | list | None = None,
         kind: str = "f", signif: float = 0.05,
-    ):
+    ) -> Any:
         """Granger causality test.  See statsmodels ``VARResults.test_causality``."""
         return self._sm_result.test_causality(caused, causing, kind=kind, signif=signif)
 
     def test_inst_causality(
         self, causing: int | str | list, signif: float = 0.05,
-    ):
+    ) -> Any:
         """Instantaneous causality test.  See statsmodels ``VARResults.test_inst_causality``."""
         return self._sm_result.test_inst_causality(causing, signif=signif)
 
-    def irf(self, periods: int = 10, **kwargs):
+    def irf(self, periods: int = 10, **kwargs: Any) -> Any:
         """Impulse response functions."""
         return self._sm_result.irf(periods=periods, **kwargs)
 
-    def fevd(self, periods: int = 10, **kwargs):
+    def fevd(self, periods: int = 10, **kwargs: Any) -> Any:
         """Forecast error variance decomposition."""
         return self._sm_result.fevd(periods=periods, **kwargs)
 
@@ -341,18 +348,18 @@ class LagOrderResult(BaseModel):
         self.selected = selected
         self.selected_lutstats = selected_lutstats
         self.ic_values_lutstats = ic_values_lutstats
-        self.maxlags = int(maxlags)
-        self.neqs = int(neqs)
-        self.nobs = int(nobs)
+        self.maxlags = maxlags
+        self.neqs = neqs
+        self.nobs = nobs
         self.trend = trend
         self.call = call
         self._freeze()
 
     def tidy(self) -> pd.DataFrame:
         """IC values across lag orders as a DataFrame."""
-        rows = []
+        rows: list[dict[str, Any]] = []
         for lag_idx in range(self.maxlags):
-            row = {"lag": lag_idx + 1}
+            row: dict[str, Any] = {"lag": lag_idx + 1}
             for ic in ["aic", "bic", "hqic", "fpe"]:
                 if ic in self.ic_values and lag_idx < len(self.ic_values[ic]):
                     row[ic] = self.ic_values[ic][lag_idx]
@@ -393,13 +400,13 @@ class JohansenResult(BaseModel):
     def __init__(
         self,
         *,
-        trace_stat: object,
-        max_eig_stat: object,
-        cvt: object,
-        cvm: object,
-        cvt_mackinnon: object,
-        cvm_mackinnon: object,
-        eigvals: object,
+        trace_stat: pd.Series,
+        max_eig_stat: pd.Series,
+        cvt: pd.DataFrame,
+        cvm: pd.DataFrame,
+        cvt_mackinnon: pd.DataFrame,
+        cvm_mackinnon: pd.DataFrame,
+        eigvals: np.ndarray,
         neqs: int,
         k_ar_diff: int,
         det_order: int,
@@ -415,12 +422,12 @@ class JohansenResult(BaseModel):
         self.cvt_mackinnon = cvt_mackinnon
         self.cvm_mackinnon = cvm_mackinnon
         self.eigvals = eigvals
-        self.neqs = int(neqs)
-        self.k_ar_diff = int(k_ar_diff)
-        self.det_order = int(det_order)
-        self.nobs = int(nobs)
-        self.trace_stat_rank = int(trace_stat_rank)
-        self.max_eig_stat_rank = int(max_eig_stat_rank)
+        self.neqs = neqs
+        self.k_ar_diff = k_ar_diff
+        self.det_order = det_order
+        self.nobs = nobs
+        self.trace_stat_rank = trace_stat_rank
+        self.max_eig_stat_rank = max_eig_stat_rank
         self.call = call
         self._freeze()
 
@@ -535,20 +542,20 @@ class VECMResult(BaseModel):
     def __init__(
         self,
         *,
-        alpha: object,
-        beta: object,
-        gamma: object,
-        sigma_u: object,
-        det_coef_coint: object,
-        det_coef: object,
+        alpha: np.ndarray,
+        beta: np.ndarray,
+        gamma: np.ndarray,
+        sigma_u: np.ndarray,
+        det_coef_coint: np.ndarray,
+        det_coef: np.ndarray,
         llf: float,
         nobs: int,
         neqs: int,
         k_ar: int,
         coint_rank: int,
         deterministic: str,
-        residuals: object,
-        _sm_result: object,
+        residuals: np.ndarray,
+        _sm_result: _VECMResults,
         call: dict,
     ) -> None:
         self.alpha = alpha
@@ -558,10 +565,10 @@ class VECMResult(BaseModel):
         self.det_coef_coint = det_coef_coint
         self.det_coef = det_coef
         self.llf = float(llf)
-        self.nobs = int(nobs)
-        self.neqs = int(neqs)
-        self.k_ar = int(k_ar)
-        self.coint_rank = int(coint_rank)
+        self.nobs = nobs
+        self.neqs = neqs
+        self.k_ar = k_ar
+        self.coint_rank = coint_rank
         self.deterministic = deterministic
         self.residuals = residuals
         self._sm_result = _sm_result
@@ -589,21 +596,21 @@ class VECMResult(BaseModel):
                 })
         return pd.DataFrame(rows)
 
-    def var_rep(self):
+    def var_rep(self) -> Any:
         """VAR representation coefficient matrices."""
         return self._sm_result.var_rep()
 
-    def irf(self, periods: int = 10):
+    def irf(self, periods: int = 10) -> Any:
         """Impulse response functions from the VAR representation."""
         return self._sm_result.irf(periods=periods)
 
-    def test_normality(self, signif: float = 0.05):
+    def test_normality(self, signif: float = 0.05) -> Any:
         """Multivariate normality test."""
         return self._sm_result.test_normality(signif=signif)
 
-    def test_whiteness(self, nlags: int = 10, signif: float = 0.05, adjusted: bool = False):
+    def test_whiteness(self, nlags: int = 10, signif: float = 0.05, adjusted: bool = False) -> Any:
         """Residual whiteness test."""
         return self._sm_result.test_whiteness(nlags=nlags, signif=signif, adjusted=adjusted)
 
-    def summary(self, alpha: float = 0.05):
+    def summary(self, alpha: float = 0.05) -> str:
         return self._sm_result.summary(alpha=alpha)
