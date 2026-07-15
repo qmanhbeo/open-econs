@@ -111,7 +111,7 @@ for (nm in names(results)) {
   }
 }
 
-write_json(results, "tests/r/fixtures/expected/var_basic.json", pretty = TRUE, auto_unbox = TRUE)
+write_json(results, "tests/r/fixtures/expected/var_basic.json", pretty = TRUE, auto_unbox = TRUE, digits = 15)
 
 cat("R fixtures written to tests/r/fixtures/expected/var_basic.json\n")
 cat("Selected lags: AIC=", results$selected_lag$aic,
