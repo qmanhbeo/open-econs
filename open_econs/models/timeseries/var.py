@@ -228,9 +228,30 @@ def var_fit(
 
     sm_result = model.fit(lags, trend=trend, **fit_kwargs)
 
-    # Compute lutstats IC (exclude deterministic params from penalty)
-    arparms = sm_result.k_ar * sm_result.neqs ** 2
+    # ── Stata-convention IC ──────────────────────────────────────────
+    # Stata var.ado (default, no lutstats):
+    #   AIC = -2*(ll/T) + 2*k/T
+    #   where ll = -0.5*T*(K*ln(2pi) + ln(det(Sigma_ml)) + K)
+    #            (_qsur.ado:266)
+    # Expanding: AIC = ln(det(Sigma_ml)) + K*ln(2pi) + K + 2*k/T
+    #
+    # Statsmodels:
+    #   AIC = ln(det(Sigma_u_mle)) + 2*free_params/T
+    #       (no K*ln(2pi) + K constant)
+    #
+    # Offset = K*ln(2pi) + K (verified to 7.4e-9 vs Stata fixture).
+    K = sm_result.neqs
+    stata_offset = K * math.log(2 * math.pi) + K
     T = sm_result.nobs
+    sm_aic = float(sm_result.aic)
+    sm_bic = float(sm_result.bic)
+    sm_hqic = float(sm_result.hqic)
+
+    # ── Lütkepohl IC ─────────────────────────────────────────────────
+    # Stata lutstats option / Lütkepohl (2005):
+    #   AIC = ln(det(Sigma_ml)) + 2*arparms/T
+    # (only AR parameters in penalty, deterministic excluded).
+    arparms = sm_result.k_ar * sm_result.neqs ** 2
     logdet = _logdet_symm(sm_result.sigma_u_mle)
 
     aic_lut = logdet + (2 * arparms) / T
@@ -246,9 +267,9 @@ def var_fit(
         sigma_u=sm_result.sigma_u,
         params=sm_result.params,
         llf=float(sm_result.llf),
-        aic=float(sm_result.aic),
-        bic=float(sm_result.bic),
-        hqic=float(sm_result.hqic),
+        aic=sm_aic + stata_offset,
+        bic=sm_bic + stata_offset,
+        hqic=sm_hqic + stata_offset,
         fpe=float(sm_result.fpe),
         aic_lutstats=float(aic_lut),
         bic_lutstats=float(bic_lut),
@@ -846,7 +867,7 @@ def vec2var(
 
     # Get the VAR representation from the VECM results
     sm_v = vecm_result._sm_result
-    var_rep_coefs = sm_v.var_rep()  # (k_ar x neqs x neqs)
+    var_rep_coefs = sm_v.var_rep  # (k_ar x neqs x neqs)
 
     # The VECM's sigma_u is already the VAR residual covariance
     sigma_u = sm_v.sigma_u
@@ -901,7 +922,7 @@ def vec2var(
             lag_order=k_ar,
             model=model,
             trend=vecm_result.deterministic,
-            names=vecm_result._sm_result.model.names if hasattr(vecm_result._sm_result, "model") else None,
+            names=vecm_result._sm_result.model.endog_names if hasattr(vecm_result._sm_result, "model") and hasattr(vecm_result._sm_result.model, "endog_names") else None,
         )
     else:
         # Fallback: create a minimal object
@@ -910,7 +931,7 @@ def vec2var(
             coefs=var_rep_coefs, llf=vecm_result.llf,
         )
 
-    names = vecm_result._sm_result.model.names if hasattr(vecm_result._sm_result, "model") else [f"y{i}" for i in range(neqs)]
+    names = vecm_result._sm_result.model.endog_names if hasattr(vecm_result._sm_result, "model") and hasattr(vecm_result._sm_result.model, "endog_names") else [f"y{i}" for i in range(neqs)]
 
     return VARResult(
         k_ar=k_ar,
