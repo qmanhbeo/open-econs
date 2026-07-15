@@ -1,15 +1,25 @@
 ## Roadmap
 
-open-econs is built in two horizons. The **committed roadmap** (v0.1 → v1.0,
-then the post-v1.0 milestones v1.1 → v1.3) is what the maintainers are actually
-building and will be held to. The **North Star** (v1.4 → v5.0) is the long-run
-vision — where the project could go if it earns a community around it. Nothing
-past the committed v1.3 is a promise; it's a map of the terrain worth exploring,
-so contributors and users can see where their work might fit.
+open-econs exists to provide a rigorous, source-verified econometric
+foundation for causal inference in policy and resource-allocation analysis.
+It targets Stata/R migrators and is built in two horizons: the **committed
+roadmap** (what's actually being built) and the **North Star** (long-run
+vision if the project earns a community).
 
 ---
 
-### Committed Roadmap (v0.1 → v1.0)
+### North Star
+
+The longer-term motivation is an RL-based resource allocation system for
+small, self-sustaining communities (50–150 people, farming + solar).
+`open-econs` provides the econometric toolkit that work and adjacent applied
+research — urban energy burden analysis, agent-based simulation — need. The
+library is also useful on its own as a Stata/R migration target, but that's
+secondary to the causal-inference-for-allocation mission.
+
+---
+
+### Committed Roadmap (v0.1 → v1.0) — Shipped
 
 #### v0.1 — Foundation *(shipped)*
 - [x] `ols()` / `reg()` — OLS with HC1/robust and clustered standard errors
@@ -113,86 +123,82 @@ Landed across v0.6.1–v0.6.9 (patch-level numeric detail → `docs/v06x-parity-
 
 ### Committed Roadmap (post-v1.0)
 
-These milestones are committed in the same sense as v0.1–v1.0: each ships with
-parity tests before merge and is held to the same quality bar. They are the
-direct response to the senior-empirical-economist review of v1.0 — closing the
-time-series, limited-DV, and diagnostics gaps while making the Stata/R parity
-suite and per-estimator maturity explicit.
+Post-v1.0 work splits into **core path** (causal-inference-critical methods
+serving the allocation/policy analysis mission) and **secondary breadth**
+(time-series variants and Stata-parity coverage that's useful but not
+mission-critical). Both tiers ship with the same parity discipline.
 
-#### v1.1 — Time-series econometrics *(committed)*
+#### Core Path — Causal/Allocation-Relevant Methods
+
+These are the methods that directly serve the project's primary purpose:
+causal inference for policy analysis and resource allocation. Items are
+ordered by dependency (later items build on earlier ones).
+
+##### v1.1 — Time-series econometrics *(in progress)*
 
 **Backend strategy: wrap-and-verify over `statsmodels.tsa` + `arch` (hard
-dependencies), not a from-scratch numerical reimplementation.** This is the same
-trust story open-econs already tells with PyFixest for `feols`/`iv`: reuse
-battle-tested numerics, add the Stata/R-parity verification layer, the OE
-named-output contract (`.tidy()`, `.summary()`, immutable results), and fill
-genuine gaps the backends don't cover.
+dependencies), not a from-scratch numerical reimplementation.**
 
 > **Wrapping is an implementation strategy, NOT a parity exemption.** Every
 > wrapped function still requires the same source-verified parity discipline as
-> a from-scratch build — critical-value-table vintage, lag-selection defaults,
-> small-sample corrections, deterministic-term handling. A wrapped ADF that
-> silently uses different critical values than Stata's `dfuller` is exactly the
-> bug standing rule #2 exists to prevent. Source verification is never skipped
-> because the numerics are borrowed.
+> a from-scratch build.
 
 - **New `open_econs/models/timeseries/` module** wrapping:
-  - `statsmodels.tsa` — `ARIMA`/`SARIMAX` (state-space ARIMA w/ `.forecast()`),
-    `VAR` (`.irf()`, `.fevd()`, `.test_causality()`), `VECM` + `coint_johansen`
-    (Johansen trace/max-eigenvalue), `ARDL`/`UECM` (Pesaran-Shin-Smith 2001
-    `.bounds_test()`, all 5 deterministic-term cases).
-  - `arch` — `unitroot` (`ADF`, `DFGLS`, `PhillipsPerron`, `KPSS`,
-    `ZivotAndrews`); `unitroot.cointegration` (`engle_granger`,
-    `phillips_ouliaris`); `arch_model` (full GARCH family).
-- **`TimeSeriesContext`** — the `tsset` equivalent: remembers time ordering,
-  frequency, and lag-operator conventions (mirrors how `PanelContext` remembers
-  entity/time structure).
-- **GARCH added to v1.1 scope** (real scope addition, not a North-Star item):
-  `garch()` / `TimeSeriesContext.garch()` via `arch_model`. Heavily wanted by
-  the macro/finance/energy users v1.1 targets; nearly free under the wrap
-  strategy. See `pyproject.toml` — `arch` is a hard dependency at the same tier
-  as `pyfixest`/`linearmodels`/`statsmodels`, not an optional `[timeseries]` extra.
-- Parity vs Stata `dfuller` / `pperron` / `kpss` / `vecrank` / `var` /
-  `vargranger` / `fcast` / `arima` / `arch` and R `urca` / `vars` /
-  `forecast` / `rugarch`.
+  - `statsmodels.tsa` — `VAR` (`.irf()`, `.fevd()`, `.test_causality()`), `VECM` + `coint_johansen` (Johansen trace/max-eigenvalue), `ARDL`/`UECM` (Pesaran-Shin-Smith 2001 `.bounds_test()`, all 5 deterministic-term cases).
+  - `arch` — `unitroot` (`ADF`, `DFGLS`, `PhillipsPerron`, `KPSS`, `ZivotAndrews`); `unitroot.cointegration` (`engle_granger`, `phillips_ouliaris`); `arch_model` (full GARCH family).
+- **`TimeSeriesContext`** — the `tsset` equivalent: remembers time ordering, frequency, and lag-operator conventions.
+- Parity vs Stata `dfuller` / `pperron` / `kpss` / `vecrank` / `var` / `vargranger` / `fcast` / `arima` / `arch` and R `urca` / `vars` / `forecast` / `rugarch`.
 - **Sub-milestones (all under committed v1.1):**
-  - **1.1.0** — unit-root tests (`adf()`/`pp()`/`kpss()`/`dfgls()`/`zivot_andrews()`
-    via `arch.unitroot`) + `arima()`/`arma()` (via `statsmodels.tsa.arima.model.ARIMA`)
-    + `garch()` (via `arch_model`).
-  - **1.1.1** — VAR/VECM + IRF/FEVD/Granger (via `statsmodels.tsa.vector_ar`) +
-    Johansen cointegration.
-  - **1.1.2** — ARDL/ECM via `statsmodels.tsa.ardl` (`ARDL`, `UECM`, `.bounds_test()`).
+  - **1.1.0** — unit-root tests (`adf()`/`pp()`/`kpss()`/`dfgls()`/`zivot_andrews()`) + `arima()`/`arma()` + `garch()`. *(shipped)*
+  - **1.1.1** — VAR/VECM + IRF/FEVD/Granger + Johansen cointegration + dual IC (Stata + Lütkepohl). *(shipped)*
+  - **1.1.2** — ARDL/ECM via `statsmodels.tsa.ardl` (`ARDL`, `UECM`, `.bounds_test()`). *(next)*
 
-#### v1.2 — Count & limited dependent variable models *(committed)*
+##### v1.2 — Count & limited dependent variable models *(committed)*
 New `open_econs/models/limited/` module:
 - `poisson()`, `nbreg()` (NB1/NB2), `ologit()` / `oprobit()` (ordered)
-- **`poisson()` / `nbreg()` MUST be FE-backed via the existing HDFE demeaning
-  core** (Correia 2016 / Guimarães & Portugal, the `fixest::fepois` convention —
-  iterative projection of the score onto the fixed-effects hyperplane) **not a
-  bare statsmodels GLM wrapper reaching point-estimate parity only.** Validation
-  target is Stata `ppmlhdfe` and R `fixest::fepois` **at the option level**
-  (absorb, vcov, IRR, dof), not just coefficient equality. The demeaning core
-  already exists in the `fe`/`feols` path; the count models must reuse it.
+- **`poisson()` / `nbreg()` MUST be FE-backed via the existing HDFE demeaning core** (Correia 2016 / Guimarães & Portugal, the `fixest::fepois` convention). Validation target is Stata `ppmlhdfe` and R `fixest::fepois` at the option level, not just coefficient equality.
 - `tobit()` — MLE (statsmodels has no Tobit); validate vs R `censReg` / `AER::tobit`
 - `heckman()` — selection model (two-step + MLE); validate vs R `sampleSelection`
-- `feglm` binomial FE absorption — **decision required, NOT in v1.2 as scoped**;
-  flag in `FUTURE_WORK.md`. Stata `felogit`/`feprobit` (conditional/Chamberlain)
-  and `fixest::feglm(binomial)` (IRLS-with-demeaning) are different estimators
-  sharing a name; do not implement either until resolved.
-- First-class `.margins()` / `.predict()`; parity vs Stata `poisson` / `nbreg` /
-  `tobit` / `heckman` / `ologit` / `oprobit`
-- Ships at **Beta** in the maturity table; `tobit` / `heckman` backend recon
-  recorded under "Explicitly Deferred Estimators" if it blocks the release
+- `feglm` binomial FE absorption — **decision required, NOT in v1.2 as scoped**; flag in `FUTURE_WORK.md`.
+- First-class `.margins()` / `.predict()`; parity vs Stata `poisson` / `nbreg` / `tobit` / `heckman` / `ologit` / `oprobit`
+- Ships at **Beta** in the maturity table; `tobit` / `heckman` backend recon recorded under "Explicitly Deferred Estimators" if it blocks the release
 
-#### v1.3 — Diagnostics: build missing + test *(committed)*
+##### v1.3 — Diagnostics: build missing + test *(committed)*
 Promote the existing JB / Breusch-Pagan / Durbin-Watson / Ramsey RESET / VIF into
 a consistent first-class result API, and implement the missing `estat` battery:
 - `bg_test()` (Breusch-Godfrey), `white_test()`, `ljung_box()`
 - `cooks_distance()`, `leverage()`, `dfbetas()`, `influence()`
 - `result.diagnostics()` summary `DataFrame`
-- Parity vs Stata `estat hettest` (BP/White), `estat bgodfrey`, `estat ovtest`
-  (RESET), `estat vif`, `predict, cooksd` / `dfbeta`, `sktest` / `swilk`,
-  `estat archlm`
+- Parity vs Stata `estat hettest` (BP/White), `estat bgodfrey`, `estat ovtest` (RESET), `estat vif`, `predict, cooksd` / `dfbeta`, `sktest` / `swilk`, `estat archlm`
+
+#### Secondary — Stata-Parity Breadth
+
+These items broaden the library's Stata/R coverage but are not
+causal-inference-critical. They ship when a specific downstream need pulls
+them forward, or when capacity allows after core-path items are complete.
+
+##### v1.x — Time-series breadth (secondary)
+- ARDL/UECM bounds test (v1.1.2, next — technically core-path but
+  time-series-specific, so listed here for visibility)
+- Additional VAR/VECM variants (structural VAR, Bayesian VAR)
+- Additional IC conventions beyond the two already implemented
+- Ng-Perron sequential lag selection for DFGLS (TS-2 gap, tracked in `FUTURE_WORK.md`)
+- Legacy CV-table ports (Fuller/ERS/ZA small-N tables, TS-1 gap)
+
+##### v1.x — Method breadth (aspirational; no committed version)
+- **v1.4** — Quantile regression; heteroskedasticity- and outlier-robust regression (MM-estimators)
+- **v1.5** — Dynamic panel breadth: Blundell-Bond system GMM, extending the existing `abond()`/GMM-core foundation
+- **v1.6** — Complex survey design (`.svy`): weighting, stratification, replicate-weight variance estimation
+- **v1.7** — High-dimensional methods: LASSO/post-double-selection for inference with many controls
+- **v1.8** — Spatial econometrics: spatial lag/error models, Moran's I diagnostics
+- **v1.9** — ML-assisted causal inference: double/debiased ML (Chernozhukov et al.), causal forests, targeted maximum likelihood
+- **v1.10** — Network econometrics: peer effects, network formation models
+- **v1.11** — Structural discrete choice: BLP demand estimation, dynamic discrete choice (Rust-style)
+- **v1.12** — Bayesian econometrics: Bayesian VAR, hierarchical models, MCMC-backed inference
+- **v1.13** — Text-as-data: dictionary methods, embeddings-based regressors, econometrically-valid LLM-derived features
+
+Design constraint carried through all of v1.x: **every new estimator ships
+with a parity test against an existing reference implementation before merge.**
 
 #### Done post-1.0 (deferred v1.0 stubs, now completed)
 
@@ -212,35 +218,13 @@ a consistent first-class result API, and implement the missing `estat` battery:
   tutorial was updated to use the top-level path and drop the submodule-import
   note. No estimator logic changed. (Source-only + doc; no release.)
 
-### North Star *(vision — not a commitment)*
+---
+
+### North Star (vision — not a commitment)
 
 This is the "imagine it's five years from now" section. It's here so the
 long-run shape of the project is visible, not so any individual line is a
 promise with a date on it.
-
-#### Aspirational estimators (no committed version)
-- **Population-averaged GEE** (`ctx.pooled(..., method="gee")`) — equivalent to
-  Stata's `xtreg, pa`. *Deferred from v0.9*; build only if demand materialises.
-  No timeline attached.
-
-#### v1.x — Method Breadth (aspirational; renumbered to avoid colliding with the committed v1.1–v1.3 above)
-The estimator library grows outward from the causal-inference core into the
-adjacent methods empirical economists actually reach for. Survey/`.svy` design
-was explicitly requested by the reviewer and is tracked here at v1.6 (deferred
-to after the committed count/limited-DV and diagnostics work):
-- **v1.4** — Quantile regression; heteroskedasticity- and outlier-robust regression (MM-estimators)
-- **v1.5** — Dynamic panel breadth: Blundell-Bond system GMM, extending the existing `abond()`/GMM-core foundation
-- **v1.6** — Complex survey design (`.svy`): weighting, stratification, replicate-weight variance estimation
-- **v1.7** — High-dimensional methods: LASSO/post-double-selection for inference with many controls
-- **v1.8** — Spatial econometrics: spatial lag/error models, Moran's I diagnostics
-- **v1.9** — ML-assisted causal inference: double/debiased ML (Chernozhukov et al.), causal forests, targeted maximum likelihood
-- **v1.10** — Network econometrics: peer effects, network formation models
-- **v1.11** — Structural discrete choice: BLP demand estimation, dynamic discrete choice (Rust-style)
-- **v1.12** — Bayesian econometrics: Bayesian VAR, hierarchical models, MCMC-backed inference as an `inference="bayesian"` path on existing estimators
-- **v1.13** — Text-as-data: dictionary methods, embeddings-based regressors, econometrically-valid LLM-derived features (with measurement-error caveats explicit)
-
-Design constraint carried through all of v1.x: **every new estimator ships
-with a parity test against an existing reference implementation before merge.**
 
 #### v2.0 — The Plugin Architecture: "Papers as Packages"
 - [ ] `open_econs.register_estimator()` — stable plugin API so a method can use the `BaseModel` contract without living in core.
