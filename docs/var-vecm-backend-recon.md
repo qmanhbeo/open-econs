@@ -287,3 +287,47 @@ Notes from source:
 
 *Recon performed 2026-07-15. No source files under `open_econs/` were modified
 by this recon except this document.*
+
+---
+
+## Appendix: Product decisions (locked 2026-07-15)
+
+The following decisions are made and must not be relitigated during
+implementation.
+
+### Decision 1: Johansen critical-value table — match Stata/R
+
+Use **Osterwald-Lenum (1992)** as the authoritative table, overriding
+`statsmodels`' native MacKinnon-Haug-Michelis (1996) table.  The evidence is
+clear: the two-variable constant-case trace 5% CV is 15.49 (MacKinnon) vs 19.96
+(O-L / Stata / R) — a gap large enough to flip the chosen cointegration rank.
+This is a correctness bug in the econometric conclusion, not a cosmetic display
+difference.  Implement O-L (1992) as the default override in the OE wrapper.
+Expose `cv_table="mackinnon"` as the statsmodels-native alternate for users who
+want it.
+
+### Decision 2: VAR lag-order IC — match Stata's `lutstats` convention as default
+
+Stata's `varsoc` excludes deterministic terms from the AIC/BIC/HQIC penalty;
+R `vars` and statsmodels include them.  Default `lag_order_select()` to Stata's
+convention (excluding deterministic terms from the penalty) since that is the
+more surprising one to get silently wrong.  Expose
+`penalty="statsmodels"` for the R/statsmodels-native convention.  Document both
+explicitly in the function's docstring with the source citation for each.
+
+### Decision 3: Johansen coverage — build the full 5-case coverage
+
+Ship the full 5-case Johansen deterministic-trend classification, not just the
+3 restricted cases `coint_johansen` natively exposes.  The unrestricted cases
+(no constant, constant-in-cointegration) are handled via `VECM` + `exog`.  If
+wiring the unrestricted cases turns out to require reimplementing part of the
+Johansen rank-test machinery rather than just calling `VECM` with different
+arguments, stop and report per standing rule 6.
+
+### Decision 4: Granger causality — F-test default, chi-sq for Stata parity
+
+Default to the **F-test** since R `vars` and `statsmodels` already agree and it
+has better small-sample properties than Stata's asymptotic χ² default.  Expose
+`test="chisq"` as the explicit Stata-equivalent alternate.  Also build R's
+instantaneous-causality χ² test and `vec2var`-equivalent (VECM-to-VAR
+conversion for causality testing after cointegration) as in-scope for v1.1.1.
