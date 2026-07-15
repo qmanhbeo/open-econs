@@ -802,11 +802,9 @@ def vecm_fit(
     )
 
     if isinstance(endog, pd.DataFrame):
-        names = list(endog.columns)
         data = endog.values.astype(float)
     else:
         data = np.asarray(endog, dtype=float)
-        names = [f"y{i}" for i in range(data.shape[1])]
 
     v = VECM(
         data,
