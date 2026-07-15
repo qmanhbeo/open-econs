@@ -15,12 +15,9 @@ from open_econs.models.timeseries.unitroot import (
     zivot_andrews,
 )
 from open_econs.models.timeseries.var import (
-    granger_causality,
-    instantaneous_causality,
     johansen_cointegration,
     var_fit,
     var_select_order,
-    vec2var,
     vecm_fit,
 )
 
