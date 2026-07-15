@@ -35,8 +35,15 @@ from .models.timeseries import (
     arima,
     dfgls,
     garch,
+    granger_causality,
+    instantaneous_causality,
+    johansen_cointegration,
     kpss,
     pp,
+    var_fit,
+    var_select_order,
+    vec2var,
+    vecm_fit,
     zivot_andrews,
 )
 
@@ -72,4 +79,7 @@ __all__ = [
     "Context", "PanelContext", "TimeSeriesContext", "__version__",
     "adf", "pp", "kpss", "dfgls", "zivot_andrews",
     "garch", "arima", "arma",
+    "var_fit", "var_select_order", "johansen_cointegration",
+    "granger_causality", "instantaneous_causality",
+    "vecm_fit", "vec2var",
 ]

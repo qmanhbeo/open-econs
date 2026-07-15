@@ -6,7 +6,12 @@ from open_econs.models.timeseries.garch import garch
 from open_econs.models.timeseries.results import (
     ARIMAResult,
     GARCHResult,
+    GrangerResult,
+    JohansenResult,
+    LagOrderResult,
     UnitRootResult,
+    VARResult,
+    VECMResult,
 )
 from open_econs.models.timeseries.unitroot import (
     adf,
@@ -14,6 +19,15 @@ from open_econs.models.timeseries.unitroot import (
     kpss,
     pp,
     zivot_andrews,
+)
+from open_econs.models.timeseries.var import (
+    granger_causality,
+    instantaneous_causality,
+    johansen_cointegration,
+    var_fit,
+    var_select_order,
+    vec2var,
+    vecm_fit,
 )
 
 __all__ = [
@@ -25,8 +39,20 @@ __all__ = [
     "garch",
     "arima",
     "arma",
+    "var_fit",
+    "var_select_order",
+    "johansen_cointegration",
+    "granger_causality",
+    "instantaneous_causality",
+    "vecm_fit",
+    "vec2var",
     "TimeSeriesContext",
     "UnitRootResult",
     "GARCHResult",
     "ARIMAResult",
+    "VARResult",
+    "LagOrderResult",
+    "JohansenResult",
+    "GrangerResult",
+    "VECMResult",
 ]

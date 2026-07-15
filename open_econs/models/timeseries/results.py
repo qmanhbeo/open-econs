@@ -220,3 +220,390 @@ class ARIMAResult(BaseModel):
             f"{'-' * 60}\n{tbl}"
         )
         return head
+
+
+class VARResult(BaseModel):
+    """Result of a VAR(p) model estimated via ``statsmodels.tsa.VAR``.
+
+    Wraps ``VARResults`` and exposes coefficient matrices, residual
+    covariance, information criteria, Granger causality tests, IRF, and
+    FEVD.  Two IC conventions are provided: the default matches
+    statsmodels/Stata-standard/R-vars (all parameters in penalty), and
+    ``lutstats`` matches Stata's ``lutstats`` option (only AR parameters
+    in penalty, following Lutkepohl 2005).
+    """
+
+    def __init__(
+        self,
+        *,
+        k_ar: int,
+        neqs: int,
+        nobs: int,
+        n_totobs: int,
+        coefs: object,
+        sigma_u: object,
+        params: object,
+        llf: float,
+        aic: float,
+        bic: float,
+        hqic: float,
+        fpe: float,
+        aic_lutstats: float,
+        bic_lutstats: float,
+        hqic_lutstats: float,
+        residuals: object,
+        names: list[str],
+        trend: str,
+        _sm_result: object,
+        call: dict,
+    ) -> None:
+        self.k_ar = int(k_ar)
+        self.neqs = int(neqs)
+        self.nobs = int(nobs)
+        self.n_totobs = int(n_totobs)
+        self.coefs = coefs
+        self.sigma_u = sigma_u
+        self.params = params
+        self.llf = float(llf)
+        self.aic = float(aic)
+        self.bic = float(bic)
+        self.hqic = float(hqic)
+        self.fpe = float(fpe)
+        self.aic_lutstats = float(aic_lutstats)
+        self.bic_lutstats = float(bic_lutstats)
+        self.hqic_lutstats = float(hqic_lutstats)
+        self.residuals = residuals
+        self.names = list(names)
+        self.trend = trend
+        self._sm_result = _sm_result
+        self.call = call
+        self._freeze()
+
+    def tidy(self) -> pd.DataFrame:
+        """Coefficient table: one row per equation, columns are lag coefficients."""
+        rows = []
+        for eq_idx, name in enumerate(self.names):
+            row = {"equation": name}
+            for lag in range(1, self.k_ar + 1):
+                for var_idx, var_name in enumerate(self.names):
+                    row["L%d.%s" % (lag, var_name)] = self.coefs[lag - 1, eq_idx, var_idx]
+            rows.append(row)
+        return pd.DataFrame(rows)
+
+    def test_causality(
+        self, caused: int | str | list, causing: int | str | list | None = None,
+        kind: str = "f", signif: float = 0.05,
+    ):
+        """Granger causality test.  See statsmodels ``VARResults.test_causality``."""
+        return self._sm_result.test_causality(caused, causing, kind=kind, signif=signif)
+
+    def test_inst_causality(
+        self, causing: int | str | list, signif: float = 0.05,
+    ):
+        """Instantaneous causality test.  See statsmodels ``VARResults.test_inst_causality``."""
+        return self._sm_result.test_inst_causality(causing, signif=signif)
+
+    def irf(self, periods: int = 10, **kwargs):
+        """Impulse response functions."""
+        return self._sm_result.irf(periods=periods, **kwargs)
+
+    def fevd(self, periods: int = 10, **kwargs):
+        """Forecast error variance decomposition."""
+        return self._sm_result.fevd(periods=periods, **kwargs)
+
+    def summary(self) -> str:
+        return self._sm_result.summary()
+
+
+class LagOrderResult(BaseModel):
+    """Result of VAR lag-order selection.
+
+    Provides two IC conventions: the default (all parameters in penalty,
+    matching Stata ``varsoc`` / R ``VARselect`` / statsmodels) and
+    ``lutstats`` (only AR parameters in penalty, matching Stata's
+    ``lutstats`` option).
+    """
+
+    def __init__(
+        self,
+        *,
+        ic_values: dict[str, list[float]],
+        selected: dict[str, int],
+        selected_lutstats: dict[str, int],
+        ic_values_lutstats: dict[str, list[float]],
+        maxlags: int,
+        neqs: int,
+        nobs: int,
+        trend: str,
+        call: dict,
+    ) -> None:
+        self.ic_values = ic_values
+        self.selected = selected
+        self.selected_lutstats = selected_lutstats
+        self.ic_values_lutstats = ic_values_lutstats
+        self.maxlags = int(maxlags)
+        self.neqs = int(neqs)
+        self.nobs = int(nobs)
+        self.trend = trend
+        self.call = call
+        self._freeze()
+
+    def tidy(self) -> pd.DataFrame:
+        """IC values across lag orders as a DataFrame."""
+        rows = []
+        for lag_idx in range(self.maxlags):
+            row = {"lag": lag_idx + 1}
+            for ic in ["aic", "bic", "hqic", "fpe"]:
+                if ic in self.ic_values and lag_idx < len(self.ic_values[ic]):
+                    row[ic] = self.ic_values[ic][lag_idx]
+            for ic in ["aic", "bic", "hqic"]:
+                if ic in self.ic_values_lutstats and lag_idx < len(self.ic_values_lutstats[ic]):
+                    row[ic + "_lut"] = self.ic_values_lutstats[ic][lag_idx]
+            rows.append(row)
+        return pd.DataFrame(rows)
+
+    def summary(self) -> str:
+        lines = [
+            "VAR Lag Order Selection",
+            "=" * 30,
+            f"Max lags  : {self.maxlags}",
+            f"Variables : {self.neqs}",
+            f"Trend     : {self.trend}",
+            "",
+            "Standard IC (all parameters in penalty):",
+        ]
+        for ic in ["aic", "bic", "hqic", "fpe"]:
+            lines.append(f"  {ic.upper():6s} -> lag {self.selected[ic]}")
+        lines.append("")
+        lines.append("Lutkepohl IC (only AR parameters in penalty):")
+        for ic in ["aic", "bic", "hqic"]:
+            lines.append(f"  {ic.upper():6s} -> lag {self.selected_lutstats[ic]}")
+        return "\n".join(lines)
+
+
+class JohansenResult(BaseModel):
+    """Result of Johansen cointegration test.
+
+    Uses Osterwald-Lenum (1992) critical values by default (matching Stata
+    ``vecrank`` and R ``urca::ca.jo``).  Statsmodels' native MacKinnon-Haug-
+    Michelis (1996) tables are available via ``cvt_mackinnon`` /
+    ``cvm_mackinnon`` for reference.
+    """
+
+    def __init__(
+        self,
+        *,
+        trace_stat: object,
+        max_eig_stat: object,
+        cvt: object,
+        cvm: object,
+        cvt_mackinnon: object,
+        cvm_mackinnon: object,
+        eigvals: object,
+        neqs: int,
+        k_ar_diff: int,
+        det_order: int,
+        nobs: int,
+        trace_stat_rank: int,
+        max_eig_stat_rank: int,
+        call: dict,
+    ) -> None:
+        self.trace_stat = trace_stat
+        self.max_eig_stat = max_eig_stat
+        self.cvt = cvt
+        self.cvm = cvm
+        self.cvt_mackinnon = cvt_mackinnon
+        self.cvm_mackinnon = cvm_mackinnon
+        self.eigvals = eigvals
+        self.neqs = int(neqs)
+        self.k_ar_diff = int(k_ar_diff)
+        self.det_order = int(det_order)
+        self.nobs = int(nobs)
+        self.trace_stat_rank = int(trace_stat_rank)
+        self.max_eig_stat_rank = int(max_eig_stat_rank)
+        self.call = call
+        self._freeze()
+
+    def tidy(self) -> pd.DataFrame:
+        """Trace and max-eigen statistics with Osterwald-Lenum CVs."""
+        df = pd.DataFrame({
+            "hypothesis": self.trace_stat.index,
+            "trace_stat": self.trace_stat.values,
+            "trace_cv_5pct": self.cvt["5%"].values,
+            "max_eig_stat": self.max_eig_stat.values,
+            "max_eig_cv_5pct": self.cvm["5%"].values,
+        })
+        return df
+
+    def summary(self) -> str:
+        lines = [
+            "Johansen Cointegration Test",
+            "=" * 30,
+            f"Variables    : {self.neqs}",
+            f"Lag diff     : {self.k_ar_diff}",
+            f"Det order    : {self.det_order}",
+            f"Observations : {self.nobs}",
+            "",
+            "Trace test (Osterwald-Lenum 1992):",
+        ]
+        for i in range(self.neqs):
+            lines.append(
+                "  r<=%d: stat=%.4f  CV_5%%=%.4f" % (
+                    i, float(self.trace_stat.iloc[i]), float(self.cvt.iloc[i, 1])
+                )
+            )
+        lines.append(f"  Selected rank (trace): {self.trace_stat_rank}")
+        lines.append("")
+        lines.append("Max-eigenvalue test (Osterwald-Lenum 1992):")
+        for i in range(self.neqs):
+            lines.append(
+                "  r<=%d: stat=%.4f  CV_5%%=%.4f" % (
+                    i, float(self.max_eig_stat.iloc[i]), float(self.cvm.iloc[i, 1])
+                )
+            )
+        lines.append(f"  Selected rank (max-eig): {self.max_eig_stat_rank}")
+        return "\n".join(lines)
+
+
+class GrangerResult(BaseModel):
+    """Result of a Granger causality or instantaneous causality test."""
+
+    def __init__(
+        self,
+        *,
+        test_name: str,
+        test_statistic: float,
+        df: tuple[int, int] | int,
+        pvalue: float,
+        caused: list[str],
+        causing: list[str],
+        method: str,
+        signif: float,
+        conclusion: str,
+        call: dict,
+    ) -> None:
+        self.test_name = test_name
+        self.test_statistic = float(test_statistic)
+        self.df = df
+        self.pvalue = float(pvalue)
+        self.caused = list(caused)
+        self.causing = list(causing)
+        self.method = method
+        self.signif = float(signif)
+        self.conclusion = conclusion
+        self.call = call
+        self._freeze()
+
+    def tidy(self) -> pd.DataFrame:
+        """One-row summary of the causality test."""
+        row = {
+            "test": self.test_name,
+            "method": self.method,
+            "statistic": self.test_statistic,
+            "df": str(self.df),
+            "pvalue": self.pvalue,
+            "causing": ", ".join(self.causing),
+            "caused": ", ".join(self.caused),
+            "conclusion": self.conclusion,
+        }
+        return pd.DataFrame([row])
+
+    def summary(self) -> str:
+        lines = [
+            self.test_name,
+            "=" * len(self.test_name),
+            f"Method        : {self.method}",
+            f"Test statistic: {self.test_statistic:.6f}",
+            f"df            : {self.df}",
+            f"p-value       : {self.pvalue:.6f}",
+            f"Caused by     : {', '.join(self.causing)}",
+            f"Causes        : {', '.join(self.caused)}",
+            f"Significance  : {self.signif}",
+            f"Conclusion    : {self.conclusion}",
+        ]
+        return "\n".join(lines)
+
+
+class VECMResult(BaseModel):
+    """Result of a VECM estimated via ``statsmodels.tsa.VECM``.
+
+    Wraps ``VECMResults`` and exposes alpha, beta, gamma, sigma_u, and
+    the VAR representation for IRF/FEVD and Granger causality after
+    VECM estimation.
+    """
+
+    def __init__(
+        self,
+        *,
+        alpha: object,
+        beta: object,
+        gamma: object,
+        sigma_u: object,
+        det_coef_coint: object,
+        det_coef: object,
+        llf: float,
+        nobs: int,
+        neqs: int,
+        k_ar: int,
+        coint_rank: int,
+        deterministic: str,
+        residuals: object,
+        _sm_result: object,
+        call: dict,
+    ) -> None:
+        self.alpha = alpha
+        self.beta = beta
+        self.gamma = gamma
+        self.sigma_u = sigma_u
+        self.det_coef_coint = det_coef_coint
+        self.det_coef = det_coef
+        self.llf = float(llf)
+        self.nobs = int(nobs)
+        self.neqs = int(neqs)
+        self.k_ar = int(k_ar)
+        self.coint_rank = int(coint_rank)
+        self.deterministic = deterministic
+        self.residuals = residuals
+        self._sm_result = _sm_result
+        self.call = call
+        self._freeze()
+
+    def tidy(self) -> pd.DataFrame:
+        """Alpha and beta matrices of the VECM."""
+        rows = []
+        for i in range(self.neqs):
+            for j in range(self.coint_rank):
+                rows.append({
+                    "matrix": "alpha",
+                    "row": i,
+                    "col": j,
+                    "value": float(self.alpha[i, j]),
+                })
+        for i in range(self.neqs):
+            for j in range(self.coint_rank):
+                rows.append({
+                    "matrix": "beta",
+                    "row": i,
+                    "col": j,
+                    "value": float(self.beta[i, j]),
+                })
+        return pd.DataFrame(rows)
+
+    def var_rep(self):
+        """VAR representation coefficient matrices."""
+        return self._sm_result.var_rep()
+
+    def irf(self, periods: int = 10):
+        """Impulse response functions from the VAR representation."""
+        return self._sm_result.irf(periods=periods)
+
+    def test_normality(self, signif: float = 0.05):
+        """Multivariate normality test."""
+        return self._sm_result.test_normality(signif=signif)
+
+    def test_whiteness(self, nlags: int = 10, signif: float = 0.05, adjusted: bool = False):
+        """Residual whiteness test."""
+        return self._sm_result.test_whiteness(nlags=nlags, signif=signif, adjusted=adjusted)
+
+    def summary(self, alpha: float = 0.05):
+        return self._sm_result.summary(alpha=alpha)

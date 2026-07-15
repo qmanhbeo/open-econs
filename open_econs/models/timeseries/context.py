@@ -14,6 +14,15 @@ from open_econs.models.timeseries.unitroot import (
     pp,
     zivot_andrews,
 )
+from open_econs.models.timeseries.var import (
+    granger_causality,
+    instantaneous_causality,
+    johansen_cointegration,
+    var_fit,
+    var_select_order,
+    vec2var,
+    vecm_fit,
+)
 
 
 class TimeSeriesContext:
@@ -124,6 +133,46 @@ class TimeSeriesContext:
     def arma(self, y: str | pd.Series | np.ndarray, **kwargs: Any) -> Any:
         """ARMA model.  See :func:`open_econs.arma`."""
         return arma(self._series(y), **kwargs)
+
+    def var_fit(self, columns: list[str] | pd.DataFrame | np.ndarray, **kwargs: Any) -> Any:
+        """Fit a VAR model.  See :func:`open_econs.var_fit`."""
+        if isinstance(columns, str):
+            columns = [columns]
+        if isinstance(columns, list):
+            data = self._data[columns].astype(float)
+        else:
+            data = columns
+        return var_fit(data, **kwargs)
+
+    def var_select_order(self, columns: list[str] | pd.DataFrame | np.ndarray, **kwargs: Any) -> Any:
+        """Select VAR lag order.  See :func:`open_econs.var_select_order`."""
+        if isinstance(columns, str):
+            columns = [columns]
+        if isinstance(columns, list):
+            data = self._data[columns].astype(float)
+        else:
+            data = columns
+        return var_select_order(data, **kwargs)
+
+    def johansen_cointegration(self, columns: list[str] | pd.DataFrame | np.ndarray, **kwargs: Any) -> Any:
+        """Johansen cointegration test.  See :func:`open_econs.johansen_cointegration`."""
+        if isinstance(columns, str):
+            columns = [columns]
+        if isinstance(columns, list):
+            data = self._data[columns].astype(float)
+        else:
+            data = columns
+        return johansen_cointegration(data, **kwargs)
+
+    def vecm_fit(self, columns: list[str] | pd.DataFrame | np.ndarray, **kwargs: Any) -> Any:
+        """Fit a VECM.  See :func:`open_econs.vecm_fit`."""
+        if isinstance(columns, str):
+            columns = [columns]
+        if isinstance(columns, list):
+            data = self._data[columns].astype(float)
+        else:
+            data = columns
+        return vecm_fit(data, **kwargs)
 
     def __repr__(self) -> str:
         head = f"TimeSeriesContext ({self._data.shape[0]} rows, {self._data.shape[1]} cols)"
