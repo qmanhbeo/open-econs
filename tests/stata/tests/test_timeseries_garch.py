@@ -11,22 +11,15 @@ confirmed per standing rule 1).
 
 Tolerance
 ---------
-**Documented exception to the rule-2 1e-6 ceiling (see
-docs/timeseries-backend-recon.md, "GARCH omega-beta ridge exception").**  The
-cross-tool coefficient spread is ~1-1.5% (beta), which exceeds 1e-6.  This is
-NOT optimizer noise: arch is deterministic to ~1e-7 across starting values and
-tight tolerances, so the gap is *not* arch scattering.  The root cause is the
-GARCH(1,1) **omega-beta ridge** -- omega and beta are near-collinear in the
-variance recursion ``h_t = omega + alpha*e^2 + beta*h_{t-1}``, so the likelihood
-is flat along the ridge: reducing omega and raising beta (or vice versa) leaves
-the log-likelihood essentially unchanged.  Demonstrated: the three parameter
-sets (OE/arch, Stata ``arch``, ``rugarch``) are all on the same likelihood ridge
--- their log-likelihoods agree to ~2e-6 relative -- and perturbing arch's optimum
-along the ridge by 1% changes the LL by only ~1.6e-6.  A secondary contributor
-is the presample/backcast variance initialization, which shifts the *reported*
-LL by ~1.4e-4 relative between arch and Stata/R.  The 2e-2 relative tolerance is
-the genuine cross-tool envelope with margin; it is an intentional, evidenced
-exception and is flagged to the project lead.
+**Documented exception to the rule-2 1e-6 ceiling.**  The remaining
+coefficient-level gap (~1e-3 relative on beta) is the omega-beta ridge:
+omega and beta are near-collinear in the variance recursion
+``h_t = omega + alpha*e^2 + beta*h_{t-1}``, so the likelihood is flat along
+the ridge.  This is a genuine flat-likelihood identifiability issue, not
+optimizer noise (arch is deterministic to ~1e-7).  The presample backcast
+convention was matched to Stata/R (``mean(e²)``), closing the LL gap from
+~1.4e-4 relative to ~2.5e-9 relative.  The 6e-3 relative tolerance covers
+the residual ridge-driven coefficient spread with margin.
 """
 
 from __future__ import annotations
@@ -44,7 +37,7 @@ from ..stata_runner import read_stata
 
 pytestmark = pytest.mark.stata
 
-RTOL = 2e-2
+RTOL = 6e-3
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 GARCH_INPUT = REPO_ROOT / "tests" / "r" / "fixtures" / "inputs" / "garch_input.csv"

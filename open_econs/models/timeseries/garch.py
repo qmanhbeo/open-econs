@@ -42,6 +42,7 @@ def garch(
     vol: Literal["GARCH", "EGARCH", "ARCH", "HARCH"] = "GARCH",
     dist: Literal["normal", "t", "skewt", "ged"] = "normal",
     power: float = 2.0,
+    backcast: Literal["stata", "arch"] | float = "stata",
     **fit_kwargs: Any,
 ) -> GARCHResult:
     """GARCH-family volatility model (wraps ``arch.arch_model``).
@@ -72,6 +73,12 @@ def garch(
     power : float, default 2.0
         Power of the GARCH representation (2 = standard GARCH; 1 = absolute
         value / Taylor/Schwert).
+    backcast : {"stata", "arch"} or float, default "stata"
+        Presample variance convention.  ``"stata"`` uses the sample mean of
+        squared residuals (``mean(e²)``), matching Stata ``arch0(xb)`` (default)
+        and R ``rugarch`` ``rec.init="all"``.  ``"arch"`` uses arch's native
+        exponentially-weighted average of the first 75 squared residuals
+        (decay 0.94).  A float is used directly as sigma²₀.
 
     Notes
     -----
@@ -82,10 +89,18 @@ def garch(
     (arch/rugarch = (1,1); Stata requires explicit ``garch(1)``), reconciled by
     always passing ``p``/``q`` explicitly (decision: GARCH is the lowest-risk
     v1.1.0 item).
+
+    The presample variance (backcast) convention diverges across tools:
+    Stata/R use ``mean(e²)``; arch uses an EWMA of the first 75 observations.
+    OE defaults to the Stata/R convention for parity.  The remaining
+    coefficient-level gap (~1e-3 relative on beta) is the omega-beta ridge
+    (near-collinearity in the variance recursion), a genuine flat-likelihood
+    identifiability issue that no backcast choice can close.
     """
     call = _capture_call(
         y=("series" if isinstance(y, pd.Series) else "array"),
         p=p, q=q, o=o, mean=mean, lags=lags, vol=vol, dist=dist, power=power,
+        backcast=backcast,
         **fit_kwargs,
     )
     s = pd.Series(y).astype(float).reset_index(drop=True)
@@ -103,6 +118,16 @@ def garch(
         rescale=False,
     )
     fit_kwargs.setdefault("disp", "off")
+
+    if backcast == "stata":
+        pre_res = am.fit(**fit_kwargs)
+        bc_val = float(np.mean(pre_res.resid**2))
+        fit_kwargs["backcast"] = bc_val
+    elif backcast == "arch":
+        pass  # arch's default EWMA backcast
+    else:
+        fit_kwargs["backcast"] = float(backcast)
+
     res: ARCHModelResult = am.fit(**fit_kwargs)
 
     params = res.params

@@ -10,17 +10,13 @@ freely estimates ``omega`` via full MLE -- identical to ``arch`` and to OE's
 
 Tolerance
 ---------
-**Documented exception to the rule-2 1e-6 ceiling (see
-docs/timeseries-backend-recon.md, "GARCH omega-beta ridge exception").**  Root
-cause is the GARCH(1,1) omega-beta ridge (omega and beta are near-collinear in
-the variance recursion, so the likelihood is flat along the ridge); the three
-engines' parameter sets are all on the same likelihood ridge (LLs agree to
-~2e-6 relative) and the cross-tool coefficient spread is ~1-1.5% (beta), which
-exceeds 1e-6.  This is NOT optimizer noise: arch is deterministic to ~1e-7
-across starting values.  The 2e-2 relative tolerance is the genuine cross-tool
-envelope with margin; it is an intentional, evidenced exception and is flagged
-to the project lead.  (The Stata-side module docstring carries the full
-rationale.)
+**Documented exception to the rule-2 1e-6 ceiling.**  The remaining
+coefficient-level gap (~5e-3 relative on alpha) is the omega-beta ridge:
+omega and beta are near-collinear in the variance recursion, so the
+likelihood is flat along the ridge.  The presample backcast convention was
+matched to R's ``rec.init="all"`` (``mean(e²)``), closing the LL gap from
+~1.4e-4 relative to ~2.2e-5 relative.  The 6e-3 relative tolerance covers
+the residual ridge-driven coefficient spread with margin.
 """
 
 from __future__ import annotations
@@ -38,7 +34,7 @@ from ..r_runner import read_r
 
 pytestmark = pytest.mark.r
 
-RTOL = 2e-2
+RTOL = 6e-3
 
 INPUT_CSV = (
     Path(__file__).resolve().parents[2]
