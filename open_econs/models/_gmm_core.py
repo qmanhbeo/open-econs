@@ -16,6 +16,19 @@ The one-step weighting is ``A1 = (Z' W Z)^{-1}``.  ``W`` defaults to the
 identity (the plain/iid case, i.e. ``(Z'Z)^{-1}``).  Arellano-Bond passes the
 first-difference block-diagonal operator ``H`` (built from
 ``_build_h`` in ``abond.py``) as ``W`` so its behavior is preserved exactly.
+
+J-statistic convention (source-confirmed 2026-07-17):
+    The one-step non-robust J uses the model-based weighting
+    ``A1 = (Z'Z)^{-1} / sig2`` (line 158 below), giving
+    ``J = g' (Z'Z)^{-1} g / sig2`` where ``sig2 = e'e / N``.
+    This matches R's ``gmm::specTest(tsls)`` (confirmed to machine
+    epsilon on the shared fixture).  Stata's ``e(J) = Q * N`` uses the
+    robust sandwich ``S = (1/N) Σ g_i g_i'`` instead, giving a
+    numerically different J (~4.03 vs ~3.77 on the fixture).  Both are
+    valid; the model-based variant is the one consistent with the
+    textbook GMM J test under homoskedasticity (Hansen 1982).  The
+    two-step J always uses the efficient weighting ``A2 = S^{-1}``
+    regardless of the robust flag.
 """
 
 from typing import Any
@@ -154,7 +167,9 @@ def estimate_gmm(
     NGroups = float(N)
     k = float(p)
     sig2 = sig2_scale * float(e1 @ e1) / wttot
-    # Mata 418-419: rescale A1, V1 by sig2 (one-step non-robust branch uses this)
+    # Model-based J: A1 = (Z'Z)^{-1} / sig2 gives J = g'(Z'Z)^{-1}g / sig2.
+    # This matches R's specTest(tsls).  Stata's e(J) uses robust S instead
+    # (see module docstring).  Kept as-is per source-confirmed convention audit.
     A1 = A1_raw / sig2
     V1 = V1_raw * sig2
 

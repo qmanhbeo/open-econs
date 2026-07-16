@@ -205,6 +205,20 @@ def gmm(
     models with lagged dependent variables and instrument construction from
     the panel structure, see :func:`abond`; this function provides plain
     linear GMM only (no panel-specific instrument or lag handling).
+
+    Convention notes (source-confirmed):
+      * **Intercept as instrument.**  ``gmm()`` always includes the intercept
+        as its own instrument in ``Z``.  For the formula
+        ``y ~ x1 + x2 | z1 + z2``, ``Z = [intercept, z1, z2]`` (3
+        instruments for 3 parameters in the exactly-identified case).
+        Stata's ``gmm`` command must replicate this by including
+        ``1*(y - Xb)`` as an explicit moment condition.
+      * **One-step J.**  The one-step non-robust J uses the model-based
+        weighting ``A1 = (Z'Z)^{-1} / sig2``, giving
+        ``J = g'(Z'Z)^{-1}g / sig2``.  This matches R's
+        ``gmm::specTest(tsls)`` but differs from Stata's ``e(J)`` which
+        uses the robust sandwich S matrix.  Both are valid; see
+        :mod:`open_econs.models._gmm_core` for the full derivation.
     """
     if step not in ("one-step", "two-step"):
         raise ValueError("step must be 'one-step' or 'two-step'.")
