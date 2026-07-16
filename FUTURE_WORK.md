@@ -285,4 +285,66 @@ relaxed tolerances (standing rule 2).
 
 ---
 
-*Last updated: 2026-07-14, v1.1.0 time-series finish-line (tests + flagged gaps).*
+## GMM Convention Differences (Documented, Not Bugs)
+
+### GMM-J: J-Statistic Convention (Closed)
+
+- **What:** OE's one-step J uses model-based S: `J = g'(Z'Z)^{-1}g / sig2`
+  (line 158 of `_gmm_core.py`). Stata's `e(J)` uses robust sandwich
+  `S_hat = (1/N)Σg_ig_i'`. R's `specTest()` does NOT include `/sig2`.
+  Two legitimate, source-confirmed conventions exist.
+- **Evidence:** Stata's `gmm.ado` line 1358: `e(J) = Q * N`. Empirically
+  verified: Stata's actual one-step estimate b=[0.830, 1.995, 1.267] with
+  robust S gives J=4.0276, matching Stata's `e(J)=4.0276` to 5 decimals.
+  OE's model-based J=3.770 matches R's `specTest` to machine epsilon.
+- **Status:** Resolved 2026-07-17. OE's `/sig2` convention was kept as-is.
+  Documented in `_gmm_core.py` module docstring, inline comment at line 158,
+  and `gmm()` docstring. See commit `a941114`.
+- **No action required.**
+
+### GMM-HAC: HAC Kernel Scope Convention
+
+- **What:** OE applies Bartlett kernel to VCE only (not to weighting matrix).
+  R's `gmm(vcov="HAC")` applies kernel to BOTH weighting matrix AND VCE.
+  Therefore R's HAC two-step SEs diverge from OE's (R=[0.158, 0.101, 0.900]
+  vs OE=[0.145, 0.103, 0.826] on the 300-obs fixture).
+- **Status:** Documented in `test_r_gmm.py` and `gmm.R` fixture comments.
+  HAC tests check finiteness/J>0 only, not numeric parity.
+- **Implementation path:** If parity is desired, add a `hac_weighting=True`
+  parameter to `gmm()` that applies the kernel to both W and VCE.
+  Reference: R `gmm` package `.myKernHAC` / `.weightFct`.
+
+### GMM-GN: Stata Gauss-Newton Non-Convergence to 2SLS
+
+- **What:** Stata's `gmm` command uses iterative Gauss-Newton optimization
+  for expression-form moment conditions.  For linear overidentified models,
+  this does NOT converge to the exact closed-form 2SLS solution.  On the
+  300-obs fixture: Stata one-step b2=1.267 vs exact 2SLS b2=1.354 (diff
+  6.8%).  Two-step coefficients differ by ~0.5% (OE 0.870 vs Stata 0.867).
+  The exactly-identified case is unaffected (unique solution regardless of
+  method, diff ≤1.8e-7).
+- **Consequence:** One-step overidentified coefficient/SE/J assertions
+  against Stata are NOT valid parity targets.  Two-step coefficient assertions
+  are valid at ~0.5% tolerance.  Two-step SE assertions are NOT valid due to
+  the coefficient divergence feeding into the sandwich VCE formula.
+- **Status:** Documented 2026-07-17 in `test_stata_gmm.py` module docstring.
+  This is a real, distinct, previously-undocumented product-level fact that
+  could resurface in any future Stata-GMM parity work.
+- **No action required** (documented convention, not a bug).  If tighter
+  parity is desired for overidentified linear GMM, use Stata `ivregress gmm`
+  which has a different optimization path.
+
+### GMM-IVGMM: linearmodels.IVGMM Wrap Candidate (Rule 14)
+
+- **What:** `linearmodels>=6.0` is already a core dependency (v7.0 installed).
+  `linearmodels.iv.model.IVGMM` exists with `centered=True` default.  Zero
+  current references in the codebase — OE uses only `IV2SLS`.  Candidate for
+  future evaluation of whether to wrap `IVGMM` instead of hand-rolling
+  `_gmm_core.py`.
+- **Status:** Checked 2026-07-17 per rule 14.  No formula/citation evidence
+  found there resolving the J-convention question.  Not actioned now.
+- **No action required** unless `_gmm_core.py` needs replacement.
+
+---
+
+*Last updated: 2026-07-17, GMM parity audit close-out.*

@@ -45,3 +45,8 @@ def df_oaxaca() -> pd.DataFrame:
 @pytest.fixture(scope="session")
 def df_balance_weighted() -> pd.DataFrame:
     return _load_csv("df_balance_weighted")
+
+
+@pytest.fixture(scope="session")
+def df_gmm() -> pd.DataFrame:
+    return _load_csv("df_gmm")
