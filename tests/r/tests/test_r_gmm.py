@@ -261,11 +261,17 @@ class TestGmmROverIdentifiedClusterTwoStep:
     coefficient ``b = [0.850, 2.012, 1.354]`` differs from Stata's
     ``[0.915, 1.989, 1.621]`` and from OE's cluster coefficient.
 
-    OE currently hardcodes the Stata-style cluster efficient weight (bread =
-    cluster S).  Reproducing R's iid-bread + cluster-meat convention would
-    require a ``weight`` toggle (Stata-style vs R/literature iid-style) — a
-    flagged gap (rule 3/15), NOT silently skipped.  This test therefore pins
-    the documented divergence rather than asserting R parity.
+    OE now exposes a ``weight`` toggle (``"stata"`` = cov-structure bread,
+    ``"iid"`` = iid efficient-weight bread).  ``weight="iid"`` reproduces the
+    textbook iid-weighted two-step GMM coefficient (verified against an
+    independent computation, ``test_coefficients_match_iid_two_step``).  However
+    R's actual cluster coefficient ``[0.850, 2.012, 1.354]`` is STILL not
+    reproduced: R's ``gmm(..., vcov="iid", cluster=)`` does not reduce to the
+    plain iid-weighted GMM for the coefficient (its ``cluster=`` argument
+    affects the two-step weighting in a way not yet reverse-engineered from
+    R's ``gmm`` source).  This is a genuine flagged gap (rule 3/15), NOT
+    silently skipped — ``test_does_not_match_r_cluster`` pins it.  See
+    FUTURE_WORK GMM-RCLUSTER.
     """
 
     @pytest.fixture(autouse=True)
@@ -276,16 +282,18 @@ class TestGmmROverIdentifiedClusterTwoStep:
             step="two-step", cov_type="cluster", cluster="cluster",
         )
 
-    def test_cluster_is_distinct_convention(self):
-        # Guard: OE's cluster coefficient must NOT silently match R's cluster
-        # coefficient (they use different efficient-weight conventions).  If
-        # this fails, a weight toggle has been added and this test must be
-        # rewritten to assert R parity under that toggle.
+    def test_does_not_match_r_cluster(self):
+        # Guard: OE's default cluster coefficient must NOT silently match R's
+        # cluster coefficient (different efficient-weight conventions; R's is
+        # not yet reproduced even with weight="iid").  If this fails, R's
+        # cluster weighting has been reverse-engineered — rewrite to assert R
+        # parity under the matching toggle.
         r_coef = np.array(self.r["coef"])
         gap = np.max(np.abs(self.oe_r.coefficients.values - r_coef))
         assert gap > 1e-3, (
             "OE cluster coefficient unexpectedly matches R cluster coefficient; "
-            "if a weight toggle was added, assert R parity explicitly."
+            "if R's cluster weighting is now reproduced, assert R parity under "
+            "the matching toggle."
         )
 
     def test_coefficients_finite(self):
@@ -293,3 +301,66 @@ class TestGmmROverIdentifiedClusterTwoStep:
 
     def test_standard_errors_positive(self):
         assert all(self.oe_r.std_errors.values > 0)
+
+
+class TestGmmWeightToggleIidBread:
+    """``weight='iid'`` selects the iid efficient-weight bread (rule 15).
+
+    The toggle switches ONLY the two-step efficient-weight bread to the plain
+    iid S (each observation its own group); the VCE meat stays at the
+    cov-structure S.  This is a genuine, documented convention switch
+    reproducing the textbook iid-weighted two-step GMM coefficient.  It is NOT
+    claimed as R-cluster parity (R's cluster coefficient is a separate, still
+    open gap — see TestGmmROverIdentifiedClusterTwoStep /
+    FUTURE_WORK GMM-RCLUSTER).
+
+    Self-consistency: with ``weight='iid'`` the coefficient must equal an
+    independent iid two-step GMM computation (identity grouping for the bread,
+    one-step residuals for S_iid) to <=1e-6.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _run(self, gmm_input):
+        self.oe_r = oe.gmm(
+            "y ~ x1 + x2 | z1 + z2 + z3 + z4 + z5", gmm_input,
+            step="two-step", cov_type="cluster", cluster="cluster",
+            windmeijer=False, robust_meat="one-step", weight="iid",
+        )
+
+    def test_coefficients_match_iid_two_step(self, gmm_input):
+        from open_econs.models.linear.iv import _parse_iv_formula
+
+        p = _parse_iv_formula(
+            "y ~ x1 + x2 | z1 + z2 + z3 + z4 + z5", gmm_input
+        )
+        Y = p["y"]
+        X = p["X"]
+        parts = [X[:, p["exog_idx"]]] if p["exog_idx"] else []
+        parts.append(p["instr_matrix"])
+        Z = np.column_stack(parts)
+        # One-step identity-weight b1 (matches core).
+        A1 = np.linalg.inv(Z.T @ Z)
+        b1 = np.linalg.solve(X.T @ Z @ A1 @ Z.T @ X, X.T @ Z @ A1 @ Z.T @ Y)
+        e1 = Y - X @ b1
+        S_iid = (Z * e1[:, None]).T @ (Z * e1[:, None])
+        A2 = np.linalg.inv(S_iid)
+        b2_ref = np.linalg.solve(
+            X.T @ Z @ A2 @ Z.T @ X, X.T @ Z @ A2 @ Z.T @ Y
+        )
+        npt.assert_allclose(
+            self.oe_r.coefficients.values, b2_ref, atol=1e-6
+        )
+
+    def test_iid_bread_distinct_from_cov_structure_bread(self, gmm_input):
+        # With cov_type='cluster', weight='iid' must differ from the Stata-style
+        # cluster bread (the cluster-efficient coefficient), confirming the
+        # toggle actually switches the bread.
+        oe_cluster = oe.gmm(
+            "y ~ x1 + x2 | z1 + z2 + z3 + z4 + z5", gmm_input,
+            step="two-step", cov_type="cluster", cluster="cluster",
+            windmeijer=False, robust_meat="one-step", weight="stata",
+        )
+        gap = np.max(
+            np.abs(self.oe_r.coefficients.values - oe_cluster.coefficients.values)
+        )
+        assert gap > 1e-3
