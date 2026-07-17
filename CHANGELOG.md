@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.0.3] - 2026-07-17
+
+### Performance hardening (bit-identical)
+
+- `psm()` fully vectorized (batched `cKDTree` k-NN, padded-tensor `xi2`/`c_tau`
+  reductions, vectorized `matched_arr`); **~4× faster** on the Stata
+  `teffects psmatch` fixture (nn=10: 0.50s → 0.13s). Bit-identical to the
+  prior scalar code. (commit `cdb15be`)
+- `_gmm_core._hac_S` Newey-West lag accumulation vectorized into a single
+  batched `einsum`; bit-identical to the scalar loop, feeds `abond`/`gmm` VCE +
+  Hansen J. (commit `897c31a`)
+- `did_cs()` opt-in `parallel=` bootstrap via `ProcessPoolExecutor`;
+  bit-identical to the serial path. (commits `3f56aea`, `3eb0e92`)
+- GPU offload (CuPy / CUDA) deliberately declined — BLAS already CPU-threaded;
+  rationale in `methodology/performance-conventions.md`.
+
+### Documentation & packaging
+
+- PyPI `description` rewritten to "Empirical economics and causal inference in
+  Python — a scikit-learn-style unified API with Stata/R-grade numerical
+  parity." (replaces the understated "scikit-learn of empirical economics").
+- README: corrected parity-test count (550+ Stata/R, 1000+ total), expanded
+  feature coverage (DID family, GMM / Arellano-Bond, panels, full time-series
+  module), added a Performance section, removed two stale duplicate sections.
+- ROADMAP: added a v1.0.3 performance-hardening entry.
+- New release notes: `docs/release_notes_v1.0.3.md`.
+
 ## [1.0.2] - 2026-07-14
 
 ### DID Naming Convention Rename
