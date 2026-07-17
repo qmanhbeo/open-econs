@@ -19,7 +19,40 @@ import pandas as pd
 import pytest
 
 import open_econs as oe
-from open_econs.models._gmm_core import estimate_gmm
+from open_econs.models._gmm_core import estimate_gmm, _hac_S
+
+
+def _scalar_hac_S(Z, e, eq_entity, max_lags, time_labels, adjust):
+    """Independent scalar re-implementation of the original _hac_S loop.
+
+    Used only to prove the vectorized version is bit-identical (rule 2).
+    """
+    L = Z.shape[1]
+    n_tot = Z.shape[0]
+    S = np.zeros((L, L))
+    for ent in np.unique(eq_entity):
+        mask = eq_entity == ent
+        Z_e = Z[mask]
+        e_e = e[mask]
+        if time_labels is not None:
+            order = np.argsort(time_labels[mask], kind="stable")
+            Z_e = Z_e[order]
+            e_e = e_e[order]
+        moments = Z_e * e_e[:, None]
+        T_ent = moments.shape[0]
+        if T_ent == 0:
+            continue
+        S_ent = moments.T @ moments
+        for lag in range(1, min(max_lags, T_ent - 1) + 1):
+            w = 1.0 - lag / (max_lags + 1.0)
+            Gamma = np.zeros((L, L))
+            for t in range(lag, T_ent):
+                Gamma += np.outer(moments[t], moments[t - lag])
+            S_ent += w * (Gamma + Gamma.T)
+        S += S_ent
+    if adjust:
+        S *= n_tot / max(float(n_tot - Z.shape[1]), 1.0)
+    return S
 
 
 @pytest.fixture
@@ -116,3 +149,74 @@ class TestGmmCoreIdentityWeight:
             )
             assert np.allclose(gmm_r["se"], iv_r.std_errors.values * robust_factor,
                                rtol=1e-8, atol=1e-10)
+
+
+class TestHacSVectorization:
+    """Bit-identical check that the vectorized `_hac_S` equals the scalar loop.
+
+    Candidate D (2026-07-17): replaced the inner per-lag/per-t `np.outer`
+    accumulation with a single batched `einsum` reduction.  The per-entity
+    loop is preserved (ragged time dimensions).  Must reproduce the scalar
+    loop EXACTLY (atol=0) because this matrix feeds abond/gmm VCE + J-stat
+    to <=1e-6 vs Stata (rule 2).  If this ever drifts, keep the scalar
+    version -- do not loosen tolerance.
+    """
+
+    @pytest.mark.parametrize("seed", [1, 2, 3])
+    @pytest.mark.parametrize("max_lags", [1, 2, 3, 4])
+    def test_hac_S_bit_identical_per_entity(self, seed, max_lags):
+        rng = np.random.default_rng(seed)
+        # Panel with ragged per-entity time lengths and a time index.
+        L = 5
+        entities = []
+        tvals = []
+        for ent in range(7):
+            T = rng.integers(2, 12)
+            entities += [ent] * T
+            tvals += list(range(T))
+        n = len(entities)
+        Z = rng.standard_normal((n, L))
+        e = rng.standard_normal(n)
+        eq = np.array(entities)
+        time_labels = np.array(tvals)
+        vec = _hac_S(Z, e, eq, max_lags, time_labels, adjust=False)
+        ref = _scalar_hac_S(Z, e, eq, max_lags, time_labels, adjust=False)
+        assert np.array_equal(vec, ref), (seed, max_lags)
+
+    def test_hac_S_bit_identical_adjust(self):
+        rng = np.random.default_rng(42)
+        L = 4
+        n = 200
+        Z = rng.standard_normal((n, L))
+        e = rng.standard_normal(n)
+        eq = rng.integers(0, 9, n)
+        for max_lags in (1, 3):
+            vec = _hac_S(Z, e, eq, max_lags, None, adjust=True)
+            ref = _scalar_hac_S(Z, e, eq, max_lags, None, adjust=True)
+            assert np.array_equal(vec, ref)
+
+    def test_hac_S_bit_identical_full_sample(self):
+        # hac_weighting=True path: single entity, ordered by row.
+        rng = np.random.default_rng(7)
+        L = 6
+        n = 150
+        Z = rng.standard_normal((n, L))
+        e = rng.standard_normal(n)
+        eq = np.zeros(n, dtype=int)
+        for max_lags in (2, 5):
+            vec = _hac_S(Z, e, eq, max_lags, None, adjust=False)
+            ref = _scalar_hac_S(Z, e, eq, max_lags, None, adjust=False)
+            assert np.array_equal(vec, ref)
+
+    def test_hac_S_bit_identical_no_time_pooled(self):
+        # Default per-entity HAC with time_labels=None (cross-sectional-style).
+        rng = np.random.default_rng(99)
+        L = 3
+        n = 100
+        Z = rng.standard_normal((n, L))
+        e = rng.standard_normal(n)
+        eq = rng.integers(0, 5, n)
+        for max_lags in (1, 2, 3):
+            vec = _hac_S(Z, e, eq, max_lags, None, adjust=False)
+            ref = _scalar_hac_S(Z, e, eq, max_lags, None, adjust=False)
+            assert np.array_equal(vec, ref)

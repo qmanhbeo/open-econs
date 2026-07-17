@@ -55,6 +55,28 @@ def _hac_S(
     time_labels: np.ndarray | None,
     adjust: bool,
 ) -> np.ndarray:
+    """Newey-West (Bartlett) long-run moment covariance S.
+
+    Per-entity accumulation, vectorized inside each entity (the per-entity
+    loop over ``np.unique(eq_entity)`` is preserved because entities have
+    ragged time dimensions; only the inner per-lag / per-t ``np.outer``
+    accumulation is batched into a single ``einsum``-style reduction, which
+    OpenBLAS auto-threads and is **bit-identical** to the original scalar
+    loop because the reduction order along the time axis is unchanged:
+    ``sum(axis=0)`` of the (T-lag, L, L) tensor matches the sequential
+    ``Gamma += outer(moments[t], moments[t-lag])`` for ``t = lag..T-1``).
+
+    Float-reduction order is preserved exactly: the contemporaneous term
+    ``S_ent = moments.T @ moments`` (a single BLAS call, already not a
+    Python loop in the original) is kept as-is, and each lag term uses
+    ``w * (Gamma + Gamma.T)`` with the same ``w = 1 - lag/(max_lags+1)``
+    scalar.
+
+    Verification: see ``tests/non_stata_nor_r/test_gmm_core.py``
+    ``test_hac_S_vectorization_bit_identical`` (bit-identical vs an
+    independent scalar re-implementation) and the Stata abond/gmm HAC
+    parity tests.
+    """
     L = Z.shape[1]
     n_tot = Z.shape[0]
     S = np.zeros((L, L))
@@ -73,10 +95,13 @@ def _hac_S(
         S_ent = moments.T @ moments
         for lag in range(1, min(max_lags, T_ent - 1) + 1):
             w = 1.0 - lag / (max_lags + 1.0)
-            Gamma = np.zeros((L, L))
-            for t in range(lag, T_ent):
-                Gamma += np.outer(moments[t], moments[t - lag])
-            S_ent += w * (Gamma + Gamma.T)
+            # Batched outer products: m_future[t-lag] x m_past[t].
+            # Summing along axis 0 (t = lag .. T_ent-1) preserves the
+            # exact reduction order of the original `for t` loop.
+            m_future = moments[lag:]          # (T-lag, L)  -> moments[t]
+            m_past = moments[:-lag]           # (T-lag, L)  -> moments[t-lag]
+            Gamma = np.einsum("ti,tj->ij", m_future, m_past)
+            S_ent = S_ent + w * (Gamma + Gamma.T)
         S += S_ent
     if adjust:
         S *= n_tot / max(float(n_tot - Z.shape[1]), 1.0)
