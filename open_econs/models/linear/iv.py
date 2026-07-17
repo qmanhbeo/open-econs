@@ -149,6 +149,7 @@ def iv(
     lags: int | None = None,
     time: str | None = None,
     hac_adjust: bool = False,
+    debiased: bool = False,
     entity: str | None = None,
     time_fe: str | None = None,
     fixed_effects: list[str] | None = None,
@@ -205,6 +206,19 @@ def iv(
         Degrees-of-freedom correction for Newey-West HAC standard errors.
         When ``True``, the HAC variance is multiplied by ``N / (N - K)``,
         matching Stata's ``ivregress`` default behavior.
+    debiased : bool, default False
+        Small-sample (degrees-of-freedom) correction for the **variance
+        estimator's** scale factor ``s2 = SSR / dof`` and the cluster
+        CRV SSC.  Default ``False`` matches Stata's ``ivregress``
+        (nonrobust uses ``SSR / N``; cluster uses **no** SSC, i.e.
+        ``(N-1)/(N-K) * G/(G-1)`` is NOT applied).
+
+        Set ``debiased=True`` to match **R** (``AER::ivreg`` +
+        ``sandwich``): nonrobust/HC use ``s2 = SSR / (N - K)`` and cluster
+        uses the ``G / (G - 1)`` small-sample correction (``sandwich::
+        vcovCL`` default).  This is a genuine Stata-vs-R convention
+        divergence for IV standard errors (see methodology/linear/iv.md);
+        expose it per the repo parity rules rather than silently picking one.
     entity : str, optional
         Column name for entity (panel unit) fixed effects. If provided,
         entity FE are absorbed via pyfixest's ``| f1 + f2`` syntax.
@@ -248,7 +262,7 @@ def iv(
     """
     call = _capture_call(
         formula=formula, cov_type=cov_type, cluster=cluster, lags=lags,
-        time=time, hac_adjust=hac_adjust,
+        time=time, hac_adjust=hac_adjust, debiased=debiased,
         entity=entity, time_fe=time_fe, fixed_effects=fixed_effects,
     )
 
@@ -345,6 +359,7 @@ def iv(
             lags=lags,
             time=time,
             hac_adjust=hac_adjust,
+            debiased=debiased,
             fe_parts=fe_parts,
             exog_vars=exog_vars_in_formula,
             endog_vars=endog_vars,
@@ -360,6 +375,7 @@ def iv(
         lags=lags,
         time=time,
         hac_adjust=hac_adjust,
+        debiased=debiased,
         fe_parts=fe_parts,
         exog_vars=exog_vars_in_formula,
         endog_vars=endog_vars,
@@ -376,6 +392,7 @@ def _iv_pyfixest_path(
     lags: int | None,
     time: str | None,
     hac_adjust: bool,
+    debiased: bool,
     fe_parts: list[str],
     exog_vars: list[str],
     endog_vars: list[str],
@@ -452,7 +469,10 @@ def _iv_pyfixest_path(
     pf_vcov: Any
     cov_label: str
     if cluster is not None:
-        pf_vcov = {"CRV1": cluster}
+        # pyfixest CRV1 applies the G/(G-1) SSC when debiased=True; matches
+        # R sandwich::vcovCL default. debiased=False (default) matches Stata
+        # ivregress (no SSC).
+        pf_vcov = {"CRV1": cluster, "debiased": debiased}
         cov_label = f"clustered({cluster})"
     elif cov_type == "HAC":
         # pyfixest NW requires post-hoc vcov() call; fit with HC1 first
@@ -462,6 +482,8 @@ def _iv_pyfixest_path(
         pf_vcov = "iid"
         cov_label = cov_type
     elif cov_type in ("HC1", "robust", "heteroskedastic"):
+        # HC1 already includes the N/(N-K) factor; debiased only changes the
+        # residual s2 scale for the iid/nonrobust case below.
         pf_vcov = "HC1"
         cov_label = "robust"
     else:
@@ -631,19 +653,21 @@ def _iv_linearmodels_path(
     lags: int | None,
     time: str | None,
     hac_adjust: bool,
+    debiased: bool,
     fe_parts: list[str],
     endog_vars: list[str],
     exog_vars: list[str],
     call: dict[str, Any],
 ) -> IVResult:
-    """Fallback path using linearmodels for HC0/HC2/HC3 and cluster.
+    """Fallback path using linearmodels for nonrobust/HC0/HC2/HC3 and cluster.
 
-    For cluster-robust IV, this route is used because Stata's ``ivregress 2sls``
-    default (no ``small`` option) applies **no SSC** to the cluster VCE
-    (``ivregress.ado`` lines 637-714).  pyfixest's CRV1 applies
-    ``(N-1)/(N-K) * G/(G-1)`` unconditionally, which matches Stata's ``small``
-    variant, not the default.  ``linearmodels(debiased=False)`` matches
-    Stata's default exactly.
+    For cluster-robust IV, ``debiased=False`` (default) applies **no SSC** to
+    the cluster VCE, matching Stata's ``ivregress 2sls`` default (no ``small``
+    option; ``ivregress.ado`` lines 637-714).  ``debiased=True`` applies the
+    ``G/(G-1)`` small-sample correction, matching R's ``sandwich::vcovCL``
+    default.  For the nonrobust/HC estimators, ``debiased=True`` uses
+    ``s2 = SSR/(N-K)`` (R/AER convention) while ``debiased=False`` uses
+    ``SSR/N`` (Stata ``ivregress`` convention).
     """
     from typing import cast as _cast
 
@@ -664,16 +688,6 @@ def _iv_linearmodels_path(
         "unadjusted": "unadjusted",
         "homoskedastic": "unadjusted",
     }
-    _IV_DEBIAS_MAP = {
-        "nonrobust": False,
-        "HC0": False,
-        "HC1": True,
-        "HC2": False,
-        "HC3": False,
-        "robust": False,
-        "unadjusted": False,
-        "homoskedastic": False,
-    }
 
     Z_arr = instr_matrix if instr_matrix.shape[1] > 0 else None
     X_exog = X_full[:, exog_idx] if exog_idx else None
@@ -693,13 +707,13 @@ def _iv_linearmodels_path(
     from linearmodels.iv import IV2SLS as LM_IV2SLS
     try:
         if cluster is not None:
-            # Route through linearmodels with debiased=False to match
-            # Stata's ivregress 2sls default (no SSC).
-            # Source: ivregress.ado lines 637-714.
+            # debiased=False (default) applies NO SSC, matching Stata's
+            # ivregress 2sls default (no small option; ivregress.ado 637-714).
+            # debiased=True applies the G/(G-1) SSC, matching R sandwich::vcovCL.
             fitted = LM_IV2SLS(y_arr, X_exog, X_endog, Z_arr).fit(
                 cov_type="clustered",
                 clusters=cluster_arr,
-                debiased=False,
+                debiased=debiased,
             )
             cov_label = f"clustered({cluster})"
         elif cov_type == "HAC":
@@ -710,9 +724,18 @@ def _iv_linearmodels_path(
             )
             cov_label = f"HAC({lags})"
         else:
+            # `debiased` controls the variance scale s2 = SSR/dof and the
+            # residual DOF used by linearmodels:
+            #   * debiased=False (default) => s2 = SSR/N, matching Stata's
+            #     ivregress (nonrobust AND robust).
+            #   * debiased=True => s2 = SSR/(N-K), matching R's AER::ivreg /
+            #     sandwich::vcovHC(vcovHC type="HC1") and sandwich::vcovCL.
+            # This is the Stata-vs-R convention divergence for IV SEs; the
+            # `debiased` toggle selects which reference to match (rule 15).
+            # HAC uses `hac_adjust` instead (see branch above).
             fitted = LM_IV2SLS(y_arr, X_exog, X_endog, Z_arr).fit(
                 cov_type=_IV_COV_MAP.get(cov_type, "robust"),
-                debiased=_IV_DEBIAS_MAP.get(cov_type, False),
+                debiased=debiased,
             )
             cov_label = cov_type
     except Exception as e:

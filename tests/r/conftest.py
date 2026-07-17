@@ -24,3 +24,9 @@ def _load_csv(name: str) -> pd.DataFrame:
 def gmm_input() -> pd.DataFrame:
     """Shared GMM input dataset (300 obs, y/x1/x2/z1-z5/cluster/t)."""
     return _load_csv("gmm_input")
+
+
+@pytest.fixture(scope="session")
+def iv_input() -> pd.DataFrame:
+    """Shared IV input dataset (500 obs, overidentified 2 instruments, panel)."""
+    return _load_csv("iv_input")

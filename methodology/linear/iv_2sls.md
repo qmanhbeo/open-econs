@@ -117,18 +117,33 @@ Substituting `ε_i = y_i - X_i β - W_i γ` and solving for the parameters gives
 
 ### Covariance Estimators
 
-The `cov_type` parameter is mapped to linearmodels conventions:
+The `cov_type` parameter is mapped to linearmodels conventions.  The
+**`debiased`** toggle (default `False`) controls the variance scale
+`s2 = SSR/dof` and the cluster SSC, selecting the Stata-vs-R convention:
 
-| open-econs `cov_type` | linearmodels `cov_type` | `debiased` | Description |
-|------------------------|------------------------|------------|-------------|
-| `"nonrobust"` | `"unadjusted"` | `False` | Homoskedastic `σ̂² (X̂'X̂)⁻¹` |
-| `"robust"` | `"robust"` | `False` | Heteroskedastic-robust, **default**, HC0 equivalent |
-| `"HC0"` | `"robust"` | `False` | HC0 alias (identical to `"robust"`) |
-| `"HC1"` | `"robust"` | `True` | Small-sample corrected `n/(n−k)`, matches Stata `ivregress 2sls, robust` |
-| `"HC2"` | `"robust"` | `False` | HC2 alias (identical to `"robust"`; no leverage adjustment for IV) |
-| `"HC3"` | `"robust"` | `False` | HC3 alias (identical to `"robust"`; no jackknife adjustment for IV) |
+| open-econs `cov_type` | linearmodels `cov_type` | `debiased=False` (Stata) | `debiased=True` (R) |
+|------------------------|------------------------|--------------------------|---------------------|
+| `"nonrobust"` | `"unadjusted"` | `s2 = SSR/N` | `s2 = SSR/(N−K)` |
+| `"robust"` / `"HC0"` | `"robust"` | `s2 = SSR/N` (HC0 meat) | `s2 = SSR/(N−K)` |
+| `"HC1"` | `"robust"` | `s2 = SSR/N` (HC1 meat) | `s2 = SSR/(N−K)` (HC1 meat) |
+| `"HC2"` / `"HC3"` | `"robust"` | maps to same linearmodels robust | maps to same linearmodels robust |
+| `cluster="c"` | `"clustered"` | **no** SSC (Stata `ivregress` default) | `G/(G−1)` SSC (R `sandwich::vcovCL`) |
 
-**Key distinction**: HC0, HC2, and HC3 all map to the same linearmodels robust covariance because linearmodels does not implement leverage-adjusted HC2/HC3 for IV. The HC1 path applies the small-sample `n/(n−k)` correction via linearmodels' `debiased=True`. This differs from the OLS implementation, where HC0–HC3 are distinct.
+**Stata-vs-R SE divergence (source-confirmed 2026-07-17):** Stata's
+`ivregress 2sls` uses `s2 = SSR/N` for BOTH nonrobust and `vce(robust)` (no
+`N−K` correction unless `small`), and applies **no** SSC to cluster SEs.
+R's `AER::ivreg` + `sandwich` uses `s2 = SSR/(N−K)` for nonrobust/HC and the
+`G/(G−1)` SSC for cluster.  These are both legitimately labeled "HC1"/"robust"
+but produce SEs that differ by `√(N/(N−K))` (homoskedastic) or `√(G/(G−1))`
+(cluster).  OE exposes `debiased` to choose (rule 15); **default `False`
+matches Stata** (preserving existing Stata parity).  The R-parity test suite
+(`tests/r/tests/test_r_iv.py`) passes `debiased=True` and asserts ≤1e-6 against
+R (the residual ~2.5e-7 gap is independent AER/sandwich vs linearmodels
+implementation noise, well within 1e-6 — rule 2).
+
+**Key distinction**: HC0, HC2, and HC3 all map to the same linearmodels robust
+covariance because linearmodels does not implement leverage-adjusted HC2/HC3 for
+IV. This differs from the OLS implementation, where HC0–HC3 are distinct.
 
 The robust IV covariance is:
 
@@ -141,8 +156,10 @@ where `\hat{e}_i = y_i - [X_i, W_i]' \hat{\theta}` are the 2SLS structural resid
 The unadjusted (homoskedastic) covariance is:
 
 \[
-V_{\text{nonrobust}} = \hat{\sigma}^2 (\tilde{X}'\tilde{X})^{-1}, \quad \hat{\sigma}^2 = \frac{1}{n - k - p} \sum_i \hat{e}_i^2
+V_{\text{nonrobust}} = \hat{\sigma}^2 (\tilde{X}'\tilde{X})^{-1}, \quad \hat{\sigma}^2 = \frac{1}{\text{dof}} \sum_i \hat{e}_i^2
 \]
+
+with `dof = N` when `debiased=False`, `dof = N−K` when `debiased=True`.
 
 ### Default Behavior
 
@@ -158,15 +175,16 @@ The default `"robust"` corresponds to HC0 without finite-sample correction. Use 
 
 | Feature | open-econs | Stata | R (`AER::ivreg`) |
 |---------|------------|-------|-------------------|
-| Default robust SE | HC0 (`robust`, no correction) | HC1 (`ivregress 2sls, robust`) | HC1 (default `vcovHC`) |
+| Default robust SE (nonrobust/robust) | `debiased=False`: `s2=SSR/N` (Stata) | `s2=SSR/N` (`ivregress 2sls`) | `s2=SSR/(N−K)` (AER/sandwich) |
 | HC0/HC2/HC3 distinction | All map to same linearmodels robust | Distinct formulas | Distinct formulas via `vcovHC` |
 | Inference distribution | z-based (normal) | t-based (`df = n−k−p`) | t-based |
-| Stata `ivregress 2sls, robust` match | `cov_type="HC1"` | Default robust | — |
+| Stata `ivregress 2sls, robust` match | `cov_type="HC1", debiased=False` (default) | Default robust | — |
+| R `vcovHC(type="HC1")` match | `cov_type="HC1", debiased=True` | — | Default robust |
 | First-stage F | Per-endog variable; Cragg-Donald = min(F) | Same | Same |
 | Weak instrument critical values | Not implemented (user compares against Stock-Yogo) | `estat weakiv` | Available |
 | Hansen J overidentification | Yes (via linearmodels sargan) | `estat overid` | `summary()` output |
-| Cluster-robust SE | Available: `cluster="<col>"` (one-way) | `ivregress 2sls, vce(cluster)` | `vcovCL` |
-| HAC SE | Available: `cov_type="HAC", lags=, time=` | `ivregress 2sls, vce(hac)` | Not directly |
+| Cluster-robust SE | `cluster="<col>"` (one-way); `debiased=False` no SSC (Stata), `debiased=True` `G/(G−1)` SSC (R) | `ivregress 2sls, vce(cluster)` | `vcovCL` |
+| HAC SE | `cov_type="HAC", lags=, time=` | `ivregress 2sls, vce(hac)` **NOT supported (rc=111)** — R-ref only | Not directly |
 | Predict | Not implemented | Yes | `predict()` |
 
 ## Implementation Details
@@ -299,7 +317,8 @@ The label matches the user-facing `cov_type` (not the mapped linearmodels value)
 
 ### Covariance Mapping Details
 
-The `_IV_COV_MAP` and `_IV_DEBIAS_MAP` control the translation:
+The `_IV_COV_MAP` translates `cov_type` to linearmodels; the `debiased`
+parameter is passed straight through to `IV2SLS.fit(debiased=...)`:
 
 ```python
 _IV_COV_MAP = {
@@ -309,17 +328,11 @@ _IV_COV_MAP = {
     "HC2": "robust",
     "HC3": "robust",
     "robust": "robust",
-    ...
+    "heteroskedastic": "robust",
+    "unadjusted": "unadjusted",
+    "homoskedastic": "unadjusted",
 }
-_IV_DEBIAS_MAP = {
-    "nonrobust": False,
-    "HC0": False,
-    "HC1": True,      # only HC1 activates small-sample correction
-    "HC2": False,
-    "HC3": False,
-    "robust": False,
-    ...
-}
+# debiased is passed through directly (default False = Stata convention).
 ```
 
 ### Missing Data
@@ -349,9 +362,18 @@ Rows with any NaN in the formula variables are dropped with a `RuntimeWarning`. 
 
 | open-econs | R | Notes |
 |------------|---|-------|
-| `oe.iv("y ~ w | x ~ z", data=df)` | `AER::ivreg(y ~ w | x | z, data=df)` | `AER::ivreg` uses a different three-part syntax; default SEs differ |
-| `oe.iv("y ~ w | x ~ z", data=df, cov_type="HC1")` | `AER::ivreg(y ~ w | x | z, data=df)` then `coeftest(vcov=vcovHC, type="HC1")` | Matches HC1 |
-| `r.first_stage_f` | `summary(..., diagnostics=TRUE)` | R reports partial F | |
+| `oe.iv("y ~ w | x ~ z", data=df, debiased=True)` | `AER::ivreg(y ~ w + x | w + z, data=df)` then `sqrt(diag(vcov(fit)))` | nonrobust SEs match (`s2=SSR/(N−K)`) |
+| `oe.iv("y ~ w | x ~ z", data=df, cov_type="HC1", debiased=True)` | `coeftest(vcov=vcovHC, type="HC1")` | Matches HC1 |
+| `oe.iv("y ~ w | x ~ z", data=df, cluster="c", debiased=True)` | `vcovCL(fit, cluster=~c, type="HC1")` | Matches cluster (`G/(G−1)` SSC) |
+| `r.first_stage_f` | `summary(..., diagnostics=TRUE)` | R reports partial F |
+
+**Note:** `AER::ivreg`'s 3-part syntax is `y ~ regressors | instruments`
+(all RHS variables before `|` are treated as endogenous regressors).  To
+replicate OE's `y ~ w | x ~ z` (w exogenous, x endogenous), pass
+`y ~ w + x | w + z` (repeating the exogenous `w` on both sides instruments it
+with itself).  `ivreg2` (the canonical R IV tool with `vce()` options) is
+**NOT available for R 4.6.1** on this machine (removed from CRAN); parity is
+established against `AER::ivreg` + `sandwich` instead (2026-07-17).
 
 ## API Examples
 
