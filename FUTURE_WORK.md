@@ -16,17 +16,22 @@ opt-in convention from `placebo.py` / `did_cs.py`. Full plan context: 2026-07-17
 handoff (GPU declined; Candidate A synth-analytic-gradient deferred — see bottom
 of this file).
 
-### Candidate D — _gmm_core._hac_S vectorize (QUEUED, parity-sensitive) — NEXT
-- **Where:** `open_econs/models/causal/_gmm_core.py` `_hac_S` (lines ~50–83).
-- **What:** triple nested loop (per-entity, per-lag, per-t) building the HAC
-  weighting matrix `S` from `np.outer(moments[t], moments[t-lag])` sums.
-  Vectorize **per entity** into batched matmuls / `einsum` (auto-BLAS-threaded).
-  This engine feeds `abond`/`gmm` VCE + J-stat to ≤1e-6 vs Stata.
-- **Risk:** HIGH parity sensitivity — vectorized float reduction order must
-  reproduce the scalar loop exactly. **Verify against `tests/stata/tests/
-  test_stata_abond.py`** (and any gmm parity tests) to ≤1e-6 after. If any
-  drift > 1e-6 appears, keep the scalar version (or use `np.einsum` with
-  explicit same-order summation). Do NOT loosen tolerance (rule 2).
+### Candidate D — _gmm_core._hac_S vectorize — DONE (commit `897c31a`)
+- Implemented 2026-07-17: the inner per-lag / per-t `np.outer` accumulation in
+  `_hac_S` (in `open_econs/models/_gmm_core.py`, NOT under `causal/`) replaced
+  by a single batched `np.einsum("ti,tj->ij", moments[lag:], moments[:-lag])`
+  reduction per entity. The per-entity loop is preserved (ragged time
+  dimensions). **Bit-identical** to the scalar loop (atol=0) — verified by new
+  `TestHacSVectorization` in `tests/non_stata_nor_r/test_gmm_core.py`
+  (parametrized over seeds/lags, adjust flag, full-sample hac_weighting path,
+  and no-time pooled path). The reduction order along the time axis is
+  unchanged, so `sum(axis=0)` of the (T-lag, L, L) tensor matches the
+  sequential `Gamma += np.outer(...)` loop exactly. The contemporaneous term
+  `S_ent = moments.T @ moments` (already a single BLAS call in the original)
+  is left as-is. Regression anchors `tests/stata/tests/test_stata_gmm.py`
+  (HAC two-step, 31 tests) and `test_stata_abond.py` (40 tests) all still pass
+  ≤1e-6. No parity drift. Do not re-touch unless a new HAC edge case breaks
+  bit-identicality.
 
 ### Candidate C — psm.py vectorize — DONE (commit `cdb15be`)
 - Implemented 2026-07-17: batched `cKDTree.query` in `_within_treatment_matching`
