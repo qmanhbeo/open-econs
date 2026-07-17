@@ -745,6 +745,12 @@ def _iv_linearmodels_path(
     endog_idx = parsed["endog_idx"]
     instr_matrix = parsed["instr_matrix"]
 
+    # linearmodels collapses HC0/HC2/HC3 to HC1, so we cannot trust its SEs
+    # for those variants.  We still fit via linearmodels (cov_type="robust")
+    # to obtain first-stage F, Hansen J, residuals and coefficients, then
+    # overwrite std_errors with the hand-rolled MacKinnon-White sandwich
+    # (see _iv_hc_sandwich) that matches R's sandwich::vcovHC exactly.
+    _HC_HANDROLLED = {"HC0", "HC2", "HC3"}
     _IV_COV_MAP = {
         "nonrobust": "unadjusted",
         "HC0": "robust",
@@ -814,6 +820,27 @@ def _iv_linearmodels_path(
     z_arr = fitted.tstats.values
     p_arr = fitted.pvalues.values
     conf_arr = fitted.conf_int(level=0.95).values
+
+    # Override SEs for HC0/HC2/HC3 with the hand-rolled MacKinnon-White
+    # sandwich that matches R's sandwich::vcovHC (linearmodels collapses them
+    # to HC1).  linearmodels' parameter order is [X_exog, X_endog], identical
+    # to parsed["X"] column order, so positional alignment is exact.
+    if cov_type in _HC_HANDROLLED and cluster is None and cov_type != "HAC":
+        hand_se = _iv_hc_sandwich(
+            y_arr=y_arr,
+            X_full=X_full,
+            instr_matrix=instr_matrix,
+            exog_idx=exog_idx,
+            kind=cov_type,
+        )
+        se_arr = hand_se
+        z_arr = coef_arr / se_arr
+        # two-sided normal p-values
+        p_arr = 2.0 * (1.0 - _norm_cdf(np.abs(z_arr)))
+        conf_arr = np.column_stack([
+            coef_arr - 1.959963984540054 * se_arr,
+            coef_arr + 1.959963984540054 * se_arr,
+        ])
 
     coef_names = fitted.params.index.tolist()
     conf_int = pd.DataFrame(
@@ -914,6 +941,111 @@ def _compute_hansen_j(
         return float(overid.stat), float(overid.pval)
     except Exception:
         return float("nan"), float("nan")
+
+
+def _iv_hc_sandwich(
+    *,
+    y_arr: np.ndarray,
+    X_full: np.ndarray,
+    instr_matrix: np.ndarray,
+    exog_idx: list[int],
+    kind: str,
+) -> np.ndarray:
+    """Heteroskedasticity-consistent IV-2SLS SEs (HC0/HC1/HC2/HC3).
+
+    Reproduces R ``sandwich::vcovHC`` on an ``AER::ivreg`` object to machine
+    precision (verified against ``sandwich``/``AER`` source, rule 1).  The two
+    details that ``linearmodels`` misses (it collapses all of HC0/HC2/HC3 to
+    HC1) are:
+
+    1. The estimating-function score uses the **instrument-projected
+       regressors** ``Xp = P_Z X`` (``AER``'s ``estfun.ivreg`` returns
+       ``residuals * model.matrix(component = "projected")``), not the raw
+       regressors.  The bread is ``cov.unscaled = (Xp' Xp)^{-1}`` (R
+       ``ivreg$cov.unscaled``) and the meat is
+       ``Meat = (Xp * sqrt(scale))' (Xp * sqrt(scale))``.
+    2. The MacKinnon-White leverage comes from ``AER::hatvalues.ivreg``,
+       ``h_ii = diag( X (Xp'Xp)^{-1} X' Z (Z'Z)^{-1} Z' )`` -- NOT
+       ``diag(X (Xp'Xp)^{-1} X' P_Z)`` (those differ by up to ~1e-2), and NOT
+       ``diag(P_Z X (Xp'Xp)^{-1} X' P_Z)``.  Crucially R's leverage can be
+       slightly *negative* (min observed ~ -1.2e-3); **do not clip the lower
+       bound to 0** -- doing so distorts the ``1/(1-h)^k`` HC2/HC3 hardening
+       and pushes HC3 past the 1e-6 tolerance.  Only an upper clip guards the
+       ``1/(1-h)`` denominator (rule 16: see methodology/linear/iv_2sls.md).
+
+    ``sandwich``'s built-in ``(1/n)`` factor and the ``bread = n * cov.unscaled``
+    scaling cancel exactly, leaving ``V = (Xp' Xp)^{-1} Meat (Xp' Xp)^{-1}``.
+
+    Parameters
+    ----------
+    kind : {"HC0", "HC1", "HC2", "HC3"}
+        HC variant.  ``debiased`` (SSR df scaling) is intentionally NOT applied
+        here: R's ``sandwich::vcovHC`` bakes the ``n/(n-k)`` factor into HC1 only
+        and uses raw residuals for HC0/HC2/HC3, which is what this reproduces.
+
+    Returns
+    -------
+    np.ndarray
+        Standard errors, aligned to ``X_full`` columns (incl. intercept).
+    """
+    if kind not in ("HC0", "HC1", "HC2", "HC3"):
+        raise ValueError(f"_iv_hc_sandwich expects HC0/HC1/HC2/HC3, got {kind!r}.")
+    n, k = X_full.shape
+    if n <= k:
+        raise ValueError("_iv_hc_sandwich requires n > k.")
+
+    # Z = [exogenous regressors (incl. the constant at index 0), external
+    # instruments].  Exogenous variables are their own instruments (standard
+    # IV identification); the constant column is already part of X_full at
+    # exog_idx[0].  linearmodels' IV2SLS does this internally; we must
+    # replicate it or P_Z will be under-identified and the SEs wrong.
+    Z_cols = [X_full[:, exog_idx]] if exog_idx else []
+    if instr_matrix.shape[1] > 0:
+        Z_cols.append(instr_matrix)
+    if not Z_cols:
+        Z_full = np.ones((n, 1))
+    else:
+        Z_full = np.column_stack(Z_cols)
+
+    # 2SLS via the instrument-projected regressors.  Xp = P_Z X is exactly
+    # R's model.matrix(component = "projected") and is what both the bread
+    # (cov.unscaled = (Xp'Xp)^{-1}) and the meat (estfun = e * Xp) use.
+    ZtZ_inv = np.linalg.inv(Z_full.T @ Z_full)
+    PZ = Z_full @ ZtZ_inv @ Z_full.T
+    Xp = PZ @ X_full
+    Bp = Xp.T @ Xp
+    Bp_inv = np.linalg.inv(Bp)
+
+    beta = Bp_inv @ Xp.T @ y_arr
+    e = y_arr - X_full @ beta
+
+    # MacKinnon-White leverage = AER::hatvalues.ivreg (source-confirmed):
+    #   h_ii = diag( X (Xp'Xp)^{-1} X' Z (Z'Z)^{-1} Z' )
+    # Only the upper bound is clipped to protect 1/(1-h); R allows small
+    # negative leverage, and clipping the lower bound breaks HC3 parity.
+    H = X_full @ Bp_inv @ X_full.T @ Z_full @ ZtZ_inv @ Z_full.T
+    h = np.clip(np.diag(H), -np.inf, 1.0 - 1e-12)
+
+    if kind == "HC0":
+        scale = e ** 2
+    elif kind == "HC1":
+        scale = e ** 2 * (n / (n - k))
+    elif kind == "HC2":
+        scale = e ** 2 / (1.0 - h)
+    else:  # HC3
+        scale = e ** 2 / (1.0 - h) ** 2
+
+    # Meat uses the projected regressors Xp (R's estfun.ivreg), not raw X.
+    Meat = (Xp * np.sqrt(scale)[:, None]).T @ (Xp * np.sqrt(scale)[:, None])
+    V = Bp_inv @ Meat @ Bp_inv
+    return np.sqrt(np.maximum(np.diag(V), 0.0))
+
+
+def _norm_cdf(x: np.ndarray) -> np.ndarray:
+    """Standard normal CDF via ``scipy.stats`` (used for hand-rolled p-values)."""
+    from scipy.stats import norm as _norm
+
+    return _norm.cdf(x)
 
 
 def _extract_vars(expr: str) -> list[str]:
