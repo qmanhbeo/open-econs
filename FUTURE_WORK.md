@@ -304,17 +304,43 @@ relaxed tolerances (standing rule 2).
   and `gmm()` docstring. See commit `a941114`.
 - **No action required.**
 
-### GMM-HAC: HAC Kernel Scope Convention
+### GMM-HAC: HAC Kernel Scope Convention (Stata parity ACHIEVED 2026-07-17)
 
 - **What:** OE applies Bartlett kernel to VCE only (not to weighting matrix).
   R's `gmm(vcov="HAC")` applies kernel to BOTH weighting matrix AND VCE.
-  Therefore R's HAC two-step SEs diverge from OE's (R=[0.158, 0.101, 0.900]
-  vs OE=[0.145, 0.103, 0.826] on the 300-obs fixture).
-- **Status:** Documented in `test_r_gmm.py` and `gmm.R` fixture comments.
-  HAC tests check finiteness/J>0 only, not numeric parity.
-- **Implementation path:** If parity is desired, add a `hac_weighting=True`
-  parameter to `gmm()` that applies the kernel to both W and VCE.
-  Reference: R `gmm` package `.myKernHAC` / `.weightFct`.
+  Stata's `gmm ..., wmatrix(hac bartlett L) vce(hac bartlett L)` applies the
+  kernel to BOTH the efficient weight AND the VCE (same as R's scope) — so OE
+  now matches **Stata HAC** to ≤1e-6 (coefficient AND SE) under
+  `windmeijer=False, robust_meat="two-step"`.
+  R's HAC two-step SEs still diverge from OE's (R=[0.158, 0.101, 0.900]
+  vs OE=[0.129, 0.094, 0.797] on the 300-obs fixture) — but R's HAC
+  *coefficient* `[0.870, 2.027, 1.464]` equals OE's plain robust coefficient
+  (the kerneled optimal weight collapses to the iid optimal weight for the
+  coefficient).  So R HAC coef is asserted; R HAC SE remains documented-only.
+- **Status:** Stata HAC parity: ACHIEVED (≤1e-6 coef+SE), tested in
+  `TestGmmOverIdentifiedTwoStepHAC`.  R HAC SE divergence: documented in
+  `test_r_gmm.py` (`TestGmmROverIdentifiedHACTwoStep`) — R coef asserted, SE
+  not.
+- **Implementation path (R HAC SE):** add a `hac_weighting=True` parameter to
+  `gmm()` that applies the kernel to both W and VCE, matching R.  Reference:
+  R `gmm` package `.myKernHAC` / `.weightFct`.  (OE HAC already matches Stata,
+  so this is purely for R-parity coverage.)
+
+### GMM-RCLUSTER: R Cluster Efficient-Weight Convention (OPEN — flagged gap)
+
+- **What:** R `gmm(..., vcov="iid", cluster=df$cluster)` uses an **iid**
+  efficient weight (bread = iid S) with a **cluster** meat, giving a distinct
+  two-step coefficient `b = [0.850, 2.012, 1.354]` — unlike both Stata's
+  cluster `gmm` (`[0.915, 1.989, 1.621]`, cluster bread) and OE's cluster
+  (Stata-style bread).  This is a genuine THIRD convention, not a bug.
+- **Status:** Flagged per rule 3/15.  OE hardcodes the Stata-style cluster
+  efficient weight; R cluster is NOT reproduced.  `TestGmmROverIdentifiedClusterTwoStep`
+  pins the documented divergence (fails loudly if silently "fixed" without an
+  explicit R-parity assertion under a new toggle).
+- **Implementation path:** add a `weight` toggle (`"stata"` = cluster/HAC
+  bread, default; `"iid"` = iid bread + cluster/HAC meat) to `gmm()` so the R
+  cluster convention can be reproduced and asserted.  Applies to both cluster
+  and HAC cov_types.
 
 ### GMM-WC: Windmeijer Correction + Robust-Meat Conventions (RESOLVED 2026-07-17)
 
