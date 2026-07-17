@@ -209,7 +209,10 @@ def gmm(
         reproduce Stata's ``gmm`` two-step robust VCE exactly (verified
         against Stata's extracted ``e(S)`` matrix).  IMPORTANT: this controls
         ONLY the robust meat; the efficient-weight bread stays at the
-        one-step residuals.  Ignored when ``step="one-step"`` or ``cov_type``
+        one-step residuals.  For exact Stata ``gmm`` parity, use BOTH
+        ``robust_meat="two-step"`` and ``windmeijer=False``; setting only one
+        of them yields a hybrid that matches neither R/literature nor Stata.
+        Ignored when ``step="one-step"`` or ``cov_type``
         is not ``"robust"``.
 
     Returns
