@@ -211,6 +211,18 @@ def estimate_gmm(
     onestepnonrobust = (step == "one-step") and (not robust)
 
     # --- Per-entity S from ONE-step residuals (A2, V1robust, Hansen) ---
+    # For non-HAC cov_types (robust, cluster) `S` is the per-entity covariance
+    # of the one-step moment conditions g_i = Z_i' e1_i, grouped by `eq_entity`
+    # (identity grouping = iid/robust; cluster ids = clustered).  For HAC,
+    # `S` is the Newey-West long-run covariance.  This SAME `S` is the efficient
+    # weight `A2 = S^{-1}` AND the VCE meat (unless `robust_meat="two-step"`
+    # swaps the meat to the two-step-residual S2).  Source-confirmed vs Stata
+    # `gmm`: Stata's `vce(cluster c)` and `wmatrix(hac ...)` both build the
+    # efficient weight from the *same* covariance structure used for the VCE,
+    # so the two-step coefficient changes across robust/cluster/HAC (matched to
+    # <=1e-6 on the gmm fixture).  Do NOT split the bread away from `S` (an
+    # early iid-bread attempt forced cluster b == robust b and silently broke
+    # parity) -- see methodology/linear/gmm.md.
     if max_lags is not None and max_lags >= 0:
         S = _hac_S(Z, e1, eq_entity, max_lags, time_labels, hac_adjust)
     else:
@@ -265,11 +277,18 @@ def estimate_gmm(
             and step == "two-step"
             and robust_meat == "two-step"
         ):
-            S2 = np.zeros((L, L))
-            for ent in np.unique(eq_entity):
-                mask = eq_entity == ent
-                ze = Z[mask].T @ e2[mask]
-                S2 += np.outer(ze, ze)
+            if max_lags is not None and max_lags >= 0:
+                # HAC: the two-step-residual meat is the HAC long-run S from e2,
+                # matching the HAC bread structure (Stata wmatrix(hac ...)
+                # vce(hac ...)).  Using the plain clustered loop here would
+                # corrupt the HAC VCE.
+                S2 = _hac_S(Z, e2, eq_entity, max_lags, time_labels, hac_adjust)
+            else:
+                S2 = np.zeros((L, L))
+                for ent in np.unique(eq_entity):
+                    mask = eq_entity == ent
+                    ze = Z[mask].T @ e2[mask]
+                    S2 += np.outer(ze, ze)
             # Full-sandwich VCE: bread-weight = S1^{-1}, meat = S2.
             GwG = ZtX.T @ A2 @ ZtX                       # G' S1^{-1} G  (bread)
             GwS2wG = ZtX.T @ A2 @ S2 @ A2 @ ZtX          # G' S1^{-1} S2 S1^{-1} G (meat)
