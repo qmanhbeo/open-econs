@@ -325,9 +325,14 @@ out$oid_2s_r  <- list(coef = b2,
                        J = J_2s, J_df = dof_j)
 
 # HAC two-step over-identified (Bartlett, L=3 lags, bw=4, prewhite=0)
-out$oid_hac_2s <- list(coef = b2,
-                        se = as.numeric(se_hac_wind),
-                        J = J_hac, J_df = dof_j)
+# NOTE: R applies the Bartlett kernel to BOTH the weighting matrix and the
+# VCE (pooled over the full sample), so R's HAC *coefficient* (coef(g_hac_oid))
+# differs from the plain optimal two-step coefficient `b2`.  Store R's actual
+# HAC estimate as the reference (not b2 / the OE-convention se_hac_wind), so
+# the parity test asserts against R's genuine HAC values.
+out$oid_hac_2s <- list(coef = as.numeric(coef(g_hac_oid)),
+                         se = as.numeric(sqrt(diag(vcov(g_hac_oid)))),
+                         J = J_hac, J_df = dof_j)
 
 # Cluster-robust two-step over-identified [NATIVE gmm(vcov="CL")]
 out$oid_2s_cl <- list(coef = as.numeric(coef(g_cl_oid)),
