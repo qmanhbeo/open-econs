@@ -6,6 +6,44 @@ item names a specific implementation path, not a vague exploration.
 
 ---
 
+## QUEUED — next-session prioritized performance work (rule 11, bounded prompts)
+
+These are the next two items from the 2026-07-17 Python-strength inspection
+plan, queued for their own **separate, single-concern sessions**. Each must be
+scoped as its own bounded supervisor prompt (do not bundle). Each must follow
+the parity gate (rule 2: ≤1e-6; rule 5: exclude synth placebo) and reuse the
+`parallel: bool` opt-in convention from `placebo.py` / `did_cs.py`. Full plan
+context: 2026-07-17 handoff (GPU declined; Candidate A synth-analytic-gradient
+deferred — see bottom of this file).
+
+### Candidate C — psm.py vectorize (QUEUED, safe)
+- **Where:** `open_econs/models/causal/psm.py`.
+- **What:** `_within_treatment_matching` / `_opposite_treatment_matching`
+  (lines ~298–326) loop `scipy.spatial.cKDTree.query` **one unit at a time**;
+  replace with a single batched `tree.query(ps[idx], k=...)` call (cKDTree
+  already accepts batched points → OpenBLAS-accelerated, identical k-NN). Also
+  vectorize the variance-accumulation `for i in range(n)` loops (lines ~410,
+  419, 438, 609, 627) via fancy indexing (`psi[pairs_keys] = ...`). Pure numpy
+  math, no optimizer → **no parity risk** as long as float reduction order is
+  preserved (it is, elementwise).
+- **Verify:** against `tests/.../psm*.py` fixtures (Stata/R). Add a
+  vectorized-vs-scalar bit-identical test if a toggle is introduced, else rely
+  on fixture parity to ≤1e-6.
+
+### Candidate D — _gmm_core._hac_S vectorize (QUEUED, parity-sensitive)
+- **Where:** `open_econs/models/causal/_gmm_core.py` `_hac_S` (lines ~50–83).
+- **What:** triple nested loop (per-entity, per-lag, per-t) building the HAC
+  weighting matrix `S` from `np.outer(moments[t], moments[t-lag])` sums.
+  Vectorize **per entity** into batched matmuls / `einsum` (auto-BLAS-threaded).
+  This engine feeds `abond`/`gmm` VCE + J-stat to ≤1e-6 vs Stata.
+- **Risk:** HIGH parity sensitivity — vectorized float reduction order must
+  reproduce the scalar loop exactly. **Verify against `tests/stata/tests/
+  test_stata_abond.py`** (and any gmm parity tests) to ≤1e-6 after. If any
+  drift > 1e-6 appears, keep the scalar version (or use `np.einsum` with
+  explicit same-order summation). Do NOT loosen tolerance (rule 2).
+
+---
+
 ## HC Estimators Beyond HC0–HC3
 
 OE currently supports HC0–HC3. Three higher-order variants from R's
@@ -628,3 +666,48 @@ added.
   docs if a second R is added.
 
 *Last updated: 2026-07-17, GMM parity audit verification (Items 1-2 resolved); abond R-parity flagged BLOCKED.*
+
+---
+
+## GPU acceleration — DECLINED project-wide (rule 19 finding)
+
+**Decision (2026-07-17):** GPU (CuPy / numba-cuda) is **not adopted** for any
+estimator in OE. Recorded so future sessions do not re-open it.
+
+- **Why:** The genuine hot spots are (1) `scipy.optimize` SLSQP/Nelder-Mead in
+  `synth.py` (no GPU backend; reimplementing the solver on GPU is out of scope
+  and would break R `Synth` parity), and (2) numpy matmuls that **already run
+  multithreaded on CPU** via the bundled BLAS. This environment ships
+  **OpenBLAS 0.3.31, DYNAMIC_ARCH, MAX_THREADS=24** — so any vectorized numpy
+  loop auto-parallelizes on the CPU without a GPU. GPU transfer overhead
+  dominates at the current fixture sizes (tens-to-hundreds of entities /
+  periods).
+- **Revisit only if:** a user has 100k+ entity panels or a genuinely
+  GPU-amenable kernel (e.g. large dense matmul-dominated GMM with no scipy
+  optimizer in the hot path). Until then, prefer **vectorize-then-let-BLAS-
+  thread** and **ProcessPoolExecutor for Python/GIL-bound loops** (see
+  `methodology/performance-conventions.md`).
+- **Note:** `ThreadPoolExecutor` is **useless** for numpy/BLAS-bound work
+  (GIL held during BLAS calls); only `ProcessPoolExecutor` helps genuinely
+  GIL-bound Python loops. Mirrored in `methodology/performance-conventions.md`.
+
+---
+
+## Candidate A — synth analytic gradient for SLSQP: DEFERRED (blocked)
+
+- **What:** `synth.py` `_optimize_v` runs SLSQP on `_fn_v`; ~60% of the cProfile
+  time is `scipy`'s numeric `approx_derivative` of the V objective. An analytic
+  gradient would speed up the inner V-optim substantially (compounds across the
+  permutation loops in `placebo.py`).  See the 2026-07-17 inspection plan.
+- **Blocker:** Supplying an analytic gradient changes the SLSQP convergence
+  path and **risks diverging from R `Synth`'s `optimx` local optimum** — `synth`
+  V-optim is multi-modal (known hazard for d0/d1/d5/d7 fixtures). Requires a
+  **full R `Synth` re-parity pass** (all permutation fixtures) before merge.
+  That budget was not authorized in the Candidate-B session.
+- **Status:** DEFERRED. Do NOT implement until a dedicated R re-parity session
+  is scoped. Flagged per rule 3/15 (disparity = optimizer path; expose only
+  behind a toggle if ever implemented, and cover both settings in parity tests).
+- **Next agent:** treat as blocked, not pending, unless the project lead budgets
+  the R `Synth` re-parity pass.
+
+*Last updated: 2026-07-17, GPU declined + Candidate A deferred (Candidate B did_cs bootstrap parallelization implemented and pushed).*
