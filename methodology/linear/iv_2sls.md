@@ -505,7 +505,19 @@ result = oe.iv("y ~ w | x ~ z", data=df)
 
 1. **One-way clustering only**: `oe.iv(..., cluster="<col>")` exposes one-way cluster-robust IV standard errors (linearmodels `cov_type="clustered"`). Multi-way clustering is **not** supported for IV-2SLS; for that, use linearmodels directly or another tool.
 2. **HAC SEs are available**: `cov_type="HAC"` with `lags` and `time` gives Newey-West (1987) heteroskedasticity- and autocorrelation-robust IV standard errors.
-3. **No HC2/HC3 distinction for IV**: Linearmodels does not implement leverage-adjusted HC2/HC3 for IV (HC0, HC2, HC3 all map to the same robust estimator). For leverage-corrected IV standard errors, use Stata or R.
+3. **HC0/HC2/HC3 hand-rolled (RESOLVED 2026-07-17)**: Linearmodels collapses HC0/HC2/HC3 to HC1 for IV, so `oe.iv()` now hand-rolls the MacKinnon-White sandwich in `_iv_hc_sandwich` (non-FE path) and matches R `sandwich::vcovHC(type="HC0"/"HC2"/"HC3")` to machine precision. Two formula traps were fixed here (see below): the meat must use the **projected regressors** `Xp = P_Z X`, and the leverage must be `AER::hatvalues.ivreg` with **no lower clip** (R allows slightly negative leverage). FE + HC2/HC3 remains unsupported (D2); HC0 with FE is out of scope.
+
+## HC0/HC2/HC3 IV Sandwich — Source-Confirmed Conventions (2026-07-17)
+
+Reference: R `AER::ivreg` + `sandwich` (`vcovHC`/`estfun.ivreg`/`bread.ivreg`/`hatvalues.ivreg`). Stata `ivregress` has **no** HC0/HC2/HC3 VCE (only `robust`=HC1 and `cluster`), so IV HC0/HC2/HC3 parity is R-reference only (rule 14).
+
+- **Coefficient**: 2SLS, identical for every cov_type (no toggle).
+- **Scores (`estfun.ivreg`)**: `residuals * model.matrix(fit, component="projected")` — the **instrument-projected regressors** `Xp = P_Z X`, NOT raw X. Hence meat `Meat = (Xp * sqrt(omega))' (Xp * sqrt(omega))`.
+- **Bread (`bread.ivreg`)**: `cov.unscaled * nobs`, where `cov.unscaled = (Xp' Xp)^{-1}` (R `ivreg$cov.unscaled`; note R's `model.matrix(fit)` defaults to the *projected* regressors, so it equals `Xp`, not raw X).
+- **Recombination (`sandwich()`)**: `V = (1/n) * bread %*% meat %*% bread` = `(Xp'Xp)^{-1} Meat (Xp'Xp)^{-1}`. `debiased` is a no-op for HC0/HC2/HC3 (R bakes `n/(n-k)` only into HC1).
+- **Leverage (`AER::hatvalues.ivreg`)**: `h_ii = diag( X (Xp'Xp)^{-1} X' Z (Z'Z)^{-1} Z' )` — **NOT** `diag(X (Xp'Xp)^{-1} X' P_Z)` (those diverge by up to ~1e-2) and **NOT** `diag(P_Z X (Xp'Xp)^{-1} X' P_Z)`. R's leverage can be slightly **negative** (min observed ≈ -1.23e-3); **do NOT clip the lower bound to 0** — clipping breaks the `1/(1-h)^2` HC3 hardening and pushes HC3 ~2e-6 past the 1e-6 tolerance. Only clip the upper bound (`1 - 1e-12`) to guard the denominator.
+- **HC scales**: HC0 = `e²`; HC1 = `e²·n/(n-k)`; HC2 = `e²/(1-h)`; HC3 = `e²/(1-h)²`.
+- **Root cause of the prior 1.95e-6 HC3 gap**: (a) meat used raw X instead of Xp, and (b) leverage lower-clipped to 0. Both fixed; HC0/HC2/HC3 now match R to ≤1e-16.
 4. **No `predict()`**: `IVResult` does not support `.predict()`. Fitted values are available via `.fitted_values`.
 5. **No weak-instrument critical values**: The Cragg-Donald statistic is reported but not compared against Stock-Yogo critical values.
 6. **No LIML**: Limited-information maximum likelihood is not implemented.

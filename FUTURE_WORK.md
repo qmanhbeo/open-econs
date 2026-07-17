@@ -187,8 +187,18 @@ available in R's `sandwich::NeweyWest` but not in OE.
     asserts coef + SE ≤1e-6 (residual ~2.5e-7 is AER/sandwich vs linearmodels
     impl noise, within rule 2).  Coefficient matches R exactly for every
     cov_type (no toggle needed).
-- **HC0/HC2/HC3:** implemented in OE; no Stata/R parity test yet.  Low risk
-  (standard HC definitions) but uncovered per rule 15.
+- **HC0/HC2/HC3:** RESOLVED (2026-07-17).  `iv()` now hand-rolls the
+  MacKinnon-White IV sandwich (`_iv_hc_sandwich` in `iv.py`) and matches R
+  `sandwich::vcovHC(type="HC0"/"HC2"/"HC3")` to **machine precision**
+  (≤1e-16) on the `iv_input.csv` fixture, with parity tests
+  `TestIvRHc0/TestIvRHc2/TestIvRHc3`.  Root cause of the prior 1.95e-6 HC3
+  gap: two formula errors, now fixed (see methodology/linear/iv_2sls.md):
+  (a) the meat must use the **projected regressors** `Xp = P_Z X`, not raw X;
+  (b) the leverage `h` must be `diag(X (Xp'Xp)^{-1} X' Z (Z'Z)^{-1} Z')`
+  (R `AER::hatvalues.ivreg`), and must **NOT be clipped at 0** — R's leverage
+  can be slightly negative (min ≈ -1.2e-3) and clipping it broke the
+  `1/(1-h)^2` HC3 hardening.  Stata `ivregress` has no HC0/HC2/HC3 VCE, so
+  parity is R-reference only (rule 14/15).
 
 ### iv() FE SE DOF Reconciliation (RESOLVED 2026-07-17)
 
