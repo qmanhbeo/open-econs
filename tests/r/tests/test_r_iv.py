@@ -78,6 +78,68 @@ class TestIvRHc1:
         )
 
 
+class TestIvRHc0:
+    """OE ``cov_type='HC0'`` matches R ``sandwich::vcovHC(type='HC0')``.
+
+    linearmodels collapses HC0 to HC1, so OE hand-rolls the MacKinnon-White
+    sandwich (``_iv_hc_sandwich``) using the instrument-projected regressors,
+    reproducing R's ``sandwich::vcovHC(type="HC0")`` to <=1e-6.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _run(self, iv_input):
+        self.r = R["hc0"]
+        self.oe_r = oe.iv(_FORMULA, iv_input, cov_type="HC0", debiased=True)
+
+    def test_coefficients(self):
+        npt.assert_allclose(
+            self.oe_r.coefficients.values, self.r["coef"], atol=1e-6
+        )
+
+    def test_standard_errors(self):
+        npt.assert_allclose(
+            self.oe_r.std_errors.values, self.r["se"], atol=1e-6
+        )
+
+
+class TestIvRHc2:
+    """OE ``cov_type='HC2'`` matches R ``sandwich::vcovHC(type='HC2')``."""
+
+    @pytest.fixture(autouse=True)
+    def _run(self, iv_input):
+        self.r = R["hc2"]
+        self.oe_r = oe.iv(_FORMULA, iv_input, cov_type="HC2", debiased=True)
+
+    def test_coefficients(self):
+        npt.assert_allclose(
+            self.oe_r.coefficients.values, self.r["coef"], atol=1e-6
+        )
+
+    def test_standard_errors(self):
+        npt.assert_allclose(
+            self.oe_r.std_errors.values, self.r["se"], atol=1e-6
+        )
+
+
+class TestIvRHc3:
+    """OE ``cov_type='HC3'`` matches R ``sandwich::vcovHC(type='HC3')``."""
+
+    @pytest.fixture(autouse=True)
+    def _run(self, iv_input):
+        self.r = R["hc3"]
+        self.oe_r = oe.iv(_FORMULA, iv_input, cov_type="HC3", debiased=True)
+
+    def test_coefficients(self):
+        npt.assert_allclose(
+            self.oe_r.coefficients.values, self.r["coef"], atol=1e-6
+        )
+
+    def test_standard_errors(self):
+        npt.assert_allclose(
+            self.oe_r.std_errors.values, self.r["se"], atol=1e-6
+        )
+
+
 class TestIvRClusterDebiased:
     """OE ``cluster='id', debiased=True`` matches R ``sandwich::vcovCL``."""
 
