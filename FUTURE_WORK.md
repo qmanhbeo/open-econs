@@ -145,6 +145,52 @@ available in R's `sandwich::NeweyWest` but not in OE.
   be eliminated by using pyfixest with `small=False`.
 - **Status:** Blocked on SSC toggle implementation and validation.
 
+### iv() Option-Coverage Audit (rule 15) — PARTIAL 2026-07-17
+
+- **Scope:** `iv()` Stata/R parity across `cov_type` (nonrobust, robust/HC1,
+  HC0/HC2/HC3, HAC), `cluster`, `lags`/`time`/`hac_adjust`, FE
+  (`entity`/`time_fe`/`fixed_effects`).
+- **New fixtures (2026-07-17):** `df_iv_panel.csv` (500 obs, 50 id x 10 t,
+  overidentified 2 instruments z1/z2, exog w, id/time) enables robust/cluster/
+  HAC/FE parity that the old just-identified 1-instrument fixtures could not
+  exercise.  Stata fixtures `iv_robust.dta` (vce(robust)) and
+  `iv_cluster_panel.dta` (vce(cluster id)) committed; their `.do` generators
+  in `tests/stata/generate-fixtures/`.
+- **Stata parity — ACHIEVED (≤1e-6, tested in test_stata_iv.py):**
+  - `nonrobust` (just-id): TestIVBasic.
+  - `robust`/HC1 (over-id): TestIVRobustOveridentified — matches
+    `ivregress 2sls, vce(robust)` coef+SE exactly.
+  - `cluster` (just-id + over-id): TestIVCluster + TestIVClusterOveridentified
+    — match `ivregress 2sls, vce(cluster ...)` coef+SE exactly.
+- **Stata parity — GAPS (not testable via `ivregress`):**
+  - **HAC:** Stata `ivregress 2sls, vce(hac bartlett L)` returns rc=111 (not
+    supported).  HAC IV in Stata must go through `newey`/a user command;
+    `ivregress` has no HAC VCE.  So iv() HAC parity is R-reference only
+    (linearmodels/sandwich), NOT Stata.  Documented as a convention boundary.
+  - **FE:** `ivregress` has no `absorb`; FE IV is `xtivreg, fe`.  Coefficients
+    match `xtivreg, fe` exactly (within-transform drops _cons).  **SEs differ
+    (~2%):** OE's pyfixest path uses HC1 (`N/(N-K)`) with `df_resid =
+    n - n_absorbed - k`, while Stata `xtivreg, fe` uses a different DOF
+    normalization.  Open item — needs DOF reconciliation (likely Stata uses
+    `N - K` where K includes absorbed entities differently, or a no-SSC
+    default).  See `iv() FE SE DOF` below.
+- **R parity:** NONE yet.  `iv()` has no R tests.  R's `AER::ivreg` /
+  `ivreg2` are NOT installed in the local R library (verified 2026-07-17) —
+  BLOCKED on package install.  Once available, add R parity for coefficients
+  (AER::ivreg) + robust/cluster SE (ivreg2), mirroring the gmm() R-suite.
+- **HC0/HC2/HC3:** implemented in OE; no Stata/R parity test yet.  Low risk
+  (standard HC definitions) but uncovered per rule 15.
+
+### iv() FE SE DOF Reconciliation (OPEN 2026-07-17)
+
+- **What:** `iv(..., entity="id")` (pyfixest FE path) matches Stata
+  `xtivreg, fe` **coefficients** exactly but **SEs differ by ~2%**.  Suspect
+  DOF normalization: OE `df_resid = n - n_absorbed - k` with HC1 `N/(N-K)`;
+  Stata `xtivreg, fe` likely uses `N - K` with K counting absorbed entities,
+  or a no-SSC default.  Needs source-confirmation against `xtivreg.ado`.
+- **Status:** Open.  Not yet covered by a test (would require accepting the
+  gap at atol~1e-2, which violates rule 2).  Diagnose before adding a test.
+
 ---
 
 ## did() Phase — Backend and Extension Items

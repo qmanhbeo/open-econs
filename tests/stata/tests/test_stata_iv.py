@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import numpy as np
 import numpy.testing as npt
-import pandas as pd
 import pytest
 
 import open_econs as oe
@@ -34,3 +32,77 @@ class TestIVBasic:
 
     def test_nobs(self):
         assert self.oe_r.nobs == int(self.s["N"])
+
+
+S_IV_CLUSTER = read_stata("iv_cluster")
+S_IV_ROBUST = read_stata("iv_robust")
+S_IV_CLUSTER_PANEL = read_stata("iv_cluster_panel")
+
+
+class TestIVCluster:
+    """Single-way cluster-robust IV-2SLS matches Stata ``ivregress, vce(cluster)``."""
+
+    @pytest.fixture(autouse=True)
+    def _run(self, df_iv_cluster):
+        self.s = S_IV_CLUSTER
+        self.oe_r = oe.iv("y ~ w | x ~ z", data=df_iv_cluster, cluster="firm")
+
+    def test_coefficients(self):
+        npt.assert_allclose(
+            self.oe_r.coefficients.values,
+            [self.s["b_int"], self.s["b_w"], self.s["b_x"]],
+            rtol=1e-6,
+        )
+
+    def test_standard_errors(self):
+        npt.assert_allclose(
+            self.oe_r.std_errors.values,
+            [self.s["se_int"], self.s["se_w"], self.s["se_x"]],
+            rtol=1e-6,
+        )
+
+
+class TestIVRobustOveridentified:
+    """HC1 robust IV-2SLS matches Stata ``ivregress, vce(robust)`` (overidentified)."""
+
+    @pytest.fixture(autouse=True)
+    def _run(self, df_iv_panel):
+        self.s = S_IV_ROBUST
+        self.oe_r = oe.iv("y ~ w | x ~ z1 + z2", data=df_iv_panel, cov_type="robust")
+
+    def test_coefficients(self):
+        npt.assert_allclose(
+            self.oe_r.coefficients.values,
+            [self.s["b_int"], self.s["b_w"], self.s["b_x"]],
+            rtol=1e-6,
+        )
+
+    def test_standard_errors(self):
+        npt.assert_allclose(
+            self.oe_r.std_errors.values,
+            [self.s["se_int"], self.s["se_w"], self.s["se_x"]],
+            rtol=1e-6,
+        )
+
+
+class TestIVClusterOveridentified:
+    """Cluster-robust IV-2SLS matches Stata ``ivregress, vce(cluster id)`` (overidentified)."""
+
+    @pytest.fixture(autouse=True)
+    def _run(self, df_iv_panel):
+        self.s = S_IV_CLUSTER_PANEL
+        self.oe_r = oe.iv("y ~ w | x ~ z1 + z2", data=df_iv_panel, cluster="id")
+
+    def test_coefficients(self):
+        npt.assert_allclose(
+            self.oe_r.coefficients.values,
+            [self.s["b_int"], self.s["b_w"], self.s["b_x"]],
+            rtol=1e-6,
+        )
+
+    def test_standard_errors(self):
+        npt.assert_allclose(
+            self.oe_r.std_errors.values,
+            [self.s["se_int"], self.s["se_w"], self.s["se_x"]],
+            rtol=1e-6,
+        )

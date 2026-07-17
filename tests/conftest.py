@@ -166,6 +166,16 @@ def _load_stata_csv(name: str) -> pd.DataFrame:
 def df_iv() -> pd.DataFrame:
     return _load_stata_csv("df_iv")
 
+
+@pytest.fixture(scope="session")
+def df_iv_cluster() -> pd.DataFrame:
+    return _load_stata_csv("df_iv_cluster")
+
+
+@pytest.fixture(scope="session")
+def df_iv_panel() -> pd.DataFrame:
+    return _load_stata_csv("df_iv_panel")
+
 @pytest.fixture(scope="session")
 def df_logit() -> pd.DataFrame:
     return _load_stata_csv("df_logit")
