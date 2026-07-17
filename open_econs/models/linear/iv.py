@@ -166,6 +166,7 @@ def iv(
     entity: str | None = None,
     time_fe: str | None = None,
     fixed_effects: list[str] | None = None,
+    fe_robust: str = "xtivreg",
 ) -> IVResult:
     """Estimate an IV-2SLS regression.
 
@@ -243,6 +244,25 @@ def iv(
         over *entity*/*time_fe* when provided -- pass **either**
         ``entity=``/``time_fe=`` **or** ``fixed_effects=``, not both
         (raises ``ValueError``).
+    fe_robust : str, default "xtivreg"
+        Controls how robust standard errors are computed for models with
+        absorbed fixed effects (entity/time FE).  This is a
+        convention toggle (rule 15): Stata and pyfixest disagree on what
+        "robust" means once within-transformation is applied.
+
+        ``"xtivreg"`` (default) -- matches Stata ``xtivreg, fe vce(robust)``
+        exactly, which implements FE-robust SEs as **cluster-robust by the
+        entity variable** (``_regress ..., cluster(id)`` on the demeaned
+        data; see ``xtivreg.ado`` ``within`` program, the ``cluster==2``
+        branch).  Implemented via pyfixest ``{"CRV1": fe_column}``.
+
+        ``"hetero"`` -- matches the pre-fix pyfixest behavior: HC1/heteroskedasticity-robust SEs from pyfixest's wild-bootstrap-style
+        meat (``vcov="HC1"``).  This does NOT match Stata's FE-robust and
+        is exposed only for users who specifically want the HC1 convention
+        on the demeaned data.
+
+        This toggle is ignored when *cluster* is supplied (then *cluster*
+        wins) or when ``cov_type`` is ``nonrobust``/``HAC``.
 
     Returns
     -------
@@ -277,6 +297,7 @@ def iv(
         formula=formula, cov_type=cov_type, cluster=cluster, lags=lags,
         time=time, hac_adjust=hac_adjust, debiased=debiased,
         entity=entity, time_fe=time_fe, fixed_effects=fixed_effects,
+        fe_robust=fe_robust,
     )
 
     cov_type = validate_cov_type(
@@ -298,6 +319,14 @@ def iv(
     has_fe = (entity is not None or time_fe is not None or fixed_effects is not None)
     if cov_type in ("HC2", "HC3") and has_fe:
         raise VcovTypeNotSupportedError(cov_type)
+
+    # Validate fe_robust convention toggle
+    if fe_robust not in ("xtivreg", "hetero"):
+        raise ValueError(
+            "iv(): fe_robust must be 'xtivreg' (Stata xtivreg,fe vce(robust) "
+            "= CRV1 by entity) or 'hetero' (pyfixest HC1). "
+            f"Got {fe_robust!r}."
+        )
 
     # Footgun (rule 18): default debiased=False uses Stata's SE convention
     # (s2=SSR/N, no cluster SSC). R users comparing to AER::ivreg/sandwich
@@ -401,6 +430,7 @@ def iv(
         hac_adjust=hac_adjust,
         debiased=debiased,
         fe_parts=fe_parts,
+        fe_robust=fe_robust,
         exog_vars=exog_vars_in_formula,
         endog_vars=endog_vars,
         call=call,
@@ -418,6 +448,7 @@ def _iv_pyfixest_path(
     hac_adjust: bool,
     debiased: bool,
     fe_parts: list[str],
+    fe_robust: str = "xtivreg",
     exog_vars: list[str],
     endog_vars: list[str],
     call: dict[str, Any],
@@ -506,10 +537,23 @@ def _iv_pyfixest_path(
         pf_vcov = "iid"
         cov_label = cov_type
     elif cov_type in ("HC1", "robust", "heteroskedastic"):
-        # HC1 already includes the N/(N-K) factor; debiased only changes the
-        # residual s2 scale for the iid/nonrobust case below.
-        pf_vcov = "HC1"
-        cov_label = "robust"
+        # FE-robust convention divergence (rule 15 toggle `fe_robust`):
+        #   * "xtivreg" (default) -> Stata xtivreg,fe vce(robust) computes
+        #     robust SEs as CRV1 clustered by the entity FE column (see
+        #     xtivreg.ado `within` program, cluster==2 branch:
+        #     `_regress ..., cluster(id)` on demeaned data).  Matches
+        #     Stata to <=1e-6 (verified vs archive/iv_fe_diag.do).
+        #   * "hetero" -> pyfixest HC1 wild-bootstrap-style meat on the
+        #     demeaned data (pre-fix behavior); does NOT match Stata FE
+        #     robust and is exposed only as an intentional alternative.
+        if fe_parts and fe_robust == "xtivreg":
+            pf_vcov = {"CRV1": fe_parts[0], "debiased": debiased}
+            cov_label = f"robust (xtivreg: CRV1 by {fe_parts[0]})"
+        else:
+            # HC1 already includes the N/(N-K) factor; debiased only changes
+            # the residual s2 scale for the iid/nonrobust case below.
+            pf_vcov = "HC1"
+            cov_label = "robust"
     else:
         pf_vcov = "HC1"
         cov_label = cov_type

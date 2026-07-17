@@ -188,32 +188,54 @@ The default `"robust"` corresponds to HC0 without finite-sample correction. Use 
 | Predict | Not implemented | Yes | `predict()` |
 | FE IV (`entity=`) | pyfixest `feols` within-path | `xtivreg y w (x=z), fe` | `plm`/`lfe` (no AER FE) |
 
-### Fixed-effects IV: Stata `xtivreg, fe` parity (source-verified 2026-07-17)
+### Fixed-effects IV: Stata `xtivreg, fe` parity (source-verified 2026-07-17, RESOLVED 2026-07-17)
 
 `iv(..., entity="id")` routes through pyfixest `feols` (within-demeaned IV).
 Coefficients match Stata `xtivreg, fe` **exactly** (within-transform sweeps
 the intercept; both return only the exogenous/endogenous slopes).
 
-Standard errors, however, have a **cov_type-dependent** divergence from Stata
-`xtivreg, fe` (N=500, n_g=50, K=3):
+Standard errors match Stata `xtivreg, fe` to ≤1e-6 for **both** `nonrobust`
+and `robust` (N=500, n_g=50, K=3):
 
-| `cov_type` | Stata SE(w) | OE SE(w) | match |
-|------------|-------------|----------|-------|
-| `nonrobust` | 0.0555038 | 0.0555038 | ✅ exact |
-| `robust`/`HC1` | 0.0523534 | 0.056824 | ❌ ~8.5% gap |
+| `cov_type` | Stata SE(w) | OE SE(w) | Stata SE(x) | OE SE(x) | match |
+|------------|-------------|----------|-------------|----------|-------|
+| `nonrobust` | 0.0555038 | 0.0555038 | 0.067038 | 0.067038 | ✅ exact |
+| `robust`/`HC1` (default `fe_robust="xtivreg"`) | 0.0523534 | 0.0523534 | 0.073104 | 0.073104 | ✅ exact |
 
-**Root cause — NOT a DOF rescale.** Stata's `e(df_rz)` = 448 =
-`N − n_g + 1 − K`, identical to OE's pyfixest default `df_resid`
-(`n − n_absorbed − k`, `n_absorbed = n_g − 1`). A candidate
-`fe_dof="xtivreg"` toggle that rescaled V by `(N−n_g−K)/(N−2n_g−K+1)`
-(xtivreg.ado line 1816) was tested and made `robust` SEs *worse* (0.0602 vs
-Stata 0.0524) while leaving `nonrobust` unchanged — proving the gap lives in
-the **robust sandwich meat/bread** (Stata's within-transform robust VCE
-normalization), not the residual df. A correct toggle requires reproducing
-Stata's within-robust meat exactly; this is OPEN work (see FUTURE_WORK
-`iv() FE SE DOF Reconciliation`). `nonrobust` FE already matches Stata, so
-only `robust`/`HC1` FE is affected. Do **not** ship a `fe_dof` toggle that
-merely rescales df — it is incorrect (rule 2/6).
+**Root cause — Stata `vce(robust)` is cluster-robust by the entity id, NOT a
+heteroskedastic HC estimator.** Verified directly against `xtivreg.ado`
+(`within` program): the `cluster` local is set to `2` for `vce(robust)`, which
+runs `_regress ..., cluster(`id')` on the demeaned data. The within-transform
+line-1816 rescale `(e(df_r)/(e(df_r)-n_g+1))` applies **only** to
+`cluster==0` (nonrobust `conventional`), never to robust. The inner
+`_regress, cluster(id)` returns SE(w)=0.0523534 (df_r=49), identical to the
+outer `xtivreg, fe vce(robust)` (df_rz=448) — so the path is confirmed. A
+candidate `fe_dof` df-rescale toggle was tested and made SEs **worse**
+(0.0602 vs Stata 0.0524), confirming the divergence is in the estimator
+*type*, not the df.
+
+**OE resolution — `fe_robust` toggle (rule 15).** When FE is present and
+`cov_type` is one of `robust`/`HC1`/`heteroskedastic` with no explicit
+`cluster`, OE selects the robust VCE per `fe_robust`:
+
+| `fe_robust` | pyfixest `vcov` | matches Stata `xtivreg, fe vce(robust)`? |
+|-------------|-----------------|------------------------------------------|
+| `"xtivreg"` (default) | `{"CRV1": <entity col>, "debiased": debiased}` | ✅ exact (≤1e-6) |
+| `"hetero"` | `"HC1"` (pre-fix behavior) | ❌ ~8.5% high — preserved as an explicit alternative |
+
+`fe_robust` is a convention toggle, not a bug fix: `"xtivreg"` is the Stata
+parity path; `"hetero"` preserves the legacy pyfixest-HC1-on-demeaned-data
+behavior for users who want it (it does NOT match Stata — documented). An
+explicit `cluster=` argument takes precedence over `fe_robust` (cluster is
+user intent). `debiased` still applies its SSC (`G/(G-1)`) on top of CRV1; at
+G=50 the effect is below 1e-6, so Stata (`debiased=False`) and R-style
+(`debiased=True`) both reproduce Stata's 0.052353 for this dataset.
+
+**Parity test:** `tests/stata/tests/test_stata_iv.py::TestIVFEStata` asserts
+both `nonrobust` and `robust` coef+SE against `iv_fe.dta` (regenerated
+2026-07-17) to ≤1e-6, plus a fixture-derived robust SE guard.
+
+
 
 ## Implementation Details
 

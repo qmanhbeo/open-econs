@@ -168,10 +168,11 @@ available in R's `sandwich::NeweyWest` but not in OE.
     `ivregress` has no HAC VCE.  So iv() HAC parity is R-reference only
     (linearmodels/sandwich), NOT Stata.  Documented as a convention boundary.
   - **FE:** `ivregress` has no `absorb`; FE IV is `xtivreg, fe`.  Coefficients
-    match `xtivreg, fe` exactly (within-transform drops _cons).  **SEs:** the
-    divergence is NOT a clean DOF rescale (ruled out 2026-07-17 — see
-    `iv() FE SE DOF` below).  `nonrobust` matches Stata exactly; `robust`
-    diverges ~8.5% in the sandwich meat/bread.  Open item.
+    match `xtivreg, fe` exactly (within-transform drops _cons).  **SEs:** RESOLVED
+    (2026-07-17).  Stata `vce(robust)` is cluster-robust by entity id, not an HC
+    estimator; OE routes FE-robust to pyfixest `CRV1` by entity via `fe_robust="xtivreg"`
+    (default) — matches Stata to ≤1e-6 for both `nonrobust` and `robust`.  See
+    `iv() FE SE DOF` below (RESOLVED).
 - **R parity — ACHIEVED (≤1e-6, tested in tests/r/tests/test_r_iv.py, 2026-07-17):**
   - `AER` installed (R 4.6.1).  `ivreg2` is **UNAVAILABLE** for R 4.6.1
     (removed from CRAN) — parity established against `AER::ivreg` +
@@ -189,44 +190,44 @@ available in R's `sandwich::NeweyWest` but not in OE.
 - **HC0/HC2/HC3:** implemented in OE; no Stata/R parity test yet.  Low risk
   (standard HC definitions) but uncovered per rule 15.
 
-### iv() FE SE DOF Reconciliation (OPEN — re-diagnosed 2026-07-17)
+### iv() FE SE DOF Reconciliation (RESOLVED 2026-07-17)
 
 - **Empirical result (source-verified, N=500, n_g=50, K=3, data
   `df_iv_panel.csv`):** `iv(..., entity="id")` vs Stata `xtivreg y w (x=z1 z2), fe`.
 
-  | cov_type | Stata SE(w) | OE SE(w) | match? |
-  |----------|-------------|----------|--------|
+  | cov_type | Stata SE(w) | OE SE(w) (fe_robust="xtivreg") | match? |
+  |----------|-------------|--------------------------------|--------|
   | nonrobust | 0.0555038 | 0.0555038 | ✅ exact (≤1e-6) |
-  | robust | 0.0523534 | 0.056824 | ❌ ~8.5% gap |
-  | HC1 | (same as robust) | 0.056824 | ❌ same gap |
+  | robust (default `fe_robust="xtivreg"`) | 0.0523534 | 0.0523534 | ✅ exact (≤1e-6) |
+  | robust (`fe_robust="hetero"`) | — | 0.056824 | legacy pyfixest HC1, documented non-Stata |
 
   Coefficients match Stata exactly in all cases (within-transform drops _cons;
   both return only `w`, `x`).
 
-- **Root cause (NOT a DOF rescale — ruled out):** Stata `e(df_rz)` = 448 =
-  `N - n_g + 1 - K` = `500 - 50 + 1 - 3`, which is **identical** to OE's
-  pyfixest default `df_resid` (`n - n_absorbed - k`, `n_absorbed = n_g - 1`).
-  So the residual df is the SAME.  A candidate `fe_dof="xtivreg"` toggle that
-  rescaled V by `(N-n_g-K)/(N-2*n_g-K+1)` (xtivreg.ado line 1816, the
-  non-cluster VCE rescale) was tried and made robust SEs WORSE (0.0602 vs
-  Stata 0.0524), and left nonrobust unchanged — confirming the divergence is in
-  the **robust sandwich meat/bread** (Stata's within-transform robust VCE), not
-  the DOF.  The line-1816 rescale applies to the demeaned-regression V, but
-  Stata's robust FE meat must be computed on the within-demeaned moments with a
-  different normalization than pyfixest's.
+- **Root cause (RESOLVED):** Stata `vce(robust)` on `xtivreg, fe` is **cluster-robust
+  by the entity id**, not a heteroskedastic HC estimator.  Verified against
+  `xtivreg.ado` `within` program: `vce(robust)` sets the `cluster` local to `2`, which runs
+  `_regress ..., cluster(`id')` on the demeaned data.  The line-1816 rescale
+  `(e(df_r)/(e(df_r)-n_g+1))` applies ONLY to `cluster==0` (nonrobust `conventional`),
+  never to robust — so the prior `fe_dof` df-rescale hypothesis was wrong (a rescale
+  made SEs worse: 0.0602 vs Stata 0.0524).  The inner `_regress, cluster(id)` returns
+  SE(w)=0.0523534 (df_r=49), identical to the outer `xtivreg, fe vce(robust)` (df_rz=448)
+  — confirming the path.  Stata's reported `e(df_rz)` = 448 = `N - n_g + 1 - K`, identical to
+  OE's pyfixest `df_resid`, so df was never the issue.
 
-- **Why no toggle yet:** a correct `fe_dof` toggle requires reproducing Stata's
-  within-robust meat exactly, which needs deeper reverse-engineering of
-  `xtivreg.ado`'s robust path (the `_regress ..., vce(robust)` on demeaned data
-  + the line-1816 rescale interaction).  Shipping a wrong toggle would violate
-  rule 2/6.  `nonrobust` FE already matches Stata, so only `robust`/`HC1` FE
-  is broken.
+- **Fix (rule 15 toggle):** new `fe_robust: str = "xtivreg"` param on `iv()`.  When FE is
+  present and `cov_type in (robust, HC1, heteroskedastic)` with no explicit `cluster`,
+  `fe_robust="xtivreg"` → pyfixest `vcov={"CRV1": <entity col>, "debiased": debiased}`
+  (matches Stata); `fe_robust="hetero"` → pyfixest `vcov="HC1"` (legacy behavior, does NOT
+  match Stata, preserved as an explicit alternative).  An explicit `cluster=` argument
+  takes precedence.  `debiased` still applies its `G/(G-1)` SSC; below 1e-6 at G=50.
 
-- **Status:** Open.  No test (would need atol~1e-2, violating rule 2).  The
-  `iv_fe.do` + `iv_fe.dta` generator pair is archived under
-  `tests/stata/generate-fixtures/archive/` for re-tracing.  Next step: read
-  `xtivreg.ado` robust branch (around the `within` program, lines 1780-1840)
-  and compare the sandwich meat against pyfixest's `feols` FE-robust VCE.
+- **Status:** RESOLVED.  `tests/stata/tests/test_stata_iv.py::TestIVFEStata` asserts both
+  `nonrobust` and `robust` coef+SE against `iv_fe.dta` (regenerated 2026-07-17) to ≤1e-6.
+  Methodology note updated in `methodology/linear/iv_2sls.md`.  The diagnostic `.do`
+  (`iv_fe_diag.do`) + `iv_fe_diag.dta` live in `tests/stata/generate-fixtures/archive/` for
+  re-tracing.  Next agent: no further work unless the user wants an R-parity FE-IV test
+  (R `AER::ivreg` has no FE; would need `plm`/`lfe`).
 
 ---
 
