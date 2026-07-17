@@ -241,3 +241,55 @@ class TestGmmROverIdentifiedHACTwoStep:
     def test_hansen_j(self):
         assert self.oe_r.hansen_j_dof == 3
         assert self.oe_r.hansen_j > 0
+
+    def test_coefficients_match_r(self):
+        # R applies the Bartlett kernel to BOTH the weighting matrix AND the
+        # VCE, so R's HAC two-step *coefficient* equals OE's plain
+        # (non-HAC) two-step coefficient (the kernel-averaged optimal weight
+        # collapses to the iid optimal weight for the coefficient).  SEs still
+        # diverge (see test_standard_errors_positive / FUTURE_WORK).  Asserted
+        # at <=1e-6.
+        npt.assert_allclose(self.oe_r.coefficients.values, self.r["coef"], atol=1e-6)
+
+
+class TestGmmROverIdentifiedClusterTwoStep:
+    """Over-identified, two-step, cluster-robust (R ``vcov='iid', cluster=``).
+
+    R's ``gmm`` cluster uses ``vcov="iid"`` (iid efficient weight) with a
+    clustered sandwich meat — a THIRD convention distinct from both Stata's
+    ``vce(cluster)`` (cluster efficient weight) and OE's default.  R's cluster
+    coefficient ``b = [0.850, 2.012, 1.354]`` differs from Stata's
+    ``[0.915, 1.989, 1.621]`` and from OE's cluster coefficient.
+
+    OE currently hardcodes the Stata-style cluster efficient weight (bread =
+    cluster S).  Reproducing R's iid-bread + cluster-meat convention would
+    require a ``weight`` toggle (Stata-style vs R/literature iid-style) — a
+    flagged gap (rule 3/15), NOT silently skipped.  This test therefore pins
+    the documented divergence rather than asserting R parity.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _run(self, gmm_input):
+        self.r = R["oid_2s_cl"]
+        self.oe_r = oe.gmm(
+            "y ~ x1 + x2 | z1 + z2 + z3 + z4 + z5", gmm_input,
+            step="two-step", cov_type="cluster", cluster="cluster",
+        )
+
+    def test_cluster_is_distinct_convention(self):
+        # Guard: OE's cluster coefficient must NOT silently match R's cluster
+        # coefficient (they use different efficient-weight conventions).  If
+        # this fails, a weight toggle has been added and this test must be
+        # rewritten to assert R parity under that toggle.
+        r_coef = np.array(self.r["coef"])
+        gap = np.max(np.abs(self.oe_r.coefficients.values - r_coef))
+        assert gap > 1e-3, (
+            "OE cluster coefficient unexpectedly matches R cluster coefficient; "
+            "if a weight toggle was added, assert R parity explicitly."
+        )
+
+    def test_coefficients_finite(self):
+        assert all(np.isfinite(self.oe_r.coefficients.values))
+
+    def test_standard_errors_positive(self):
+        assert all(self.oe_r.std_errors.values > 0)

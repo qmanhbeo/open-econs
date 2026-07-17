@@ -282,3 +282,102 @@ class TestGmmOverIdentifiedTwoStepRobust:
     def test_hansen_j(self):
         assert self.oe_stata.hansen_j_dof == 3
         npt.assert_allclose(self.oe_stata.hansen_j, self.s["J_oid_2s_r"], atol=1e-6)
+
+
+class TestGmmOverIdentifiedTwoStepCluster:
+    """Over-identified, two-step, cluster-robust (Stata ``vce(cluster cluster)``).
+
+    Stata's ``gmm ..., twostep vce(cluster c)`` builds BOTH the efficient
+    weight (bread ``A2 = S_cluster^{-1}``) AND the VCE meat from the clustered
+    moment covariance.  The two-step efficient weight therefore differs from
+    the iid/robust case, so the coefficient itself changes
+    (``b = [0.915, 1.989, 1.621]`` vs robust ``[0.870, 2.027, 1.464]``).
+
+    Stata parity requires the same toggle recipe as robust:
+    ``windmeijer=False, robust_meat="two-step"`` — asserted at <=1e-6.  The
+    default (Windmeijer, one-step meat) matches R's convention instead and is
+    NOT a Stata-parity target (guarded below).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _run(self, df_gmm):
+        self.s = S
+        self.oe_default = oe.gmm(
+            "y ~ x1 + x2 | z1 + z2 + z3 + z4 + z5", df_gmm,
+            step="two-step", cov_type="cluster", cluster="cluster",
+        )
+        self.oe_stata = oe.gmm(
+            "y ~ x1 + x2 | z1 + z2 + z3 + z4 + z5", df_gmm,
+            step="two-step", cov_type="cluster", cluster="cluster",
+            windmeijer=False, robust_meat="two-step",
+        )
+
+    def test_coefficients(self):
+        expected = [self.s["b0_oid_2s_cl"], self.s["b1_oid_2s_cl"], self.s["b2_oid_2s_cl"]]
+        npt.assert_allclose(self.oe_stata.coefficients.values, expected, atol=1e-6)
+
+    def test_standard_errors_stata_parity(self):
+        expected = [
+            self.s["se0_oid_2s_cl"], self.s["se1_oid_2s_cl"], self.s["se2_oid_2s_cl"],
+        ]
+        npt.assert_allclose(self.oe_stata.std_errors.values, expected, atol=1e-6)
+
+    def test_default_matches_r_not_stata(self):
+        # Default cluster (Windmeijer, one-step meat) gives a different SE than
+        # Stata's gmm cluster VCE; guard against accidental Stata regression.
+        expected_stata = [
+            self.s["se0_oid_2s_cl"], self.s["se1_oid_2s_cl"], self.s["se2_oid_2s_cl"],
+        ]
+        gap = np.max(np.abs(self.oe_default.std_errors.values - np.array(expected_stata)))
+        assert gap > 1e-3, "default cluster gmm() unexpectedly matches Stata cluster SEs"
+
+    def test_hansen_j(self):
+        assert self.oe_stata.hansen_j_dof == 3
+        npt.assert_allclose(self.oe_stata.hansen_j, self.s["J_oid_2s_cl"], atol=1e-6)
+
+
+class TestGmmOverIdentifiedTwoStepHAC:
+    """Over-identified, two-step, HAC-robust (Stata ``wmatrix(hac ...) vce(hac ...)``).
+
+    Stata's HAC ``gmm`` builds the efficient weight (bread) AND the VCE meat
+    from the Newey-West long-run covariance (Bartlett kernel).  As with
+    cluster, the coefficient changes vs robust
+    (``b = [0.892, 2.017, 1.570]``).  Stata parity again requires
+    ``windmeijer=False, robust_meat="two-step"`` (the HAC meat is the
+    two-step-residual HAC S, not the clustered S).  Coefficients are asserted
+    at <=1e-6; SEs too (now matched after the HAC-meat fix).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _run(self, df_gmm):
+        self.s = S
+        self.oe_default = oe.gmm(
+            "y ~ x1 + x2 | z1 + z2 + z3 + z4 + z5", df_gmm,
+            step="two-step", cov_type="HAC", lags=3, time="t", cluster="cluster",
+        )
+        self.oe_stata = oe.gmm(
+            "y ~ x1 + x2 | z1 + z2 + z3 + z4 + z5", df_gmm,
+            step="two-step", cov_type="HAC", lags=3, time="t", cluster="cluster",
+            windmeijer=False, robust_meat="two-step",
+        )
+
+    def test_coefficients(self):
+        expected = [self.s["b0_oid_2s_hac"], self.s["b1_oid_2s_hac"], self.s["b2_oid_2s_hac"]]
+        npt.assert_allclose(self.oe_stata.coefficients.values, expected, atol=1e-6)
+
+    def test_standard_errors_stata_parity(self):
+        expected = [
+            self.s["se0_oid_2s_hac"], self.s["se1_oid_2s_hac"], self.s["se2_oid_2s_hac"],
+        ]
+        npt.assert_allclose(self.oe_stata.std_errors.values, expected, atol=1e-6)
+
+    def test_default_matches_r_not_stata(self):
+        expected_stata = [
+            self.s["se0_oid_2s_hac"], self.s["se1_oid_2s_hac"], self.s["se2_oid_2s_hac"],
+        ]
+        gap = np.max(np.abs(self.oe_default.std_errors.values - np.array(expected_stata)))
+        assert gap > 1e-3, "default HAC gmm() unexpectedly matches Stata HAC SEs"
+
+    def test_hansen_j(self):
+        assert self.oe_stata.hansen_j_dof == 3
+        npt.assert_allclose(self.oe_stata.hansen_j, self.s["J_oid_2s_hac"], atol=1e-6)
