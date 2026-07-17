@@ -53,6 +53,10 @@ new benchmark scripts were invented for this release.
   entities. Rationale in `methodology/performance-conventions.md` and
   `FUTURE_WORK.md`.
 
+Full performance detail (with the bit-identical determinism-test references):
+[docs/performance.md](../docs/performance.md). The Stata/R-vs-open-econs
+feature matrix lives at [docs/comparison.md](../docs/comparison.md).
+
 ## Parity discipline
 
 - **550+ Stata- and R-parity tests** (330+ vs Stata, 220+ vs R) run in CI on
