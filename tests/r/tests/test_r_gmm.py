@@ -10,8 +10,9 @@ Convention notes (source-confirmed against R ``gmm`` v1.9-1 source):
   2. R's two-step GMM with ``vcov="HAC"`` applies a Newey-West HAC kernel to
      BOTH the weighting matrix AND the VCE over the *pooled* sample, while OE's
      default HAC is per-entity (Stata-style).  OE's ``hac_weighting=True``
-     reproduces R's HAC coefficient to <=1e-6 (SE within ~6e-4, residual R-internals
-     meat gap documented in FUTURE_WORK GMM-HAC).
+     reproduces R's HAC coefficient to <=1e-6 (SE within ~6e-4: R's coef weight
+     uses 2SLS residuals while its reported VCE uses two-step residuals -- an
+     internal R inconsistency; documented in FUTURE_WORK GMM-HAC).
   3. R's ``cluster=`` argument is a **no-op** (not a real parameter — falls
      through ``...`` and is never consumed).  R has NO genuine cluster VCE; the
      historical "R cluster" fixture is simply R's plain ``vcov="iid"`` two-step
@@ -272,7 +273,8 @@ class TestGmmROverIdentifiedHACWeighting:
 
     With ``hac_weighting=True`` the HAC long-run S (bread AND meat) is computed
     over the full sample as one time series, matching R's ``gmm(vcov="HAC")``
-    kernel-in-both-W-and-VCE convention.  Coefficient AND SE match R to <=1e-6.
+    kernel-in-both-W-and-VCE convention.  Coefficient matches R to <=1e-6; SE
+    matches R to within ~6e-4 (see below).
     """
 
     @pytest.fixture(autouse=True)
@@ -285,20 +287,27 @@ class TestGmmROverIdentifiedHACWeighting:
         )
 
     def test_coefficients_match_r(self):
-        # Coefficient matches R's pooled-sample HAC to <=1e-6 (the bread is the
-        # full-sample HAC S from the one-step residuals, matching R's kerneled
-        # weighting matrix exactly).
+        # Coefficient matches R's pooled-sample HAC to <=1e-6.  R's two-step
+        # coefficient is optimized with a HAC weight W=S^-1 built from the
+        # FIRST-STAGE 2SLS residuals (R .weightFct is called with res1$par, the
+        # 2SLS theta).  OE's bread is the same full-sample HAC S from the
+        # one-step (2SLS) residuals, matching R's kerneled weighting matrix.
         npt.assert_allclose(
             self.oe_r.coefficients.values, self.r["coef"], atol=1e-6
         )
 
     def test_standard_errors_match_r(self):
-        # SE matches R's HAC SE to within 1e-3.  A residual ~6e-4 gap remains:
-        # R's gmm HAC VCE meat uses a slightly different two-step-residual
-        # kernel accumulation than OE's full-sandwich (R-internals detail, not
-        # yet source-confirmed).  This is a documented divergence, NOT claimed
-        # 1e-6 parity -- see FUTURE_WORK GMM-HAC.  The coefficient (above) IS
-        # at 1e-6, which is the headline convention-parity win.
+        # SE matches R's HAC SE to within ~6e-4 (atol=1e-3).  Root cause
+        # (source-confirmed): R's reported vcov builds v from the TWO-STEP
+        # (final) residuals, NOT the 2SLS residuals used for the coefficient.
+        # So R's coef(g) and vcov(g) derive from two DIFFERENT S matrices --
+        # R is internally inconsistent.  Empirically: e1-HAC (2SLS) bread gives
+        # R's coefficient to 2e-15 but SE ~6e-4 off; e2-HAC (two-step) bread
+        # gives R's SE to 6 decimals but a DIFFERENT coefficient [0.888,2.016,
+        # 1.510].  OE uses ONE consistent S (e1-HAC bread + meat) -> exact
+        # coefficient + ~6e-4 on R's inconsistent SE.  Do NOT tighten to 1e-6:
+        # that would force OE to replicate R's coef<->SE inconsistency and break
+        # the exact coefficient match.  See FUTURE_WORK GMM-HAC / methodology.
         npt.assert_allclose(
             self.oe_r.std_errors.values, self.r["se"], atol=1e-3
         )

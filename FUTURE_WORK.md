@@ -322,21 +322,36 @@ relaxed tolerances (standing rule 2).
   - R-pooled HAC: `hac_weighting=True` toggle ADDED.  **Coefficient matches R
     to ≤1e-6** (tested in `TestGmmROverIdentifiedHACWeighting`).  **SE matches
     R to within ~6e-4** (R SE `[0.128, 0.097, 0.802]` vs OE `[0.128, 0.097,
-    0.803]`); a residual ~6e-4 gap remains in the VCE *meat* because R's exact
-    two-step-residual kernel accumulation in the meat is not yet
-    source-confirmed (R-internals detail, not a loosened tolerance — the SE
-    test asserts at atol=1e-3 with an explicit documented-divergence comment,
-    NOT at 1e-6).  The headline convention-parity win (coefficient) is exact.
+    0.803]`).  The residual ~6e-4 gap is **diagnosed and explained** (NOT a
+    bug, NOT a loosened tolerance — see below).  The SE test asserts at
+    atol=1e-3 with an explicit documented-divergence comment, NOT at 1e-6.
+  - **Root cause of the ~6e-4 SE gap (source-confirmed 2026-07-17):** R's
+    `gmm(..., vcov="HAC")` is **internally inconsistent** between the coefficient
+    and the reported VCE.  The two-step *coefficient* is optimized with a HAC
+    weight `W = S⁻¹` built from the **first-stage 2SLS residuals** (`.weightFct`
+    is called with `res1$par` = the 2SLS theta in `momentEstim.baseGmm.
+    twoStep.formula`).  But the *reported* `vcov` (`FinRes.baseGmm.res`) builds
+    `v = .weightFct(z$coefficient, x, "HAC")` from the **final two-step
+    residuals**, and uses it for BOTH `z$w` and `z$vcov`.  Empirically: the
+    e1-HAC (2SLS-residual) bread reproduces R's coefficient to 2e-15, while the
+    e2-HAC (two-step-residual) bread reproduces R's *SE* to 6 decimals
+    (`[0.127674, 0.096713, 0.802281]`) — but gives a DIFFERENT coefficient
+    (`[0.888, 2.016, 1.510]`).  So R's own `coef(g)` and `vcov(g)` come from
+    two different S matrices.  OE uses ONE consistent S (e1-HAC bread → also
+    used in the meat sandwich), so it matches R's coefficient exactly and lands
+    within 6e-4 of R's (internally-inconsistent) SE.  **Do NOT "fix" this to
+    1e-6** by switching OE's bread to e2-HAC — that would replicate R's
+    inconsistency, break OE's own coef↔SE consistency, AND break the exact
+    coefficient match.  Keep atol=1e-3 with this note.
   - FIX (2026-07-17): the R fixture `oid_hac_2s` previously stored the PLAIN
     optimal two-step coef `b2=[0.870,...]` as the "R HAC" coef — wrong.  R's
     actual HAC coef is `[0.885,...]`.  `gmm.R` now stores `coef(g_hac_oid)` /
     `vcov(g_hac_oid)`; the old `test_coefficients_match_r` asserting OE==b2 was
     validating against an incorrect R value and has been corrected.
-- **Implementation path (residual R HAC SE gap):** read R `gmm` source
-  (`gmm:::.myKernHAC` / `.getVcov` HAC branch) to determine the exact meat
-  residual/normalization (suspect: R kernels the meat from a differently
-  centered or two-step residual).  Once confirmed, tighten the SE test to
-  1e-6.
+- **Implementation path (residual R HAC SE gap):** NONE remaining — the gap is
+  a confirmed R-internals inconsistency (coefficient weight from 2SLS residuals
+  vs reported VCE from two-step residuals).  No source-dive needed; no code
+  change warranted.  Documented as above; SE test stays at atol=1e-3.
 
 ### GMM-RCLUSTER: R "cluster=" is a NO-OP — RESOLVED as R `vcov="iid"` (2026-07-17)
 
