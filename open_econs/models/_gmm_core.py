@@ -97,7 +97,7 @@ def estimate_gmm(
     max_lags: int | None = None,
     hac_adjust: bool = False,
     windmeijer: bool = True,
-    s_residuals: str = "one-step",
+    robust_meat: str = "one-step",
 ) -> dict[str, Any]:
     """General two-step GMM estimator, mirroring xtabond2's Mata source (v3.7.2).
 
@@ -158,18 +158,22 @@ def estimate_gmm(
         default.  If False, skip the correction, reproducing Stata's ``gmm``
         command default (which does NOT apply Windmeijer — confirmed via
         gmm.ado source).  Ignored for one-step or non-robust cases.
-    s_residuals : {"one-step", "two-step"}, default "one-step"
-        Which residuals feed the moment-covariance matrix ``S`` used in the
-        two-step robust VCE.  The econometric literature and R's ``gmm``
-        package (``vcov="MDS"``) build ``S`` from the ONE-step residuals
+    robust_meat : {"one-step", "two-step"}, default "one-step"
+        Which residuals feed the robust **MEAT** ``S2`` of the two-step
+        VCE sandwich.  The econometric literature and R's ``gmm`` package
+        (``vcov="MDS"``) build the robust meat from the ONE-step residuals
         ``e1`` (the efficient two-step weighting is estimated from the
-        first-step residuals).  Stata's ``gmm`` command instead builds ``S``
-        from the TWO-step residuals ``e2`` — a genuine, source-confirmed
-        convention difference.  Set ``s_residuals="two-step"`` to reproduce
-        Stata's ``gmm`` two-step robust VCE exactly.  Ignored for one-step
-        or non-robust cases.  (Source evidence: Stata's ``e(S)`` extracted
-        from a live run equals ``(1/N)·Σᵢ(Zᵢ·e2ᵢ)(Zᵢ·e2ᵢ)'`` to machine
-        epsilon, whereas the one-step-residual ``S`` differs structurally.)
+        first-step residuals).  Stata's ``gmm`` command instead builds the
+        robust meat from the TWO-step residuals ``e2`` — a genuine,
+        source-confirmed convention difference.  Set
+        ``robust_meat="two-step"`` to reproduce Stata's ``gmm`` two-step
+        robust VCE exactly.  IMPORTANT: this parameter controls ONLY the
+        robust meat ``S2``; the efficient-weight bread ``S1`` always stays
+        at the one-step residuals ``e1`` (the full sandwich requires this
+        split).  Ignored for one-step or non-robust cases.  (Source
+        evidence: Stata's ``e(S)`` extracted from a live run equals
+        ``(1/N)·Σᵢ(Zᵢ·e2ᵢ)(Zᵢ·e2ᵢ)'`` to machine epsilon, whereas the
+        one-step-residual ``S`` differs structurally.)
     """
     n_eq = Y.shape[0]
     N = float(len(np.unique(eq_entity)))
@@ -249,14 +253,17 @@ def estimate_gmm(
         # robust MEAT S2 while keeping the one-step S1 for the efficient weight,
         # i.e. the full sandwich
         #   V = (G' S1^{-1} G)^{-1} (G' S1^{-1} S2 S1^{-1} G) (G' S1^{-1} G)^{-1}.
-        # When s_residuals="two-step", compute S2 from e2 and assemble the VCE
+        # When robust_meat="two-step", compute S2 from e2 and assemble the VCE
         # with S2 in the meat (source-confirmed: reproduces Stata's e(S) and e(V)
         # to machine epsilon).  Coefficients b2 are unchanged at the 1e-9 level.
+        # NOTE: S1 (bread, efficient weight) is ALWAYS the one-step-residual S;
+        # only the robust meat S2 switches to e2.  Do not "simplify" this to a
+        # global S swap -- that regresses parity to a 0.00013 gap.
         S2 = None
         if (
             robust
             and step == "two-step"
-            and s_residuals == "two-step"
+            and robust_meat == "two-step"
         ):
             S2 = np.zeros((L, L))
             for ent in np.unique(eq_entity):

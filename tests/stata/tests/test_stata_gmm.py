@@ -22,7 +22,7 @@ Convention notes (source-confirmed 2026-07-17):
       default ``gmm()`` applies Windmeijer and builds the robust S from e1
       (the literature/R convention), so its two-step robust SEs diverge
       (~15%) from Stata's ``gmm``.  Setting ``windmeijer=False`` AND
-      ``s_residuals="two-step"`` reproduces Stata's ``gmm`` two-step robust
+      ``robust_meat="two-step"`` reproduces Stata's ``gmm`` two-step robust
       VCE exactly (<=1e-6; see GMM-WC in FUTURE_WORK.md).  The default
       (Windmeijer) path matches R's ``gmm`` package instead and is NOT a
       Stata-parity target.
@@ -235,11 +235,11 @@ class TestGmmOverIdentifiedRobust:
 class TestGmmOverIdentifiedTwoStepRobust:
     """Over-identified, two-step, robust.
 
-    DEFAULT (windmeijer=True, s_residuals="one-step") matches the
+    DEFAULT (windmeijer=True, robust_meat="one-step") matches the
     econometric literature / R's ``gmm`` package, NOT Stata's ``gmm``
     command (which omits Windmeijer and uses two-step-residual S in the
     robust meat).  Stata-parity is achieved with windmeijer=False,
-    s_residuals="two-step" — asserted below at <=1e-6.
+    robust_meat="two-step" — asserted below at <=1e-6.
     """
 
     @pytest.fixture(autouse=True)
@@ -254,7 +254,7 @@ class TestGmmOverIdentifiedTwoStepRobust:
         self.oe_stata = oe.gmm(
             "y ~ x1 + x2 | z1 + z2 + z3 + z4 + z5", df_gmm,
             step="two-step", cov_type="robust",
-            windmeijer=False, s_residuals="two-step",
+            windmeijer=False, robust_meat="two-step",
         )
 
     def test_coefficients(self):
@@ -263,7 +263,7 @@ class TestGmmOverIdentifiedTwoStepRobust:
 
     def test_standard_errors_stata_parity(self):
         # Stata `gmm` two-step robust SEs reproduced to <=1e-6
-        # (windmeijer=False + s_residuals="two-step").  See GMM-WC in FUTURE_WORK.
+        # (windmeijer=False + robust_meat="two-step").  See GMM-WC in FUTURE_WORK.
         expected = [
             self.s["se0_oid_2s_r"], self.s["se1_oid_2s_r"], self.s["se2_oid_2s_r"],
         ]

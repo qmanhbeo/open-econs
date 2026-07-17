@@ -342,17 +342,17 @@ so it was confirmed numerically instead: Stata's extracted `e(S)` equals
 `(1/N)·Σᵢ(Zᵢ·e2ᵢ)(Zᵢ·e2ᵢ)'` to machine epsilon, and feeding Stata's OWN
 extracted `e(S)` into the full-sandwich formula reproduces Stata's `e(V)`
 to ~2e-8.
-→ Toggle `s_residuals` added; default `"one-step"` (literature/R collapse);
+→ Toggle `robust_meat` added; default `"one-step"` (literature/R collapse);
   `"two-step"` builds S2 from e2 and assembles the full sandwich.
 
-**Resolution / parity:** With **`windmeijer=False, s_residuals="two-step"`**
+**Resolution / parity:** With **`windmeijer=False, robust_meat="two-step"`**
 OE reproduces Stata `gmm` two-step robust SEs to **max |gap| = 2.06e-08**
 (≤1e-6).  Coefficients and two-step J match to machine epsilon in all cases.
 - Stata `gmm` SE: [0.1260902, 0.0986776, 0.7745471]
-- OE (`windmeijer=False, s_residuals="two-step"`): [0.1260902, 0.0986776, 0.7745471]
-- OE default (`windmeijer=True, s_residuals="one-step"`) = R `gmm`: [0.14527, 0.10322, 0.82625]
+- OE (`windmeijer=False, robust_meat="two-step"`): [0.1260902, 0.0986776, 0.7745471]
+- OE default (`windmeijer=True, robust_meat="one-step"`) = R `gmm`: [0.14527, 0.10322, 0.82625]
 
-**IMPORTANT semantics caution:** `s_residuals="two-step"` does NOT replace
+**IMPORTANT semantics caution:** `robust_meat="two-step"` does NOT replace
 the whole S with e2 — it switches only the robust MEAT S2 to e2 while keeping
 the efficient-weight bread S1 at e1 (the full sandwich requires exactly this).
 Do not "simplify" it to globally replacing S1 with S2 (that regresses to a
@@ -360,12 +360,12 @@ Do not "simplify" it to globally replacing S1 with S2 (that regresses to a
 
 **Tests:** `tests/stata/tests/test_stata_gmm.py`
 `TestGmmOverIdentifiedTwoStepRobust` now asserts the ≤1e-6 SE parity with
-`windmeijer=False, s_residuals="two-step"`; the default (Windmeijer) path is
+`windmeijer=False, robust_meat="two-step"`; the default (Windmeijer) path is
 documented as matching R rather than Stata `gmm` and is NOT asserted as Stata
-parity.  R `gmm` has no `s_residuals="two-step"` equivalent (always e1), so
+parity.  R `gmm` has no `robust_meat="two-step"` equivalent (always e1), so
 no R-side assertion is added (rule 3: no clean R anchor — documented, not
 forced).  `abond()` is unaffected (inherits `windmeijer=True,
-s_residuals="one-step"` defaults, correct for xtabond/xtdpd).
+robust_meat="one-step"` defaults, correct for xtabond/xtdpd).
 
 **Status:** RESOLVED — both gaps closed and exposed as toggles; parity tests
 added.

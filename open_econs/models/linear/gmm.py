@@ -142,7 +142,7 @@ def gmm(
     time: str | None = None,
     hac_adjust: bool = False,
     windmeijer: bool = True,
-    s_residuals: str = "one-step",
+    robust_meat: str = "one-step",
 ) -> GMMResult:
     """Estimate a linear-in-parameters GMM regression.
 
@@ -200,15 +200,17 @@ def gmm(
         command default (which does NOT apply Windmeijer — confirmed via
         gmm.ado source; contrast ``xtabond``/``xtdpd`` which DO apply it).
         Ignored when ``step="one-step"`` or ``cov_type`` is not ``"robust"``.
-    s_residuals : {"one-step", "two-step"}, default "one-step"
-        Which residuals feed the robust moment-covariance matrix ``S`` used in
-        the two-step VCE.  The literature and R's ``gmm`` package
-        (``vcov="MDS"``) build ``S`` from the **one-step** residuals ``e1``;
-        Stata's ``gmm`` command builds it from the **two-step** residuals
-        ``e2``.  Set ``s_residuals="two-step"`` (together with
-        ``windmeijer=False``) to reproduce Stata's ``gmm`` two-step robust
-        VCE exactly (verified against Stata's extracted ``e(S)`` matrix).
-        Ignored when ``step="one-step"`` or ``cov_type`` is not ``"robust"``.
+    robust_meat : {"one-step", "two-step"}, default "one-step"
+        Which residuals feed the robust **MEAT** of the two-step VCE sandwich.
+        The literature and R's ``gmm`` package (``vcov="MDS"``) build the
+        robust meat from the **one-step** residuals ``e1``; Stata's ``gmm``
+        command builds it from the **two-step** residuals ``e2``.  Set
+        ``robust_meat="two-step"`` (together with ``windmeijer=False``) to
+        reproduce Stata's ``gmm`` two-step robust VCE exactly (verified
+        against Stata's extracted ``e(S)`` matrix).  IMPORTANT: this controls
+        ONLY the robust meat; the efficient-weight bread stays at the
+        one-step residuals.  Ignored when ``step="one-step"`` or ``cov_type``
+        is not ``"robust"``.
 
     Returns
     -------
@@ -272,7 +274,7 @@ def gmm(
     call = _capture_call(
         formula=formula, step=step, cov_type=cov_type, cluster=cluster,
         lags=lags, time=time, hac_adjust=hac_adjust, windmeijer=windmeijer,
-        s_residuals=s_residuals,
+        robust_meat=robust_meat,
     )
 
     parsed = _parse_iv_formula(formula, data)
@@ -326,7 +328,7 @@ def gmm(
         Y, X, Z, eq_entity, core_step, robust=robust,
         time_labels=hac_time_labels, max_lags=hac_max_lags,
         hac_adjust=use_hac_adjust, windmeijer=windmeijer,
-        s_residuals=s_residuals,
+        robust_meat=robust_meat,
     )
 
     if cov_type == "HAC":
