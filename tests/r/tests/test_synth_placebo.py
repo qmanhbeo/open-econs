@@ -352,6 +352,34 @@ def test_placebo_space_internal_consistency():
     assert np.allclose(ps.gap_paths[d].to_numpy(), direct.gap_path["gap"].to_numpy())
 
 
+def test_placebo_space_parallel_matches_sequential():
+    """``parallel=True`` must be bit-identical to the sequential path (rule 2: no
+    tolerance loosening).  Each ``synth`` fit is a pure function, so the process
+    pool reproduces the exact same ratios / p-value / gap paths."""
+    p = _make_panel_small()
+    r = _fit(p, predictors=["x1", "x2"])
+    ps_seq = r.placebo_space(p["df"], parallel=False)
+    ps_par = r.placebo_space(p["df"], parallel=True)
+    assert ps_seq.ratios.index.equals(ps_par.ratios.index)
+    assert np.allclose(ps_seq.ratios.to_numpy(), ps_par.ratios.to_numpy(), atol=0.0, rtol=0.0)
+    assert ps_seq.p_value == ps_par.p_value
+    assert np.allclose(ps_seq.gap_paths.to_numpy(), ps_par.gap_paths.to_numpy(), atol=0.0, rtol=0.0)
+
+
+def test_placebo_time_parallel_matches_sequential():
+    """``parallel=True`` must be bit-identical to the sequential path for the
+    in-time loop as well."""
+    p = _make_panel_small()
+    r = _fit(p, predictors=["x1", "x2"])
+    pt_seq = r.placebo_time(p["df"], parallel=False)
+    pt_par = r.placebo_time(p["df"], parallel=True)
+    assert pt_seq.ratios.index.equals(pt_par.ratios.index)
+    assert np.allclose(pt_seq.ratios.to_numpy(), pt_par.ratios.to_numpy(), atol=0.0, rtol=0.0)
+    assert pt_seq.p_value == pt_par.p_value
+    assert np.allclose(pt_seq.gap_paths.to_numpy(), pt_par.gap_paths.to_numpy(), atol=0.0, rtol=0.0)
+
+
+
 @pytest.mark.slow
 def test_placebo_space_internal_consistency_default_predictors():
     """Internal consistency also holds when predictors=None (default path)."""

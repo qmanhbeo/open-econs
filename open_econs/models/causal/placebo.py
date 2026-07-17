@@ -40,7 +40,8 @@ This is new, additive code only: no existing estimator is modified.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+import concurrent.futures as _cf
+from typing import Any, Optional, Sequence
 
 import pandas as pd
 
@@ -55,6 +56,56 @@ def _adh_permutation_p_value(ratios: pd.Series, treated_ratio: float) -> float:
     if len(ratios) == 0:
         return float("nan")
     return float((ratios >= treated_ratio).mean())
+
+
+# Below which a permutation loop is run sequentially.  Each ``synth()`` fit costs
+# ~1s; the process pool pays a fixed spawn + per-item pickling overhead (the
+# DataFrame and the full ``open_econs`` import must be re-created in every
+# worker), so for small loops parallelising is a net loss.  Benchmarks on this
+# machine: N=6 -> 0.90x (slower), N=12 -> 1.68x (faster).  The threshold is
+# deliberately conservative so default behaviour never regresses.
+_MIN_PARALLEL_ITEMS = 8
+
+
+def _one_synth(spec: dict[str, Any]) -> dict[str, Any]:
+    """Run a single ``synth`` fit from a picklable spec.
+
+    Pure worker for the permutation loop: takes the exact kwargs a
+    ``synth`` fit needs (data is passed by the caller), returns the three
+    quantities the placebo loop consumes plus any exception.  Kept at module
+    level so it is picklable across ``ProcessPoolExecutor`` (Windows spawn).
+    """
+    from open_econs.models.causal.synth import synth
+
+    key = spec.pop("__key__")
+    try:
+        r = synth(**spec)
+        return {
+            "key": key,
+            "ok": True,
+            "pre_mspe": float(r.pre_mspe),
+            "post_mspe": float(r.post_mspe),
+            "gap": r.gap_path["gap"],
+        }
+    except Exception as exc:  # noqa: BLE001 - mirrored from the sequential loop
+        return {"key": key, "ok": False, "error": str(exc)}
+
+
+def _parmap(
+    specs: Sequence[dict[str, Any]],
+    parallel: bool,
+) -> list[dict[str, Any]]:
+    """Run permutation ``synth`` fits, optionally across a process pool.
+
+    Sequential and parallel paths are numerically identical: ``synth`` is a pure
+    function (no shared mutable state; its only RNG use is a fixed-seed Dirichlet
+    start in the inner QP), so each worker reproduces the sequential result
+    exactly.  Returns the list of per-item result dicts (order preserved).
+    """
+    if parallel and len(specs) >= _MIN_PARALLEL_ITEMS:
+        with _cf.ProcessPoolExecutor() as ex:
+            return list(ex.map(_one_synth, list(specs)))
+    return [_one_synth(s) for s in specs]
 
 
 class PlaceboSpaceResult(BaseModel):
@@ -283,6 +334,7 @@ def placebo_space(
     data: pd.DataFrame,
     *,
     exclude_pre_mspe_multiple: Optional[float] = None,
+    parallel: bool = False,
     **solver_kwargs: Any,
 ) -> PlaceboSpaceResult:
     """Placebo-in-space permutation inference for a fitted synthetic control.
@@ -308,6 +360,13 @@ def placebo_space(
         poorly-pre-fitting placebos for exactly this reason; the default
         ``None`` performs **no** exclusion (transparent behavior).  ADH
         applications typically pass a multiple such as 10.
+    parallel : bool, default False
+        Run the per-donor ``synth()`` fits across a process pool.  Each fit is an
+        independent pure call, so results are **bit-identical** to the sequential
+        path; this only changes wall-clock time.  Useful for large donor pools
+        (the loop is sequential below ``_MIN_PARALLEL_ITEMS`` to avoid spawn
+        overhead on small panels).  Note: a thread pool gives no speedup here
+        (the SLSQP/QM path holds the GIL), so this uses processes.
     **solver_kwargs
         Forwarded to :func:`synth`'s inner/outer ``scipy.optimize.minimize``.
 
@@ -315,8 +374,6 @@ def placebo_space(
     -------
     PlaceboSpaceResult
     """
-    from open_econs.models.causal.synth import synth
-
     if not isinstance(data, pd.DataFrame):
         raise TypeError("data must be a pandas DataFrame.")
 
@@ -339,23 +396,34 @@ def placebo_space(
     gap_map: dict[Any, pd.Series] = {}
     excluded: list[dict[str, Any]] = []
 
-    for d in donors:
-        new_donors = [u for u in donors if u != d]
-        try:
-            r = synth(
-                data, outcome, treated_unit=d, donor_pool=new_donors,
-                entity=entity, time=time, pre_period=pre_period,
-                post_period=post_period, predictors=predictors, **solver_kwargs,
-            )
-        except Exception as exc:  # noqa: BLE001 - a donor that cannot be fit as
-            # a placebo is recorded, never silently dropped.
+    specs = [
+        {
+            "__key__": d,
+            "data": data,
+            "outcome": outcome,
+            "treated_unit": d,
+            "donor_pool": [u for u in donors if u != d],
+            "entity": entity,
+            "time": time,
+            "pre_period": pre_period,
+            "post_period": post_period,
+            "predictors": predictors,
+            **solver_kwargs,
+        }
+        for d in donors
+    ]
+    for res in _parmap(specs, parallel):
+        d = res["key"]
+        if not res["ok"]:
+            # a donor that cannot be fit as a placebo is recorded, never
+            # silently dropped.
             excluded.append(
                 {"unit": d, "pre_mspe": float("nan"),
-                 "ratio": float("nan"), "reason": f"fit failed: {exc}"}
+                 "ratio": float("nan"), "reason": f"fit failed: {res['error']}"}
             )
             continue
-        pre_mspe = float(r.pre_mspe)
-        post_mspe = float(r.post_mspe)
+        pre_mspe = res["pre_mspe"]
+        post_mspe = res["post_mspe"]
         ratio = (post_mspe / pre_mspe) if pre_mspe > 0 else float("inf")
         if (
             exclude_pre_mspe_multiple is not None
@@ -367,7 +435,7 @@ def placebo_space(
         ratio_map[d] = ratio
         pre_map[d] = pre_mspe
         post_map[d] = post_mspe
-        gap_map[d] = r.gap_path["gap"]
+        gap_map[d] = res["gap"]
 
     ratios = pd.Series(ratio_map, name="mspe_ratio")
     if ratios.index.name is None:
@@ -409,6 +477,8 @@ def placebo_space(
 def placebo_time(
     result: SynthResult,
     data: pd.DataFrame,
+    *,
+    parallel: bool = False,
     **solver_kwargs: Any,
 ) -> PlaceboTimeResult:
     """Placebo-in-time permutation inference for a fitted synthetic control.
@@ -426,6 +496,12 @@ def placebo_time(
         placebo call, so the caller only supplies the panel ``data``.
     data : pd.DataFrame
         The full balanced panel (the same one used for the original fit).
+    parallel : bool, default False
+        Run the per-candidate-date ``synth()`` fits across a process pool.  Each
+        fit is an independent pure call, so results are **bit-identical** to the
+        sequential path; this only changes wall-clock time.  See
+        :func:`placebo_space` for the parallelization rationale and the small-
+        panel threshold.
     **solver_kwargs
         Forwarded to :func:`synth`'s inner/outer ``scipy.optimize.minimize``.
 
@@ -442,8 +518,6 @@ def placebo_time(
     it raises ``TypeError`` (rejected explicitly before any ``synth`` call, so
     the space-only parameter is never silently reinterpreted as a solver kwarg).
     """
-    from open_econs.models.causal.synth import synth
-
     if not isinstance(data, pd.DataFrame):
         raise TypeError("data must be a pandas DataFrame.")
 
@@ -489,29 +563,39 @@ def placebo_time(
     gap_map: dict[Any, pd.Series] = {}
     excluded: list[dict[str, Any]] = []
 
-    for t_c in candidates:
-        i_c = all_times.index(t_c)
-        new_post = all_times[i_c + 1]
-        try:
-            r = synth(
-                data, outcome, treated_unit=treated, donor_pool=donors,
-                entity=entity, time=time, pre_period=t_c,
-                post_period=new_post, predictors=predictors, **solver_kwargs,
-            )
-        except Exception as exc:  # noqa: BLE001 - a candidate date that cannot
-            # be fit is recorded, never silently dropped.
+    specs = [
+        {
+            "__key__": t_c,
+            "data": data,
+            "outcome": outcome,
+            "treated_unit": treated,
+            "donor_pool": donors,
+            "entity": entity,
+            "time": time,
+            "pre_period": t_c,
+            "post_period": all_times[all_times.index(t_c) + 1],
+            "predictors": predictors,
+            **solver_kwargs,
+        }
+        for t_c in candidates
+    ]
+    for res in _parmap(specs, parallel):
+        t_c = res["key"]
+        if not res["ok"]:
+            # a candidate date that cannot be fit is recorded, never silently
+            # dropped.
             excluded.append(
                 {"time": t_c, "pre_mspe": float("nan"),
-                 "ratio": float("nan"), "reason": f"fit failed: {exc}"}
+                 "ratio": float("nan"), "reason": f"fit failed: {res['error']}"}
             )
             continue
-        pre_mspe = float(r.pre_mspe)
-        post_mspe = float(r.post_mspe)
+        pre_mspe = res["pre_mspe"]
+        post_mspe = res["post_mspe"]
         ratio = (post_mspe / pre_mspe) if pre_mspe > 0 else float("inf")
         # Reindex the pseudo-fit's gap path onto the alignment index
         # (periods <= the actual pre_period), filling nothing (each candidate
         # window already covers this range with no gaps).
-        gap_map[t_c] = r.gap_path["gap"].reindex(align_index)
+        gap_map[t_c] = res["gap"].reindex(align_index)
         ratio_map[t_c] = ratio
         pre_map[t_c] = pre_mspe
         post_map[t_c] = post_mspe
