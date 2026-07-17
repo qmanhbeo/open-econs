@@ -1,4 +1,4 @@
-# open-econs
+﻿# open-econs
 
 [![PyPI version](https://img.shields.io/pypi/v/open-econs?color=blue)](https://pypi.org/project/open-econs/)
 [![Python versions](https://img.shields.io/pypi/pyversions/open-econs)](https://pypi.org/project/open-econs/)
@@ -9,31 +9,38 @@
 **Python econometrics with Stata/R parity.**
 
 Empirical researchers often use Python for data cleaning, Stata for estimation,
-R for specialized methods, and LaTeX or custom scripts for output — a fragmented
+R for specialized methods, and LaTeX or custom scripts for output â€” a fragmented
 workflow that hurts reproducibility.
 
 open-econs brings familiar empirical economics methods from Stata and R into a
 unified Python workflow. Every estimator uses a consistent API, with numerical
 validation against established reference implementations.
 
-- **Familiar estimators** — OLS, fixed effects, IV/2SLS, logit, probit,
-  difference-in-differences, event studies, RDD, panel models, matching,...
-- **Tested against Stata/R** 217 Stata- and R-parity tests (208 vs Stata, 9 vs R) verify coefficients and
-  standard errors against reference implementations — at tolerances from `1e-6`
+- **Familiar estimators** â€” OLS, fixed effects (one/two-way, RE, FD,
+  Driscoll-Kraay, Hausman), IV/2SLS, logit/probit/mlogit, Oaxaca-Blinder,
+  nonlinear least squares, **GMM & Arellano-Bond dynamic panels**, the full
+  **difference-in-differences family** (Callaway-Sant'Anna, Sun-Abraham,
+  Gardner DID2S, two-period DiD, event studies), regression discontinuity (RDD),
+  **propensity-score & coarsened-exact matching** with balance diagnostics and
+  Rosenbaum sensitivity bounds, **synthetic control** with ADH permutation
+  inference, and a **time-series module** (ARIMA, VAR/VECM, GARCH, unit-root &
+  cointegration tests).
+- **Tested against Stata/R**   550+ Stata- and R-parity tests (330+ vs Stata, 220+ vs R) verify coefficients and
+  standard errors against reference implementations â€” at tolerances from `1e-6`
   (typical) up to `1e-15` for the tightest exact-equivalence cases (IV /
-  Arellano-Bond / synthetic control), mostly `1e-6`–`1e-10`. They run in CI on
+  Arellano-Bond / synthetic control), mostly `1e-6`â€“`1e-10`. They run in CI on
   every release, so a numerical-equivalence regression fails the build before it
   ships.
 - **One consistent interface**  across all estimators: `.summary()`, `.tidy()`,
   `.vcov()`, `.predict()`, `.export()`, `.to_latex()`.
-- **Named pandas outputs** — coefficients, standard errors, and diagnostics
+- **Named pandas outputs** â€” coefficients, standard errors, and diagnostics
   return as `pd.Series` or `pd.DataFrame` with clear labels
-- **Immutable results** — no accidental mutation after estimation
-- **Reproducible exports** — JSON, CSV, LaTeX, HTML from any result
+- **Immutable results** â€” no accidental mutation after estimation
+- **Reproducible exports** â€” JSON, CSV, LaTeX, HTML from any result
 
 ## Installation & Quick Start
 
-Requires Python ≥ 3.10.
+Requires Python â‰¥ 3.10.
 
 ```bash
 pip install open-econs                           # core: OLS, Oaxaca, FE, IV, Logit, Probit
@@ -97,16 +104,6 @@ print(r.summary())
 
 
 
-## Why open-econs?
-
-
-
-open-econs keeps everything in one Python environment:
-
-
-
-
-
 ## For Stata and R users
 
 If you know the Stata or R command, you already know the open-econs equivalent.
@@ -122,9 +119,16 @@ If you know the Stata or R command, you already know the open-econs equivalent.
 | `mlogit`             | `oe.mlogit()` (multinomial logit) |
 | `oaxaca`             | `oe.oaxaca()`               |
 | `xtabond2`           | `oe.abond()`                |
+| `gmm`                | `oe.gmm()`                  |
 | `csdid`              | `oe.did_cs()`               |
+| `eventstudyinteract`| `oe.did_sa()` / `oe.event_study()` |
+| `did2s`              | `oe.did_gardner()`          |
 | `rdrobust`           | `oe.rdd()`                  |
+| `rddensity`          | `oe.density_test()`         |
 | `teffects psmatch`   | `oe.psm()`                  |
+| `synth_runner`       | `oe.synth()` / `oe.placebo_space()` / `oe.placebo_time()` |
+| `dfuller` / `pperron` / `vars` / `var` | `oe.adf()` / `oe.pp()` / `oe.var()` / `oe.arima()` |
+| `arch`               | `oe.garch()`                |
 
 ### R
 
@@ -133,7 +137,13 @@ If you know the Stata or R command, you already know the open-econs equivalent.
 | `fixest` / `plm`     | `oe.fe()` / `oe.PanelContext()` |
 | `AER::ivreg`         | `oe.iv()`                   |
 | `did`                | `oe.did_cs()`               |
+| `fixest::sunab`      | `oe.did_sa()`               |
+| `fixest::did2s`      | `oe.did_gardner()`          |
+| `synth`              | `oe.synth()`                |
 | `MatchIt`            | `oe.psm()`                  |
+| `cobalt`             | `oe.balance()`             |
+| `rbounds`            | `oe.rosenbaum_bounds()`    |
+| `urca` / `vars`      | `oe.adf()` / `oe.var()`    |
 
 See [Migrating from Stata](docs/migrating_from_stata.md) for a
 detailed migration guide, or [Migrating from R](docs/migrating_from_r.md)
@@ -144,61 +154,6 @@ Step-by-step porting walkthroughs for the causal estimators live in
 - [RDD](docs/tutorials/rdd.md) (maps to `rdrobust` / `rddensity`)
 - [PSM](docs/tutorials/psm.md) (maps to `MatchIt` / `teffects psmatch`)
 - [Synthetic Control](docs/tutorials/synth_control.md) (maps to `Synth` / `synth`)
-
-## Quick Start
-
-```python
-import open_econs as oe
-import pandas as pd
-
-df = pd.DataFrame({
-    "income":    [30, 45, 55, 70, 85, 40, 60, 95],
-    "education": [10, 12, 14, 16, 18, 11, 15, 20],
-    "age":       [25, 30, 35, 40, 45, 28, 38, 50],
-    "female":    [0,  0,  0,  0,  1,  1,  1,  1],
-    "province":  ["A","A","B","B","C","C","A","B"],
-})
-
-# --- OLS with cluster-robust SEs ---
-r = oe.ols("income ~ education + age", data=df, cluster="province")
-r.coefficients          # pd.Series with named index
-r.tidy()                # coefficient table as DataFrame
-r.predict(df.head(2))   # out-of-sample predictions
-print(r.summary())      # printable summary
-
-# --- Logit / Probit ---
-r_logit = oe.logit("female ~ education + age", data=df)
-r_logit.tidy()          # coef, z, P>|z| table
-r_logit.margins()       # average marginal effects
-r_logit.predict(proba=False)
-
-# --- Fixed effects ---
-r_fe = oe.fe("income ~ education + age", data=df, entity="province")
-r_fe.tidy()
-
-# --- IV / 2SLS ---
-r_iv = oe.iv("income ~ education | age", data=df)
-r_iv.tidy()             # 2SLS coefficients
-r_iv.first_stage()      # first-stage F-stat
-
-# --- Oaxaca-Blinder decomposition ---
-d = oe.oaxaca("income ~ education + age + female", data=df, by="female")
-d.explained             # covariate-driven gap
-d.unexplained           # coefficient-driven gap
-d.total_gap             # female mean - male mean
-
-# --- VIF diagnostics ---
-ctx = oe.Context(df)
-ctx.vif("income ~ education + age")
-
-# --- Context remembers the dataset ---
-ctx.ols("income ~ education + age")
-ctx.logit("female ~ education + age")
-ctx.probit("female ~ education + age")
-
-# --- Immutability ---
-r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
-```
 
 ## Supported Methods
 
@@ -218,6 +173,7 @@ r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
 | `did_sa()` | Sun & Abraham (2021) interaction-weighted event-study DiD (cluster-robust VCE) | Beta |
 | `did_gardner()` | Gardner (2022) two-stage DiD (DID2S, cluster-robust IF SEs) | Beta |
 | `rdd()` | Sharp / fuzzy regression discontinuity (local linear, triangular kernel) | Production |
+| `density_test()` | RDD continuity (Manipulation) test — McCrary / Cattaneo-Jansson density test | Production |
 | `did()` / `event_study()` | Two-period DiD, event-study with pre-trend diagnostics | Production |
 | `psm()` | Propensity score matching (1:1 nearest-neighbor with replacement, AI 2012 SEs) | Production |
 | `cem()` | Coarsened exact matching (auto or explicit cutpoints, multiple binning methods) | Production |
@@ -228,6 +184,12 @@ r.f_statistic = 0.0  # AttributeError: OLSResult is immutable
 | `placebo_time()` | Synthetic control placebo-in-time permutation inference (ADH): re-fits `synth()` once per candidate pre-treatment date; `post/pre` MSPE ratio per candidate; permutation p-value | Beta |
 | `PanelContext(...)` | Pooled/FE/RE/FD/Driscoll-Kraay/Hausman/ABond with remembered entity/time | Production |
 | `Context(...)` | Dataset-scoped workflow with access to all above estimators | Production |
+| `TimeSeriesContext(...)` | `tsset` equivalent: remembers time ordering, frequency, lag-operator conventions | Production |
+| `adf()` / `pp()` / `kpss()` / `dfgls()` / `zivot_andrews()` | Unit-root tests (ADF, Phillips-Perron, KPSS, DF-GLS, Zivot-Andrews) | Production |
+| `arima()` / `arma()` | ARIMA / ARMA estimation (wraps `statsmodels.tsa`, validated) | Production |
+| `garch()` | GARCH-family volatility models (wraps `arch`) | Production |
+| `var_fit()` / `var_select_order()` / `vec2var()` / `vecm_fit()` | VAR / VECM with IRF, FEVD, Granger causality, Johansen cointegration (`johansen_cointegration()`) | Production |
+| `granger_causality()` / `instantaneous_causality()` | Granger / instantaneous causality tests | Production |
 
 *Status reflects validation maturity: **Production** = machine-precision parity
 vs Stata/R on reference fixtures; **Beta** = validated but with narrower parity
@@ -241,12 +203,12 @@ Every estimator returns an object with:
 | Method | Returns |
 |---|---|
 | `.summary()` | Printable string (also `__repr__`) |
-| `.tidy()` | `pd.DataFrame` — coefficient or effect table |
-| `.vcov()` | `pd.DataFrame` — variance-covariance matrix |
-| `.predict(newdata)` | `pd.Series` — only on regression models |
+| `.tidy()` | `pd.DataFrame` â€” coefficient or effect table |
+| `.vcov()` | `pd.DataFrame` â€” variance-covariance matrix |
+| `.predict(newdata)` | `pd.Series` â€” only on regression models |
 | `.export(path)` | JSON / CSV serialization |
 | `.plot()` | Residual diagnostics plot (requires `pip install open-econs[plot]`) |
-| `.to_dict()` | `dict` — full result metadata |
+| `.to_dict()` | `dict` â€” full result metadata |
 | `.to_latex()` | LaTeX table string |
 | `.to_html()` | HTML table string |
 
@@ -295,12 +257,65 @@ Step-by-step walkthroughs for the core estimators:
 
 ## Comparison
 
-| Library | Strength |
-|---|---|
-| statsmodels | General statistical models |
-| linearmodels | Panel and IV estimation |
-| scikit-learn | Machine learning |
-| **open-econs** | Empirical economics workflows with Stata/R parity |
+A side-by-side of what each Python package actually covers. ✅ = first-class,
+⚠️ = partial / different scope, — = not offered.
+
+| Feature | statsmodels | linearmodels | fixest (R) | **open-econs** |
+|---|:---:|:---:|:---:|:---:|
+| OLS / WLS, robust & clustered SEs | ✅ | ✅ | ✅ | ✅ |
+| Fixed effects (one/two-way, RE, FD) | ⚠️ | ✅ | ✅ | ✅ |
+| IV / 2SLS | ✅ | ✅ | ✅ | ✅ |
+| GMM & Arellano-Bond dynamic panels | ⚠️ | ✅ | — | ✅ |
+| Logit / Probit / Multinomial logit | ✅ | — | ⚠️ | ✅ |
+| Oaxaca-Blinder decomposition | — | — | ⚠️ | ✅ |
+| Nonlinear least squares | ✅ | — | — | ✅ |
+| Difference-in-Differences (staggered, Sun-Abraham, DID2S, event study) | — | — | ⚠️ | ✅ |
+| Regression discontinuity (RDD) + density test | — | — | — | ✅ |
+| Propensity-score & coarsened-exact matching + balance + Rosenbaum bounds | — | — | — | ✅ |
+| Synthetic control + ADH permutation inference | — | — | ⚠️ | ✅ |
+| Time series: ARIMA / VAR / VECM / GARCH / unit-root & cointegration | ✅ | — | — | ✅ |
+| **Numerical parity vs Stata / R (550+ tests)** | — | — | — | ✅ |
+| Reproducible exports (JSON / CSV / LaTeX / HTML) | ⚠️ | ⚠️ | — | ✅ |
+
+**Why open-econs?**
+
+- **Stata/R parity, not just "close."** Coefficients and standard errors are
+  checked against `xtabond2`, `csdid`, `teffects psmatch`, `rdrobust`,
+  `synth_runner`, `dfuller`/`vars`/`arch`, and more — at ≤1e-6, and to machine
+  precision for IV / Arellano-Bond / synthetic control. If a number differs
+  from Stata or R, it's a bug, not a feature.
+- **One workflow for the whole empirical pipeline.** Data cleaning in pandas,
+  estimation, diagnostics, sensitivity analysis, and publication-ready tables
+  all live in Python — no more copy-pasting between Stata, R, and LaTeX.
+- **Causal-inference-first.** DiD (staggered, Sun-Abraham, DID2S), RDD,
+  matching with Rosenbaum bounds, and synthetic control with permutation
+  inference are first-class, not afterthoughts.
+- **Reproducible by construction.** Immutable results, named `pd.Series` /
+  `pd.DataFrame` outputs, and one-call `.export()` to JSON, CSV, LaTeX, and HTML.
+
+## Performance
+
+open-econs uses Python's strengths (vectorization, parallelization) without
+ever loosening numerical parity. Refactors of existing float math are held to
+**bit-identical** reproduction of the reference implementation; new methods are
+validated to the standard ≤1e-6 tolerance. Recent hardening (v1.0.3):
+
+- **Propensity-score matching (`psm`)** — k-NN matching, the variance
+  accumulation loops, and the `c_tau` influence-function term were fully
+  vectorized into batched `scipy`/`numpy` reductions. **Bit-identical** to the
+  prior scalar code and **~4× faster** on the Stata `teffects psmatch` fixture
+  (nn=10: 0.50s → 0.13s).
+- **GMM HAC weighting (`_hac_S`)** — the Newey-West lag accumulation was
+  vectorized into a single batched `einsum` reduction. **Bit-identical** to the
+  scalar loop; it feeds the `abond` / `gmm` variance and Hansen J-statistic.
+- **Callaway-Sant'Anna DiD bootstrap (`did_cs`)** — permutation/bootstrap
+  repetitions run through an opt-in `parallel=` process pool. Bit-identical to
+  the serial path; no parity risk.
+
+GPU offload (CuPy / CUDA) was evaluated and **deliberately declined**: the hot
+spots are SciPy optimizers (no GPU backend) and BLAS matmuls (already
+CPU-multithreaded), and transfer overhead dominates at current fixture sizes.
+See `methodology/performance-conventions.md` and `FUTURE_WORK.md`.
 
 ## Roadmap
 
