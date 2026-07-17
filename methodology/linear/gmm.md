@@ -128,9 +128,9 @@ Over-identified fixtures use `instruments()` + `winitial(unadjusted)` (standard 
 | `oe.gmm(..., step="two-step", cov_type="robust")` | `gmm(g, type="twoStep", wmatrix="optimal", vcov="MDS", centeredVcov=FALSE)` | matches to machine epsilon |
 | `oe.gmm(..., robust_meat="two-step")` | — (R has no e2-meat option) | no clean R anchor; not asserted |
 | `oe.gmm(..., cov_type="HAC", lags=3, time="t")` | `gmm(g, vcov="HAC", kernel="Bartlett", bw=4, prewhite=0, centeredVcov=FALSE)` | **coefficients match** (R kernel collapses to iid weight for the coef → equals OE robust coef `[0.870,2.027,1.464]`); **SEs diverge** (R kernel in weight+VCE) |
-| `oe.gmm(..., cov_type="cluster", cluster="cluster")` | `gmm(g, vcov="iid", cluster=df$cluster)` | **DISTINCT convention** (see below); R coef `[0.850,2.012,1.354]` ≠ OE/Stata cluster coef. Flagged gap — needs a `weight` toggle to reproduce R. |
+| `oe.gmm(..., weight="iid", windmeijer=False, robust_meat="two-step")` | `gmm(g, vcov="iid", centeredVcov=FALSE)` ← `cluster=` is a NO-OP | **matches R `vcov="iid"`** coef `[0.850,2.012,1.354]` + SE `[0.132,0.102,0.805]` to ≤1e-6 |
 
-R source evidence (`.weightFct`): `MDS` weight = `crossprod(gt)/n` from one-step residuals `gt`. This confirms R uses e1 for both bread and meat (on OE's side, not Stata's). R's `cluster=` adds a clustered sandwich on top of the iid-efficient GMM — a convention **distinct from both** Stata's cluster-efficient-weight `gmm` and OE's default.
+R source evidence (`.weightFct`): `MDS` weight = `crossprod(gt)/n` from one-step residuals `gt`. This confirms R uses e1 for both bread and meat (on OE's side, not Stata's). **R's `cluster=` argument is NOT a real parameter** — it falls through `...` and is never consumed in `gmm()` / `FinRes.baseGmm.res` / `.weightFct`. R has **NO cluster VCE**; the historical "R cluster" fixture is simply R's plain `vcov="iid"` two-step GMM. The `vcov="iid"` weight is the *homoskedastic* `S = Z_iid' Z_iid / n` (Z_iid = intercept + explicit instruments), NOT the per-obs EHW S.
 
 ### Three-way cluster/HAC efficient-weight convention (source-confirmed 2026-07-17)
 
@@ -138,13 +138,13 @@ The two-step coefficient changes across covariance types because the efficient w
 
 | Tool / setting | Efficient-weight bread `A2` | VCE meat `S2` | Resulting two-step `b` (df_gmm) |
 |----------------|------------------------------|----------------|----------------------------------|
-| **OE/Stata `gmm`, robust** | iid `S₁` (per-obs) | iid `S₂` (e2 if `robust_meat="two-step"`) | `[0.870, 2.027, 1.464]` |
+| **OE/Stata `gmm`, robust** | iid `S₁` (per-obs EHW) | iid `S₂` (e2 if `robust_meat="two-step"`) | `[0.870, 2.027, 1.464]` |
 | **OE/Stata `gmm`, cluster** | **cluster** `S` | cluster `S` (e2 if `robust_meat="two-step"`) | `[0.915, 1.989, 1.621]` |
 | **OE/Stata `gmm`, HAC** | **HAC** `S` | HAC `S` (e2 if `robust_meat="two-step"`) | `[0.892, 2.017, 1.570]` |
-| **R `gmm`, cluster (`vcov="iid", cluster=`)** | **cluster-adjusted `gc$w`** (structurally distinct from plain cluster S — see GMM-RCLUSTER) | cluster meat | `[0.850, 2.012, 1.354]` |
+| **R `gmm`, `vcov="iid"`** (homoskedastic; `cluster=` ignored) | **homoskedastic** `S = Z_iid' Z_iid / n` (Z_iid = intercept + explicit instruments) | homoskedastic, scaled by `sig2` | `[0.850, 2.012, 1.354]` |
 | **R `gmm`, HAC (`vcov="HAC"`)** | **pooled-sample HAC** `S` (full sample, one entity) | pooled-sample HAC `S` | `[0.885, 2.018, 1.534]` |
 | **OE `gmm`, `hac_weighting=True`, HAC** | pooled-sample HAC `S` (full sample) | pooled-sample HAC `S` (e2) | `[0.885, 2.018, 1.534]` (= R HAC, coef ≤1e-6) |
-| **OE `gmm`, `weight="iid"` (any cov_type)** | iid `S₁` (per-obs) | cov-structure `S` (e2 if `robust_meat="two-step"`) | `[0.870, 2.027, 1.464]` (= OE robust coef) |
+| **OE `gmm`, `weight="iid"` (robust cov_type)** | homoskedastic `S = Z_iid' Z_iid / n` | homoskedastic, scaled by `sig2` | `[0.850, 2.012, 1.354]` (= R `vcov="iid"`, coef+SE ≤1e-6) |
 
 **KEY (corrected):** Stata's `vce(cluster c)` and `wmatrix(hac ...) vce(hac ...)` build the efficient weight from the **same** covariance structure used for the VCE (cluster S / HAC S) — NOT an iid bread. An earlier hypothesis (iid bread + cluster meat for Stata cluster) was **WRONG**: it reproduced Stata's *SE* but forced the cluster coefficient to equal the robust coefficient, breaking the b-match. The correct reconstruction is bread = `S` (the covariance structure), meat = `S` from e2 (`robust_meat="two-step"`), no Windmeijer.
 
@@ -159,7 +159,7 @@ The **HAC VCE meat must be the HAC S from e2**, not the clustered S. A bug was f
 - OE `windmeijer=False, robust_meat="two-step"`: same (gap 2.06e-08) ✅
 - OE default (`windmeijer=True, robust_meat="one-step"`) = R: `[0.14527, 0.10322, 0.82625]`
 
-**FOOTGUN (rule 18):** `robust_meat="two-step"` switches ONLY the robust meat S2 to e2; the efficient-weight bread S1 stays at e1 (for robust). For cluster/HAC the bread is the *cluster/HAC* S (Stata-style), NOT iid. Two separate traps: (a) forcing an iid bread for cluster/HAC breaks the Stata coefficient match; (b) building the `robust_meat="two-step"` meat via the clustered loop for HAC (instead of `_hac_S` from e2) breaks the Stata HAC SE match. Both are guarded by `TestGmmOverIdentifiedTwoStepCluster` / `...TwoStepHAC` in `tests/stata/tests/test_stata_gmm.py` (atol=1e-6). The `TestGmmOverIdentifiedTwoStepRobust.test_standard_errors_stata_parity` guard also covers the robust path.
+**FOOTGUN (rule 18):** `robust_meat="two-step"` switches ONLY the robust meat S2 to e2; the efficient-weight bread S1 stays at e1 (for robust). For cluster/HAC the bread is the *cluster/HAC* S (Stata-style), NOT iid. `weight="iid"` is an explicit convention switch that uses the *homoskedastic* S (`Z_iid' Z_iid / n`, Z_iid = intercept + explicit instruments) for BOTH bread and meat — this reproduces R's `gmm(..., vcov="iid")` (homoskedastic GMM), NOT the per-obs EHW S. Two separate traps: (a) forcing an iid bread into cluster/HAC (Stata-style) breaks the Stata coefficient match; (b) building the `robust_meat="two-step"` meat via the clustered loop for HAC (instead of `_hac_S` from e2) breaks the Stata HAC SE match. Both are guarded by `TestGmmOverIdentifiedTwoStepCluster` / `...TwoStepHAC` in `tests/stata/tests/test_stata_gmm.py` (atol=1e-6). R `vcov="iid"` parity is guarded by `TestGmmROverIdentifiedIidTwoStep` / `TestGmmWeightToggleIidBread` (atol=1e-6).
 
 ## API Examples
 
@@ -188,7 +188,7 @@ print(r.std_errors)   # [0.1260902, 0.0986776, 0.7745471]
 2. HAC two-step: R applies the Bartlett kernel to BOTH weight and VCE over the **pooled sample** (`hac_weighting=True` reproduces R's HAC coefficient `[0.885,...]` ≤1e-6; SE within ~6e-4). OE default HAC is per-entity (Stata-style). Both conventions covered by tests.
 3. `small_sample_correction` not exposed via `gmm()` (only via `abond()`).
 4. No one-step J asserted against Stata (model-based vs robust weighting divergence).
-5. **R cluster convention not reproduced** (flagged gap, rule 3/15): R `gmm(..., vcov="iid", cluster=)` yields a distinct coefficient `[0.850,2.012,1.354]`. Reverse-engineered (2026-07-17): R's `cluster=` modifies the *weighting matrix* `gc$w` (recovering the coef from `gc$w` reproduces `[0.850,...]` exactly), and `gc$w` differs from the plain per-entity cluster S by max 1.22 — it is NOT a simple scaling of cluster S. So R cluster weight is a structurally distinct aggregation (R-internals). OE exposes `weight="iid"` (textbook iid-weight coef `[0.870,...]`, self-consistency tested in `TestGmmWeightToggleIidBread`), but this is NOT R's cluster coefficient. `TestGmmROverIdentifiedClusterTwoStep` pins the divergence. Remaining path: read R `gmm` source for the `cluster=` weight branch to reproduce `gc$w`. See FUTURE_WORK GMM-RCLUSTER.
+5. **R `cluster=` is a NO-OP — RESOLVED as R `vcov="iid"` (2026-07-17).** R's `gmm` `cluster=` argument is silently ignored (not a real parameter; falls through `...`). R has NO cluster VCE. The "R cluster" fixture is R's plain `gmm(..., vcov="iid")` two-step GMM (homoskedastic efficient weight), reproduced exactly by OE `weight="iid"` (`TestGmmROverIdentifiedIidTwoStep`, `TestGmmWeightToggleIidBread`, coef+SE ≤1e-6). The earlier "gc$w distinct aggregation" finding was chasing an ignored argument. See FUTURE_WORK GMM-RCLUSTER (now RESOLVED).
 
 ## References
 
