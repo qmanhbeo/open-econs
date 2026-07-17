@@ -561,4 +561,44 @@ added.
 
 ---
 
-*Last updated: 2026-07-17, GMM parity audit verification (Items 1-2 resolved).*
+## ABOND R-Parity (BLOCKED — plm `pgmm` broken on R 4.6.1)
+
+- **What (rule 15 gap):** `oe.abond()` has full Stata `xtabond2` parity
+  (`tests/stata/tests/test_stata_abond.py`, 8 flavors × 5 cross-checks = 40
+  tests, all green) but **no R parity**.  The canonical R anchor for
+  Arellano-Bond difference GMM is `plm::pgmm`.
+- **Blocker (verified 2026-07-17):** `plm::pgmm` is **broken on the dev R
+  installed on this machine (R 4.6.1)**.  It errors inside plm itself at
+  `cbind(yX1[[i]], V1)` ("number of rows of matrices must match") — a plm
+  internal code path — and the failure reproduces on the **canonical plm
+  `EmplUK` example** (`pgmm(log(emp) ~ lag(log(emp),-1) + lag(log(wage),0) +
+  lag(log(capital),0) | lag(log(emp),-2), effect="twoways", model="onestep")`)
+  for `effect="individual"` and `effect="twoways"` alike.  plm 2.6.7 AND 2.6.4
+  both fail.  Base `plm` (e.g. `plm(..., model="within")`) still works, so the
+  breakage is specific to `pgmm`.  Root cause = `pgmm`'s matrix assembly is
+  incompatible with R 4.6.1's stricter behavior; NOT an OE bug.
+- **Impact:** Cannot generate a committed R `abond.json` fixture via pgmm on
+  this machine.  Therefore no `tests/r/tests/test_r_abond.py` can be added
+  until pgmm runs again.
+- **Remediation options (rule 3 — flag, do not silently skip):**
+  1. Run the R fixture generation on a **R version plm supports** (e.g. R 4.4/4.5)
+     — simplest; requires a second R install or CI matrix entry.
+  2. Install plm **dev** from GitHub (may have fixed R 4.6.1 compat) once
+     `remotes`/`devtools` is available.
+  3. If plm stays broken, **hand-roll `pgmm` math in R** (pgmm = GMM on
+     first-differenced moment conditions with the ABond H weighting; OE already
+     implements the identical math in `_gmm_core.py` + `abond.py`, so an R
+     reference implementation is feasible and would let us assert the
+     cross-language convention rather than depend on plm's internals).
+- **Status:** BLOCKED.  Stata parity is complete and authoritative for now.
+  The simulation-only `tests/non_stata_nor_r/test_abond.py` stays as the only
+  non-Stata abond coverage; it is not a parity anchor (rule 7: it belongs in
+  the deferred-migration bucket, not in `tests/r/`).
+- **Next agent:** do NOT attempt to add R abond parity until pgmm runs.  When
+  it does, mirror the Stata fixture's 8 flavors (collapsed/non-collapsed ×
+  one/two-step × robust/non-robust) on the same `df_panel.csv`, using
+  `pgmm(..., effect="twoways", transformation="d")` with a two-part formula
+  `y | lag(y,-1)+lag(x,0)+lag(z,0) ~ lag(y,-2:-4)+lag(x,0)+lag(z,0)` to match
+  Stata's `gmm(L.y, lag(2 4)) iv(x z)`.
+
+*Last updated: 2026-07-17, GMM parity audit verification (Items 1-2 resolved); abond R-parity flagged BLOCKED.*
