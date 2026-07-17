@@ -8,29 +8,15 @@ item names a specific implementation path, not a vague exploration.
 
 ## QUEUED — next-session prioritized performance work (rule 11, bounded prompts)
 
-These are the next two items from the 2026-07-17 Python-strength inspection
-plan, queued for their own **separate, single-concern sessions**. Each must be
-scoped as its own bounded supervisor prompt (do not bundle). Each must follow
-the parity gate (rule 2: ≤1e-6; rule 5: exclude synth placebo) and reuse the
-`parallel: bool` opt-in convention from `placebo.py` / `did_cs.py`. Full plan
-context: 2026-07-17 handoff (GPU declined; Candidate A synth-analytic-gradient
-deferred — see bottom of this file).
+These are the items from the 2026-07-17 Python-strength inspection plan, queued
+for their own **separate, single-concern sessions**. Each must be scoped as its
+own bounded supervisor prompt (do not bundle). Each must follow the parity gate
+(rule 2: ≤1e-6; rule 5: exclude synth placebo) and reuse the `parallel: bool`
+opt-in convention from `placebo.py` / `did_cs.py`. Full plan context: 2026-07-17
+handoff (GPU declined; Candidate A synth-analytic-gradient deferred — see bottom
+of this file).
 
-### Candidate C — psm.py vectorize (QUEUED, safe)
-- **Where:** `open_econs/models/causal/psm.py`.
-- **What:** `_within_treatment_matching` / `_opposite_treatment_matching`
-  (lines ~298–326) loop `scipy.spatial.cKDTree.query` **one unit at a time**;
-  replace with a single batched `tree.query(ps[idx], k=...)` call (cKDTree
-  already accepts batched points → OpenBLAS-accelerated, identical k-NN). Also
-  vectorize the variance-accumulation `for i in range(n)` loops (lines ~410,
-  419, 438, 609, 627) via fancy indexing (`psi[pairs_keys] = ...`). Pure numpy
-  math, no optimizer → **no parity risk** as long as float reduction order is
-  preserved (it is, elementwise).
-- **Verify:** against `tests/.../psm*.py` fixtures (Stata/R). Add a
-  vectorized-vs-scalar bit-identical test if a toggle is introduced, else rely
-  on fixture parity to ≤1e-6.
-
-### Candidate D — _gmm_core._hac_S vectorize (QUEUED, parity-sensitive)
+### Candidate D — _gmm_core._hac_S vectorize (QUEUED, parity-sensitive) — NEXT
 - **Where:** `open_econs/models/causal/_gmm_core.py` `_hac_S` (lines ~50–83).
 - **What:** triple nested loop (per-entity, per-lag, per-t) building the HAC
   weighting matrix `S` from `np.outer(moments[t], moments[t-lag])` sums.
@@ -41,6 +27,17 @@ deferred — see bottom of this file).
   test_stata_abond.py`** (and any gmm parity tests) to ≤1e-6 after. If any
   drift > 1e-6 appears, keep the scalar version (or use `np.einsum` with
   explicit same-order summation). Do NOT loosen tolerance (rule 2).
+
+### Candidate C — psm.py vectorize — DONE (commit `cdb15be`)
+- Implemented 2026-07-17: batched `cKDTree.query` in `_within_treatment_matching`
+  / `_opposite_treatment_matching`; fancy-indexed `psi`; padded `(n,h)` /
+  `(n,h,p)` tensor reduction for `xi2` and `c_tau` (via `_padded_local_cov`);
+  vectorized `matched_arr` mask. **Bit-identical** to the scalar loops
+  (atol=0, rtol=0) — verified by new `test_psm_*_bit_identical_to_scalar` and
+  `test_psm_c_tau_vectorization_bit_identical`, plus the existing Stata-pinned
+  `test_psm_se_nn*` (nn=2/5/10) which still pass ≤1e-6. ~4x faster on the Stata
+  fixture (psm nn=10: 0.50s → 0.13s). No parity drift. Do not re-touch unless a
+  new neighborhood-size edge case breaks bit-identicality.
 
 ---
 
