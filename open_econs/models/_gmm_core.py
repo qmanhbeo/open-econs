@@ -99,6 +99,7 @@ def estimate_gmm(
     windmeijer: bool = True,
     robust_meat: str = "one-step",
     weight: str = "stata",
+    hac_weighting: bool = False,
 ) -> dict[str, Any]:
     """General two-step GMM estimator, mirroring xtabond2's Mata source (v3.7.2).
 
@@ -189,9 +190,24 @@ def estimate_gmm(
         ``vcov="HAC"`` (iid weight + HAC meat).  Set ``weight="iid"`` to
         reproduce R's ``gmm`` cluster/HAC coefficient (which differs from
         Stata's coefficient).  The meat is unaffected by this flag — only the
-        efficient weight.  Source-confirmed: R cluster coef
+        efficient weight.          Source-confirmed: R cluster coef
         ``[0.850, 2.012, 1.354]`` (iid bread) vs Stata cluster coef
         ``[0.915, 1.989, 1.621]`` (cluster bread) on the gmm fixture.
+    hac_weighting : bool, default False
+        HAC sandwich scope (rule 15).  By default (``False``), the HAC long-run
+        covariance ``S`` is computed **per-entity** (Newey-West within each
+        panel entity, accumulated) — matching Stata's ``gmm, wmatrix(hac ...)
+        vce(hac ...)`` and giving the per-entity HAC coefficient/SE.  When
+        ``True`` (and ``max_lags`` is set), ``S`` is instead computed over the
+        **full sample** as a single time series (each observation its own
+        entity, ordered by row / ``time_labels``) — matching R's
+        ``gmm(vcov="HAC")``, which applies the Bartlett kernel to BOTH the
+        efficient weight AND the VCE over the pooled sample.  With
+        ``hac_weighting=True`` the two-step coefficient changes to R's HAC
+        coefficient (e.g. ``[0.885, 2.018, 1.534]`` on the gmm fixture) and the
+        SE matches R's HAC SE to <=1e-6.  Ignored when not HAC.  This is a
+        genuine convention divergence (Stata per-entity vs R pooled), not a
+        bug — see methodology/linear/gmm.md and FUTURE_WORK GMM-HAC.
     """
     n_eq = Y.shape[0]
     N = float(len(np.unique(eq_entity)))
@@ -242,7 +258,18 @@ def estimate_gmm(
     # early iid-bread attempt forced cluster b == robust b and silently broke
     # parity) -- see methodology/linear/gmm.md.
     if max_lags is not None and max_lags >= 0:
-        S = _hac_S(Z, e1, eq_entity, max_lags, time_labels, hac_adjust)
+        # HAC bread.  By default the HAC S is per-entity (Newey-West within
+        # each entity, accumulated) to match Stata.  When ``hac_weighting`` is
+        # set, the HAC S is computed over the FULL SAMPLE as one time series
+        # (uniform entity, row order) to match R's gmm(vcov="HAC"), which
+        # kernel-averages over the pooled sample.  See hac_weighting docstring.
+        if hac_weighting:
+            hac_entity = np.zeros(n_eq, dtype=int)
+            hac_time = None
+        else:
+            hac_entity = eq_entity
+            hac_time = time_labels
+        S = _hac_S(Z, e1, hac_entity, max_lags, hac_time, hac_adjust)
     else:
         S = np.zeros((L, L))
         for ent in np.unique(eq_entity):
@@ -316,11 +343,14 @@ def estimate_gmm(
             and robust_meat == "two-step"
         ):
             if max_lags is not None and max_lags >= 0:
-                # HAC: the two-step-residual meat is the HAC long-run S from e2,
-                # matching the HAC bread structure (Stata wmatrix(hac ...)
-                # vce(hac ...)).  Using the plain clustered loop here would
-                # corrupt the HAC VCE.
-                S2 = _hac_S(Z, e2, eq_entity, max_lags, time_labels, hac_adjust)
+                # HAC: the two-step-residual meat is the HAC long-run S from e2.
+                # When hac_weighting, the meat is the FULL-SAMPLE HAC S (matching
+                # R's pooled HAC); otherwise it is the per-entity HAC S (Stata).
+                # Using the plain clustered loop here would corrupt the HAC VCE.
+                if hac_weighting:
+                    S2 = _hac_S(Z, e2, np.zeros(n_eq, dtype=int), max_lags, None, hac_adjust)
+                else:
+                    S2 = _hac_S(Z, e2, eq_entity, max_lags, time_labels, hac_adjust)
             else:
                 S2 = np.zeros((L, L))
                 for ent in np.unique(eq_entity):

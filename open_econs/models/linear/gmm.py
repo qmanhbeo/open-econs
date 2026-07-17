@@ -144,6 +144,7 @@ def gmm(
     windmeijer: bool = True,
     robust_meat: str = "one-step",
     weight: str = "stata",
+    hac_weighting: bool = False,
 ) -> GMMResult:
     """Estimate a linear-in-parameters GMM regression.
 
@@ -230,6 +231,17 @@ def gmm(
         the efficient weight; the meat is governed by ``robust_meat``.  See
         GMM-RCLUSTER in ``FUTURE_WORK.md`` and ``methodology/linear/gmm.md``.
 
+    hac_weighting : bool, default False
+        HAC sandwich scope (rule 15).  By default (``False``) the HAC long-run
+        covariance is computed **per-entity** (Newey-West within each panel
+        entity), matching Stata's ``gmm, wmatrix(hac ...) vce(hac ...)``.  Set
+        ``hac_weighting=True`` to compute the HAC S over the **full sample** as
+        a single time series (each observation its own entity) — matching R's
+        ``gmm(vcov="HAC")``, which applies the Bartlett kernel to BOTH the
+        efficient weight and the VCE over the pooled sample.  With
+        ``hac_weighting=True`` the two-step coefficient and SE match R's HAC to
+        ≤1e-6.  Ignored unless ``cov_type="HAC"``.
+
     Returns
     -------
     GMMResult
@@ -288,13 +300,20 @@ def gmm(
             raise ValueError("time= must be provided when cov_type='HAC'.")
         if time not in data.columns:
             raise errors.missing_column_error(time, data.columns.tolist())
+        if hac_weighting and cluster is not None:
+            # Full-sample pooled HAC ignores entity grouping; a cluster= arg
+            # would be misleading.  Require the plain HAC form.
+            raise ValueError(
+                "hac_weighting=True computes a pooled HAC S and is incompatible "
+                "with cluster=; drop cluster= for R-style pooled HAC."
+            )
 
     if weight not in ("stata", "iid"):
         raise ValueError("weight must be 'stata' or 'iid'.")
     call = _capture_call(
         formula=formula, step=step, cov_type=cov_type, cluster=cluster,
         lags=lags, time=time, hac_adjust=hac_adjust, windmeijer=windmeijer,
-        robust_meat=robust_meat, weight=weight,
+        robust_meat=robust_meat, weight=weight, hac_weighting=hac_weighting,
     )
 
     parsed = _parse_iv_formula(formula, data)
@@ -348,7 +367,7 @@ def gmm(
         Y, X, Z, eq_entity, core_step, robust=robust,
         time_labels=hac_time_labels, max_lags=hac_max_lags,
         hac_adjust=use_hac_adjust, windmeijer=windmeijer,
-        robust_meat=robust_meat, weight=weight,
+        robust_meat=robust_meat, weight=weight, hac_weighting=hac_weighting,
     )
 
     if cov_type == "HAC":
