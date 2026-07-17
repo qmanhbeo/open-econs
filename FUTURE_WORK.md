@@ -561,7 +561,14 @@ added.
 
 ---
 
-## ABOND R-Parity (BLOCKED — plm `pgmm` is broken, R-version-independent)
+## ABOND R-Parity (DEFERRED — plm `pgmm` broken; Stata parity complete, accepted as sufficient)
+
+- **Decision (2026-07-17):** R `plm::pgmm` parity for `oe.abond()` is
+  **intentionally DEFERRED / accepted-incomplete**.  Stata `xtabond2` parity is
+  fully covered (40 tests, green) and is the primary anchor for abond's users.
+  R parity adds little given low abond usage and is currently impossible to
+  verify (plm `pgmm` is broken upstream).  This is a documented acceptance, NOT
+  an open "todo" — do not treat it as pending work unless plm is fixed.
 
 - **What (rule 15 gap):** `oe.abond()` has full Stata `xtabond2` parity
   (`tests/stata/tests/test_stata_abond.py`, 8 flavors × 5 cross-checks = 40
@@ -605,14 +612,17 @@ added.
      independent reference implementation (violates rule 1's "verify against
      source" intent).  Only use a hand-roll as a last resort and label it
      explicitly as a self-consistency check, not parity.
-- **Status:** BLOCKED.  Stata parity is complete and authoritative for now.
-  The simulation-only `tests/non_stata_nor_r/test_abond.py` stays as the only
-  non-Stata abond coverage; it is not a parity anchor (rule 7: it belongs in
-  the deferred-migration bucket, not in `tests/r/`).
-- **Next agent:** do NOT attempt to add R abond parity until `pgmm` runs on a
-  known-good plm/R combo.  When it does, mirror the Stata fixture's 8 flavors
-  (collapsed/non-collapsed × one/two-step × robust/non-robust) on the same
-  `df_panel.csv`, using `pgmm(..., effect="twoways", transformation="d")` with a
+- **Status:** DEFERRED (accepted).  Stata `xtabond2` parity is complete and
+  authoritative; R parity is intentionally not covered.  The simulation-only
+  `tests/non_stata_nor_r/test_abond.py` stays as the only non-Stata abond
+  coverage; it is NOT a parity anchor (rule 7: it belongs in the deferred-
+  migration bucket, not in `tests/r/`).
+- **Next agent:** do NOT attempt to add R abond parity unless plm's `pgmm` is
+  fixed upstream AND a known-good plm/R combo is available.  It is an explicit
+  accepted deferral, not pending work.  If revisited, mirror the Stata
+  fixture's 8 flavors (collapsed/non-collapsed × one/two-step × robust/
+  non-robust) on the same `df_panel.csv`, using `pgmm(..., effect="twoways",
+  transformation="d")` with a
   two-part formula `y | lag(y,-1)+lag(x,0)+lag(z,0) ~ lag(y,-2:-4)+lag(x,0)+lag(z,0)`
   to match Stata's `gmm(L.y, lag(2 4)) iv(x z)`.  Also update `r_runner.R_EXE`/
   docs if a second R is added.
