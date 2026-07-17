@@ -333,14 +333,26 @@ relaxed tolerances (standing rule 2).
   two-step coefficient `b = [0.850, 2.012, 1.354]` — unlike both Stata's
   cluster `gmm` (`[0.915, 1.989, 1.621]`, cluster bread) and OE's cluster
   (Stata-style bread).  This is a genuine THIRD convention, not a bug.
-- **Status:** Flagged per rule 3/15.  OE hardcodes the Stata-style cluster
-  efficient weight; R cluster is NOT reproduced.  `TestGmmROverIdentifiedClusterTwoStep`
-  pins the documented divergence (fails loudly if silently "fixed" without an
-  explicit R-parity assertion under a new toggle).
-- **Implementation path:** add a `weight` toggle (`"stata"` = cluster/HAC
-  bread, default; `"iid"` = iid bread + cluster/HAC meat) to `gmm()` so the R
-  cluster convention can be reproduced and asserted.  Applies to both cluster
-  and HAC cov_types.
+- **Status:** Flagged per rule 3/15.  `weight="iid"` toggle now EXISTS in
+  `gmm()` (bread = iid S, meat = cov-structure S) and is tested for
+  self-consistency (`TestGmmWeightToggleIidBread`) — it reproduces the textbook
+  iid-weighted two-step GMM coefficient to ≤1e-6.  HOWEVER, R's actual cluster
+  coefficient `b = [0.850, 2.012, 1.354]` is STILL NOT reproduced by
+  `weight="iid"` (OE gives `[0.870, 2.027, 1.464]`, = the iid-weight coef, which
+  differs from R's).  R's `gmm(..., vcov="iid", cluster=)` does not reduce to
+  the plain iid-weighted GMM for the coefficient — its `cluster=` argument
+  affects the two-step weighting in a way not yet reverse-engineered from R's
+  `gmm` source (suspect: `cluster=` feeds the *weighting* matrix, not just the
+  meat, but via a non-iid, non-plain-cluster aggregation).  `TestGmmROverIdentifiedClusterTwoStep`
+  pins the divergence (fails loudly if silently "fixed" without an explicit
+  R-parity assertion).
+- **Implementation path:** Reverse-engineer R's `gmm` `cluster=` handling for
+  the two-step weighting (likely in `gmm:::.solveGmm` / `gmm:::.weightFct` /
+  the `cluster` branch of `specTest`) to determine the exact bread S R uses for
+  cluster, then extend `weight=` (or add `weight="r-cluster"`) to reproduce
+  `[0.850, 2.012, 1.354]`.  The `weight` toggle plumbing is already in place
+  (`_gmm_core.py` `weight` param + `gmm()` API); only the bread-S computation
+  needs the new convention.  Applies to both cluster and HAC cov_types.
 
 ### GMM-WC: Windmeijer Correction + Robust-Meat Conventions (RESOLVED 2026-07-17)
 

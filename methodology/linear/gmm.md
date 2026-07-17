@@ -140,6 +140,7 @@ The two-step coefficient changes across covariance types because the efficient w
 | **OE/Stata `gmm`, HAC** | **HAC** `S` | HAC `S` (e2 if `robust_meat="two-step"`) | `[0.892, 2.017, 1.570]` |
 | **R `gmm`, cluster (`vcov="iid", cluster=`)** | iid `S₁` | cluster `S` | `[0.850, 2.012, 1.354]` |
 | **R `gmm`, HAC** | iid `S₁` (kernel-averaged) | HAC `S` | `[0.870, 2.027, 1.464]` (= OE robust) |
+| **OE `gmm`, `weight="iid"` (any cov_type)** | iid `S₁` (per-obs) | cov-structure `S` (e2 if `robust_meat="two-step"`) | `[0.870, 2.027, 1.464]` (= OE robust coef) |
 
 **KEY (corrected):** Stata's `vce(cluster c)` and `wmatrix(hac ...) vce(hac ...)` build the efficient weight from the **same** covariance structure used for the VCE (cluster S / HAC S) — NOT an iid bread. An earlier hypothesis (iid bread + cluster meat for Stata cluster) was **WRONG**: it reproduced Stata's *SE* but forced the cluster coefficient to equal the robust coefficient, breaking the b-match. The correct reconstruction is bread = `S` (the covariance structure), meat = `S` from e2 (`robust_meat="two-step"`), no Windmeijer.
 
@@ -183,7 +184,7 @@ print(r.std_errors)   # [0.1260902, 0.0986776, 0.7745471]
 2. HAC two-step diverges from R (kernel applied to weight+VCE in R, VCE only in OE) — R *coefficient* still matches (kerneled weight collapses to iid optimal), only SEs diverge. Documented, SEs not asserted.
 3. `small_sample_correction` not exposed via `gmm()` (only via `abond()`).
 4. No one-step J asserted against Stata (model-based vs robust weighting divergence).
-5. **R cluster convention not reproduced** (flagged gap, rule 3/15): R `gmm(..., vcov="iid", cluster=)` uses an iid efficient weight + cluster meat, giving a distinct coefficient `[0.850,2.012,1.354]`. OE hardcodes the Stata-style cluster efficient weight. A `weight` toggle (Stata-style vs R/literature iid-style) would close this; `TestGmmROverIdentifiedClusterTwoStep` currently pins the documented divergence (fails loudly if silently "fixed" without explicit R-parity assertion).
+5. **R cluster convention not reproduced** (flagged gap, rule 3/15): R `gmm(..., vcov="iid", cluster=)` yields a distinct coefficient `[0.850,2.012,1.354]`. OE now exposes a `weight` toggle: `weight="stata"` (default, cov-structure bread) and `weight="iid"` (iid efficient-weight bread, meat stays cov-structure). `weight="iid"` reproduces the textbook iid-weighted two-step GMM coefficient `[0.870,2.027,1.464]` (self-consistency tested in `TestGmmWeightToggleIidBread`), but this is **NOT** R's cluster coefficient — R's `cluster=` argument affects the two-step weighting beyond a plain iid bread. So R cluster remains open; `TestGmmROverIdentifiedClusterTwoStep` pins the divergence (fails loudly if silently "fixed" without explicit R-parity assertion). See FUTURE_WORK GMM-RCLUSTER for the remaining reverse-engineering path.
 
 ## References
 
