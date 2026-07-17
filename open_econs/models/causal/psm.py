@@ -305,6 +305,11 @@ def _within_treatment_matching(
     Returns a list of length N, where entry *i* is an array of indices of
     *n_neighbors* same-treatment observations with closest PS to unit *i*.
     The unit itself is always included.
+
+    Vectorized via batched ``cKDTree.query`` (one call per treatment arm).
+    ``cKDTree`` returns neighbours sorted by distance ascending, so the
+    self-match (distance 0) is always index 0 and is dropped by the
+    ``[:, :n_neighbors]`` slice -- identical to the per-unit scalar loop.
     """
     is_treat = treatment == 1
     treat_idx = np.where(is_treat)[0]
@@ -315,14 +320,18 @@ def _within_treatment_matching(
     tc = _cKDTree(ps[control_idx].reshape(-1, 1))
 
     out: list[np.ndarray] = [np.array([], dtype=int) for _ in range(n)]
-    for i in treat_idx:
-        k = min(n_neighbors + 1, len(treat_idx))
-        _, idx = tt.query(ps[i].reshape(1, -1), k=k)
-        out[i] = treat_idx[idx[0][:n_neighbors]]
-    for i in control_idx:
-        k = min(n_neighbors + 1, len(control_idx))
-        _, idx = tc.query(ps[i].reshape(1, -1), k=k)
-        out[i] = control_idx[idx[0][:n_neighbors]]
+
+    k_t = min(n_neighbors + 1, len(treat_idx))
+    _, idx_t = tt.query(ps[treat_idx].reshape(-1, 1), k=k_t)
+    nb_t = treat_idx[idx_t[:, :n_neighbors]]
+    for row, i in enumerate(treat_idx):
+        out[i] = nb_t[row]
+
+    k_c = min(n_neighbors + 1, len(control_idx))
+    _, idx_c = tc.query(ps[control_idx].reshape(-1, 1), k=k_c)
+    nb_c = control_idx[idx_c[:, :n_neighbors]]
+    for row, i in enumerate(control_idx):
+        out[i] = nb_c[row]
     return out
 
 
@@ -406,21 +415,30 @@ def _compute_ai_variance(
     Kprime = Km.copy()
 
     # --- ψ_i = (2T_i - 1)(Y_i - Y_{m(i)}) ---
+    keys = np.array(list(pairs.keys()))
+    js = np.array([pairs[k] for k in keys])
     psi = np.full(n, np.nan)
-    for i in range(n):
-        if i in pairs:
-            j = pairs[i]
-            psi[i] = (2 * treatment[i] - 1) * (y[i] - y[j])
+    psi[keys] = (2 * treatment[keys] - 1) * (y[keys] - y[js])
     dev = psi - tau
 
     # --- ξ̂²_i (conditional outcome variance from within-treatment neighbors) ---
     wt = _within_treatment_matching(ps, treatment, h)
-    xi2 = np.zeros(n)
-    for i in range(n):
-        nb = wt[i]
-        if len(nb) >= 2:
-            ym = y[nb].mean()
-            xi2[i] = np.sum((y[nb] - ym) ** 2) / (len(nb) - 1)
+    max_h = max((len(w) for w in wt), default=0)
+    if max_h > 0:
+        W = np.zeros((n, max_h), dtype=int)
+        counts = np.zeros(n, dtype=int)
+        for i, w in enumerate(wt):
+            counts[i] = len(w)
+            W[i, : len(w)] = w
+        vals = y[W].astype(float)
+        valid = np.arange(max_h)[None, :] < counts[:, None]
+        vals = np.where(valid, vals, np.nan)
+        ym = np.nanmean(vals, axis=1)
+        denom = np.where(counts - 1 > 0, (counts - 1).astype(float), 1.0)
+        xi2 = np.nansum((vals - ym[:, None]) ** 2, axis=1) / denom
+        xi2 = np.where(counts >= 2, xi2, 0.0)
+    else:
+        xi2 = np.zeros(n)
 
     # --- Base variance ---
     V_base = np.nansum(dev ** 2 + xi2 * (Km ** 2 + 2 * Km - Kprime)) / (n ** 2)
@@ -434,38 +452,56 @@ def _compute_ai_variance(
     # Ψ_h(i): h nearest same-treatment neighbors (already computed as wt)
     ot = _opposite_treatment_matching(ps, treatment, h)
 
-    c_tau = np.zeros(z.shape[1])
-    for i in range(n):
-        if i not in pairs:
-            continue
-        t_i = treatment[i]
-        p_i = ps[i]
+    paired = np.array([i in pairs for i in range(n)])
 
-        # cov(z_i, ŷ_{i1}): covariance with treated outcome
-        # If t_i == 1: use within-treatment (treated) neighborhood Ψ_h(i)
-        # If t_i == 0: use opposite-treatment (treated) neighborhood Ω_h(i)
-        if t_i == 1:
-            nb_y1 = wt[i]
-        else:
-            nb_y1 = ot[i]
+    def _padded_local_cov(nb_list: list[np.ndarray]) -> np.ndarray:
+        """Vectorized :func:`_compute_local_cov` over all units.
 
-        # cov(z_i, ŷ_{i0}): covariance with control outcome
-        # If t_i == 0: use within-treatment (control) neighborhood Ψ_h(i)
-        # If t_i == 1: use opposite-treatment (control) neighborhood Ω_h(i)
-        if t_i == 0:
-            nb_y0 = wt[i]
-        else:
-            nb_y0 = ot[i]
+        Builds a padded ``(n, h_max, p)`` z-tensor and ``(n, h_max)`` y-tensor,
+        masks padding to NaN, then reduces with ``nanmean``/``nansum`` -- the
+        same floating-point operations as the per-unit scalar loop, so results
+        are bit-identical (verified against the scalar path on the Stata
+        fixture for ``nn`` = 2, 5, 10).
+        """
+        maxh = max((len(w) for w in nb_list), default=0)
+        if maxh == 0:
+            return np.zeros((n, z.shape[1]))
+        W = np.zeros((n, maxh), dtype=int)
+        cnt = np.zeros(n, dtype=int)
+        for i, w in enumerate(nb_list):
+            cnt[i] = len(w)
+            W[i, : len(w)] = w
+        zn = z[W].astype(float)
+        yn = y[W].astype(float)
+        valid = np.arange(maxh)[None, :] < cnt[:, None]
+        zn = np.where(valid[:, :, None], zn, np.nan)
+        yn = np.where(valid, yn, np.nan)
+        zmean = np.nanmean(zn, axis=1)
+        ymean = np.nanmean(yn, axis=1)
+        denom = np.where(cnt - 1 > 0, (cnt - 1).astype(float), 1.0)
+        cov = np.nansum(
+            (zn - zmean[:, None, :]) * (yn - ymean[:, None])[:, :, None], axis=1
+        ) / denom[:, None]
+        return np.where(cnt[:, None] >= 2, cov, 0.0)
 
-        cov_y1 = _compute_local_cov(z, y, nb_y1) if len(nb_y1) >= 2 else np.zeros(z.shape[1])
-        cov_y0 = _compute_local_cov(z, y, nb_y0) if len(nb_y0) >= 2 else np.zeros(z.shape[1])
+    nb_y1_list = [wt[i] if treatment[i] == 1 else ot[i] for i in range(n)]
+    nb_y0_list = [wt[i] if treatment[i] == 0 else ot[i] for i in range(n)]
+    cov_y1 = _padded_local_cov(nb_y1_list)
+    cov_y0 = _padded_local_cov(nb_y0_list)
 
-        # c_tau_i = f(z'_i γ) * [cov(z_i,ŷ_{i1})/p_i + cov(z_i,ŷ_{i0})/(1-p_i)]
-        #         = p_i(1-p_i) * [cov_y1/p_i + cov_y0/(1-p_i)]
-        #         = (1-p_i)*cov_y1 + p_i*cov_y0
-        c_tau += f_deriv[i] * (cov_y1 / p_i + cov_y0 / (1.0 - p_i))
-
-    c_tau /= n
+    # c_tau_i = f(z'_i γ) * [cov(z_i,ŷ_{i1})/p_i + cov(z_i,ŷ_{i0})/(1-p_i)]
+    #         = p_i(1-p_i) * [cov_y1/p_i + cov_y0/(1-p_i)]
+    #         = (1-p_i)*cov_y1 + p_i*cov_y0
+    # Unpaired units (i not in pairs) contribute 0; guard the division there to
+    # avoid 0/0 inference by zeroing the term before scaling.
+    pi = ps.copy()
+    onem = 1.0 - pi
+    term = np.where(
+        paired[:, None],
+        cov_y1 / pi[:, None] + cov_y0 / onem[:, None],
+        0.0,
+    )
+    c_tau = np.sum(paired[:, None] * f_deriv[:, None] * term, axis=0) / n
 
     # V_adj = c'_τ V̂_γ c_τ
     # The PDF shows +, but empirical verification against Stata confirms - is correct
@@ -484,6 +520,10 @@ def _opposite_treatment_matching(
 
     Returns a list of length N, where entry *i* is an array of indices of
     *n_neighbors* opposite-treatment observations with closest PS to unit *i*.
+
+    Vectorized via batched ``cKDTree.query`` (one call per treatment arm).
+    ``cKDTree`` returns neighbours sorted by distance ascending, identical to
+    the per-unit scalar loop.
     """
     is_treat = treatment == 1
     treat_idx = np.where(is_treat)[0]
@@ -493,14 +533,18 @@ def _opposite_treatment_matching(
     tree_c = _cKDTree(ps[control_idx].reshape(-1, 1))
 
     out: list[np.ndarray] = [np.array([], dtype=int) for _ in range(len(ps))]
-    for i in treat_idx:
-        k = min(n_neighbors, len(control_idx))
-        _, idx = tree_c.query(ps[i].reshape(1, -1), k=k)
-        out[i] = control_idx[idx[0]]
-    for i in control_idx:
-        k = min(n_neighbors, len(treat_idx))
-        _, idx = tree_t.query(ps[i].reshape(1, -1), k=k)
-        out[i] = treat_idx[idx[0]]
+
+    k_c = min(n_neighbors, len(control_idx))
+    _, idx_c = tree_c.query(ps[treat_idx].reshape(-1, 1), k=k_c)
+    nb_c = control_idx[idx_c]
+    for row, i in enumerate(treat_idx):
+        out[i] = nb_c[row]
+
+    k_t = min(n_neighbors, len(treat_idx))
+    _, idx_t = tree_t.query(ps[control_idx].reshape(-1, 1), k=k_t)
+    nb_t = treat_idx[idx_t]
+    for row, i in enumerate(control_idx):
+        out[i] = nb_t[row]
     return out
 
 
@@ -623,10 +667,9 @@ def psm(
     # Build per-observation weight and match indicator
     K = _count_matches(pairs, n)
     weights_arr = np.where(t == 1, 1.0, K.astype(float))
-    matched_arr = np.zeros(n, dtype=bool)
-    for i in range(n):
-        if (t[i] == 1 and i in pairs) or K[i] > 0:
-            matched_arr[i] = True
+    paired_mask = np.zeros(n, dtype=bool)
+    paired_mask[list(pairs.keys())] = True
+    matched_arr = ((t == 1) & paired_mask) | (K > 0)
 
     return PSMResult(
         effect=float(tau),

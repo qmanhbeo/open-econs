@@ -3,12 +3,17 @@
 import numpy as np
 import pandas as pd
 import pytest
+from scipy.spatial import cKDTree as _cKDTree
 
 from open_econs.models.causal.balance import balance as _balance
 from open_econs.models.causal.psm import (
+    _compute_ai_variance,
+    _compute_local_cov,
     _count_matches,
     _nearest_neighbor_match_with_replacement,
     _compute_propensity_scores,
+    _opposite_treatment_matching,
+    _within_treatment_matching,
     psm,
 )
 
@@ -152,3 +157,120 @@ def test_psm_balance_shape(df):
     assert "Variance Ratio" in bal.columns
     assert len(bal) == 2  # x1 and x2
     assert bal["P>|t|"].is_monotonic_increasing  # sorted by p-value
+
+
+# ── Vectorization determinism (rule 19: parity-preserving refactor) ──
+# The batched cKDTree / padded-tensor vectorization must reproduce the scalar
+# per-unit loops EXACTLY (atol=0, rtol=0), not merely within 1e-6. These tests
+# pin that contract so a future reduction-order change is caught immediately.
+
+
+def _scalar_within_treatment_matching(ps, treatment, n_neighbors):
+    """Reference scalar implementation mirroring the pre-vectorization loop."""
+    is_treat = treatment == 1
+    treat_idx = np.where(is_treat)[0]
+    control_idx = np.where(~is_treat)[0]
+    n = len(ps)
+    tt = _cKDTree(ps[treat_idx].reshape(-1, 1))
+    tc = _cKDTree(ps[control_idx].reshape(-1, 1))
+    out = [np.array([], dtype=int) for _ in range(n)]
+    for i in treat_idx:
+        k = min(n_neighbors + 1, len(treat_idx))
+        _, idx = tt.query(ps[i].reshape(1, -1), k=k)
+        out[i] = treat_idx[idx[0][:n_neighbors]]
+    for i in control_idx:
+        k = min(n_neighbors + 1, len(control_idx))
+        _, idx = tc.query(ps[i].reshape(1, -1), k=k)
+        out[i] = control_idx[idx[0][:n_neighbors]]
+    return out
+
+
+def _scalar_opposite_treatment_matching(ps, treatment, n_neighbors):
+    """Reference scalar implementation mirroring the pre-vectorization loop."""
+    is_treat = treatment == 1
+    treat_idx = np.where(is_treat)[0]
+    control_idx = np.where(~is_treat)[0]
+    out = [np.array([], dtype=int) for _ in range(len(ps))]
+    tree_t = _cKDTree(ps[treat_idx].reshape(-1, 1))
+    tree_c = _cKDTree(ps[control_idx].reshape(-1, 1))
+    for i in treat_idx:
+        k = min(n_neighbors, len(control_idx))
+        _, idx = tree_c.query(ps[i].reshape(1, -1), k=k)
+        out[i] = control_idx[idx[0]]
+    for i in control_idx:
+        k = min(n_neighbors, len(treat_idx))
+        _, idx = tree_t.query(ps[i].reshape(1, -1), k=k)
+        out[i] = treat_idx[idx[0]]
+    return out
+
+
+@pytest.mark.parametrize("h", [2, 5, 10])
+def test_psm_within_matching_bit_identical_to_scalar(df, h):
+    ps, _, _ = _compute_propensity_scores(df, "t", ["x1", "x2"])
+    t = df["t"].values
+    vec = _within_treatment_matching(ps, t, h)
+    ref = _scalar_within_treatment_matching(ps, t, h)
+    assert [a.tolist() for a in vec] == [a.tolist() for a in ref]
+
+
+@pytest.mark.parametrize("h", [2, 5, 10])
+def test_psm_opposite_matching_bit_identical_to_scalar(df, h):
+    ps, _, _ = _compute_propensity_scores(df, "t", ["x1", "x2"])
+    t = df["t"].values
+    vec = _opposite_treatment_matching(ps, t, h)
+    ref = _scalar_opposite_treatment_matching(ps, t, h)
+    assert [a.tolist() for a in vec] == [a.tolist() for a in ref]
+
+
+def test_psm_c_tau_vectorization_bit_identical(df):
+    """The padded-tensor c_tau must equal the per-unit scalar _compute_local_cov loop."""
+    ps, z, Vg = _compute_propensity_scores(df, "t", ["x1", "x2"])
+    t = df["t"].values.astype(int)
+    y = df["y"].values
+    pairs = _nearest_neighbor_match_with_replacement(ps, t, 1.0)
+    tau = float(np.nanmean([(2 * t[i] - 1) * (y[i] - y[pairs[i]])
+                            for i in range(len(y)) if i in pairs]))
+    h = 10
+    # Vectorized path.
+    V_vec = _compute_ai_variance(y, t, ps, pairs, tau, z, Vg, h=h)
+
+    # Reference scalar path (re-derives c_tau via the per-unit loop).
+    n = len(y)
+    K = _count_matches(pairs, n)
+    psi = np.full(n, np.nan)
+    for i in range(n):
+        if i in pairs:
+            psi[i] = (2 * t[i] - 1) * (y[i] - y[pairs[i]])
+    dev = psi - tau
+    V_base = np.nansum(dev ** 2 + 0.0) / (n ** 2)  # placeholder; recompute exactly below
+    wt = _within_treatment_matching(ps, t, h)
+    ot = _opposite_treatment_matching(ps, t, h)
+    f_deriv = ps * (1.0 - ps)
+    c_tau = np.zeros(z.shape[1])
+    for i in range(n):
+        if i not in pairs:
+            continue
+        t_i = t[i]
+        p_i = ps[i]
+        nb_y1 = wt[i] if t_i == 1 else ot[i]
+        nb_y0 = wt[i] if t_i == 0 else ot[i]
+        cy1 = _compute_local_cov(z, y, nb_y1) if len(nb_y1) >= 2 else np.zeros(z.shape[1])
+        cy0 = _compute_local_cov(z, y, nb_y0) if len(nb_y0) >= 2 else np.zeros(z.shape[1])
+        c_tau += f_deriv[i] * (cy1 / p_i + cy0 / (1.0 - p_i))
+    c_tau /= n
+    V_adj_ref = c_tau @ Vg @ c_tau
+    # Base variance (recomputed exactly per the module formula, includes xi2).
+    xi2 = np.zeros(n)
+    for i in range(n):
+        nb = wt[i]
+        if len(nb) >= 2:
+            ym = y[nb].mean()
+            xi2[i] = np.sum((y[nb] - ym) ** 2) / (len(nb) - 1)
+    Km = K.astype(float)
+    V_base = np.nansum(dev ** 2 + xi2 * (Km ** 2 + 2 * Km - Km)) / (n ** 2)
+    V_ref = V_base - V_adj_ref
+
+    assert V_vec == V_ref
+    # And the SE must still hit the Stata pin.
+    se = float(np.sqrt(max(V_vec, 0.0)))
+    assert se == pytest.approx(0.08351363, abs=1e-6)
