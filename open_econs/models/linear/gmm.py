@@ -141,6 +141,8 @@ def gmm(
     lags: int | None = None,
     time: str | None = None,
     hac_adjust: bool = False,
+    windmeijer: bool = True,
+    s_residuals: str = "one-step",
 ) -> GMMResult:
     """Estimate a linear-in-parameters GMM regression.
 
@@ -190,6 +192,23 @@ def gmm(
         applied to ``newey_west_cov`` in OLS contexts).  For exactly-identified
         GMM this produces the same SEs as ``ols()``/``iv()`` with
         ``hac_adjust=True``.
+    windmeijer : bool, default True
+        If True (default), apply the Windmeijer (2005) finite-sample correction
+        to the two-step robust VCE.  This is the recommended practice in the
+        econometric literature and matches Stata's ``xtabond``/``xtdpd``
+        default.  If False, skip the correction, reproducing Stata's ``gmm``
+        command default (which does NOT apply Windmeijer — confirmed via
+        gmm.ado source; contrast ``xtabond``/``xtdpd`` which DO apply it).
+        Ignored when ``step="one-step"`` or ``cov_type`` is not ``"robust"``.
+    s_residuals : {"one-step", "two-step"}, default "one-step"
+        Which residuals feed the robust moment-covariance matrix ``S`` used in
+        the two-step VCE.  The literature and R's ``gmm`` package
+        (``vcov="MDS"``) build ``S`` from the **one-step** residuals ``e1``;
+        Stata's ``gmm`` command builds it from the **two-step** residuals
+        ``e2``.  Set ``s_residuals="two-step"`` (together with
+        ``windmeijer=False``) to reproduce Stata's ``gmm`` two-step robust
+        VCE exactly (verified against Stata's extracted ``e(S)`` matrix).
+        Ignored when ``step="one-step"`` or ``cov_type`` is not ``"robust"``.
 
     Returns
     -------
@@ -220,12 +239,13 @@ def gmm(
         uses the robust sandwich S matrix.  Both are valid; see
         :mod:`open_econs.models._gmm_core` for the full derivation.
       * **Windmeijer correction.**  For two-step GMM with
-        ``cov_type="robust"``, OE always applies the Windmeijer (2005)
-        finite-sample correction to the VCE.  Stata's ``gmm`` command
-        does NOT apply this correction by default (contrast:
-        ``xtabond``/``xtdpd`` DO apply it).  Two-step robust SEs
-        therefore differ at ~15% from Stata's ``gmm``.  See GMM-WC in
-        ``FUTURE_WORK.md``.
+        ``cov_type="robust"``, the ``windmeijer`` flag controls whether the
+        Windmeijer (2005) finite-sample correction is applied to the VCE.
+        Default ``windmeijer=True`` matches the econometric literature's
+        recommended practice and Stata's ``xtabond``/``xtdpd``.  Setting
+        ``windmeijer=False`` reproduces Stata's ``gmm`` command, which does
+        NOT apply the correction (confirmed via gmm.ado source).  See
+        GMM-WC in ``FUTURE_WORK.md``.
     """
     if step not in ("one-step", "two-step"):
         raise ValueError("step must be 'one-step' or 'two-step'.")
@@ -251,7 +271,8 @@ def gmm(
 
     call = _capture_call(
         formula=formula, step=step, cov_type=cov_type, cluster=cluster,
-        lags=lags, time=time, hac_adjust=hac_adjust,
+        lags=lags, time=time, hac_adjust=hac_adjust, windmeijer=windmeijer,
+        s_residuals=s_residuals,
     )
 
     parsed = _parse_iv_formula(formula, data)
@@ -304,7 +325,8 @@ def gmm(
     est = _estimate_gmm(
         Y, X, Z, eq_entity, core_step, robust=robust,
         time_labels=hac_time_labels, max_lags=hac_max_lags,
-        hac_adjust=use_hac_adjust,
+        hac_adjust=use_hac_adjust, windmeijer=windmeijer,
+        s_residuals=s_residuals,
     )
 
     if cov_type == "HAC":

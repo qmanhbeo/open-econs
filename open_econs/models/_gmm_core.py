@@ -31,14 +31,14 @@ J-statistic convention (source-confirmed 2026-07-17):
     regardless of the robust flag.
 
 Windmeijer correction (source-confirmed 2026-07-17):
-    OE always applies the Windmeijer (2005) finite-sample correction
-    to the two-step robust VCE (lines 224-239).  Stata's ``gmm``
-    command does NOT apply this correction by default (confirmed via
-    gmm.ado source: no Windmeijer code, no WC-robust label, no
-    toggle option).  Contrast: Stata's ``xtabond``/``xtdpd`` DO apply
-    it.  Two-step robust SEs from ``gmm()`` therefore differ from
-    Stata's ``gmm`` at ~15% (OE larger, as expected for Windmeijer).
-    See GMM-WC in FUTURE_WORK.md.
+    The ``windmeijer`` flag (default True) controls whether the Windmeijer
+    (2005) finite-sample correction is applied to the two-step robust VCE.
+    When True (default), the correction is applied (lines 234-249),
+    matching Stata's ``xtabond``/``xtdpd`` and the econometric literature's
+    recommended practice.  When False, the naive two-step sandwich VCE
+    is returned, matching Stata's ``gmm`` command default (confirmed via
+    gmm.ado source: no Windmeijer code, no WC-robust label, no toggle).
+    The flag is ignored for one-step or non-robust cases.
 """
 
 from typing import Any
@@ -96,6 +96,8 @@ def estimate_gmm(
     time_labels: np.ndarray | None = None,
     max_lags: int | None = None,
     hac_adjust: bool = False,
+    windmeijer: bool = True,
+    s_residuals: str = "one-step",
 ) -> dict[str, Any]:
     """General two-step GMM estimator, mirroring xtabond2's Mata source (v3.7.2).
 
@@ -149,6 +151,25 @@ def estimate_gmm(
         ``wttot/(wttot-k)`` multiplier to ``sig2``, mirroring xtabond2's Mata
         source.  If False (generic default), no small-sample correction is
         applied to ``V`` or ``sig2``.
+    windmeijer : bool, default True
+        If True, apply the Windmeijer (2005) finite-sample correction to the
+        two-step robust VCE (lines 224-239).  This is the recommended practice
+        in the econometric literature and matches Stata's ``xtabond``/``xtdpd``
+        default.  If False, skip the correction, reproducing Stata's ``gmm``
+        command default (which does NOT apply Windmeijer — confirmed via
+        gmm.ado source).  Ignored for one-step or non-robust cases.
+    s_residuals : {"one-step", "two-step"}, default "one-step"
+        Which residuals feed the moment-covariance matrix ``S`` used in the
+        two-step robust VCE.  The econometric literature and R's ``gmm``
+        package (``vcov="MDS"``) build ``S`` from the ONE-step residuals
+        ``e1`` (the efficient two-step weighting is estimated from the
+        first-step residuals).  Stata's ``gmm`` command instead builds ``S``
+        from the TWO-step residuals ``e2`` — a genuine, source-confirmed
+        convention difference.  Set ``s_residuals="two-step"`` to reproduce
+        Stata's ``gmm`` two-step robust VCE exactly.  Ignored for one-step
+        or non-robust cases.  (Source evidence: Stata's ``e(S)`` extracted
+        from a live run equals ``(1/N)·Σᵢ(Zᵢ·e2ᵢ)(Zᵢ·e2ᵢ)'`` to machine
+        epsilon, whereas the one-step-residual ``S`` differs structurally.)
     """
     n_eq = Y.shape[0]
     N = float(len(np.unique(eq_entity)))
@@ -219,6 +240,39 @@ def estimate_gmm(
         if step == "two-step":
             sig2 = sig2_scale * float(e2 @ e2) / wttot   # Mata 480: two-step sig2 from e2
         A2Ze = A2 @ (Z.T @ e2)
+
+        # --- Optional two-step-residual robust MEAT (Stata `gmm` convention) ---
+        # The econometric literature & R's gmm package build the robust VCE as
+        # V2 = (G' S1^{-1} G)^{-1}  (equivalently the full sandwich with the
+        # one-step residual S1 used for BOTH the efficient weight and the meat).
+        # Stata's `gmm` command instead uses the TWO-step residuals e2 for the
+        # robust MEAT S2 while keeping the one-step S1 for the efficient weight,
+        # i.e. the full sandwich
+        #   V = (G' S1^{-1} G)^{-1} (G' S1^{-1} S2 S1^{-1} G) (G' S1^{-1} G)^{-1}.
+        # When s_residuals="two-step", compute S2 from e2 and assemble the VCE
+        # with S2 in the meat (source-confirmed: reproduces Stata's e(S) and e(V)
+        # to machine epsilon).  Coefficients b2 are unchanged at the 1e-9 level.
+        S2 = None
+        if (
+            robust
+            and step == "two-step"
+            and s_residuals == "two-step"
+        ):
+            S2 = np.zeros((L, L))
+            for ent in np.unique(eq_entity):
+                mask = eq_entity == ent
+                ze = Z[mask].T @ e2[mask]
+                S2 += np.outer(ze, ze)
+            # Full-sandwich VCE: bread-weight = S1^{-1}, meat = S2.
+            GwG = ZtX.T @ A2 @ ZtX                       # G' S1^{-1} G  (bread)
+            GwS2wG = ZtX.T @ A2 @ S2 @ A2 @ ZtX          # G' S1^{-1} S2 S1^{-1} G (meat)
+            invGwG = np.linalg.inv(GwG) if GwG.shape[0] == GwG.shape[1] else np.linalg.pinv(GwG)
+            V2 = invGwG @ GwS2wG @ invGwG
+            # Robust one-step sandwich with the two-step-residual meat S2.
+            VXZA1 = V1 @ ZtX.T @ A1
+            V1robust = VXZA1 @ S2 @ VXZA1.T
+            A2Ze = A2 @ (Z.T @ e2)
+
         if step == "one-step":
             b = b1
             pV_pre = V1
@@ -231,22 +285,27 @@ def estimate_gmm(
             pA_pre = A2
             pe = e2
             if robust:
-                # Windmeijer (2005) correction — Mata 510-523
-                VXZA2 = V2 @ ZtX.T @ A2
-                D = np.zeros((L, p))
-                for ent in np.unique(eq_entity):
-                    mask = eq_entity == ent
-                    ze = Z[mask].T @ e1[mask]           # (L,)  Z_i' e1_i (one-step)
-                    ZXi = Z[mask].T @ X[mask]           # (L, p)
-                    # Mata 518: term1 = scalar (Z_i'e1_i · A2Ze) * ZXi ;
-                    # term2 = outer(Z_i'e1_i, A2Ze'·ZXi) — per-row-varying scale.
-                    s1 = ze @ A2Ze                      # scalar
-                    term1 = s1 * ZXi                    # (L, p)
-                    term2 = np.outer(ze, A2Ze @ ZXi)    # (L, p)
-                    D += term1 + term2
-                D = VXZA2 @ D                           # -> (p, p)
-                V2robust = V2 + D @ V1robust @ D.T + 2.0 * D @ V2
-                pV = V2robust
+                if windmeijer:
+                    # Windmeijer (2005) correction — Mata 510-523
+                    VXZA2 = V2 @ ZtX.T @ A2
+                    D = np.zeros((L, p))
+                    for ent in np.unique(eq_entity):
+                        mask = eq_entity == ent
+                        ze = Z[mask].T @ e1[mask]           # (L,)  Z_i' e1_i (one-step)
+                        ZXi = Z[mask].T @ X[mask]           # (L, p)
+                        # Mata 518: term1 = scalar (Z_i'e1_i · A2Ze) * ZXi ;
+                        # term2 = outer(Z_i'e1_i, A2Ze'·ZXi) — per-row-varying scale.
+                        s1 = ze @ A2Ze                      # scalar
+                        term1 = s1 * ZXi                    # (L, p)
+                        term2 = np.outer(ze, A2Ze @ ZXi)    # (L, p)
+                        D += term1 + term2
+                    D = VXZA2 @ D                           # -> (p, p)
+                    V2robust = V2 + D @ V1robust @ D.T + 2.0 * D @ V2
+                    pV = V2robust
+                else:
+                    # Naive two-step sandwich (Stata gmm default):
+                    # VCE = (X'Z S^{-1} Z'X)^{-1} without Windmeijer correction.
+                    pV = V2
             else:
                 pV = V2
 
