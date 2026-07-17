@@ -218,6 +218,24 @@ with a parity test against an existing reference implementation before merge.**
   tutorial was updated to use the top-level path and drop the submodule-import
   note. No estimator logic changed. (Source-only + doc; no release.)
 
+- **v1.0.3 — Performance hardening (shipped, 2026-07-17)** — Python-strength
+  audit of the hot loops, all **bit-identical** to the prior scalar code (no
+  parity tolerance loosened; new determinism tests guard each one):
+  - `did_cs` bootstrap / permutation reps parallelized via an opt-in
+    `parallel=` `ProcessPoolExecutor` (bit-identical). Commits `3f56aea`,
+    `3eb0e92`.
+  - `psm` fully vectorized: batched `cKDTree` k-NN, padded `(n,h)` / `(n,h,p)`
+    tensor reductions for `xi2` and `c_tau`, vectorized `matched_arr`. **~4×
+    faster** on the Stata `teffects psmatch` fixture (nn=10: 0.50s → 0.13s).
+    Commit `cdb15be`.
+  - `_gmm_core._hac_S` Newey-West lag accumulation vectorized into a single
+    batched `einsum` (feeds `abond` / `gmm` VCE + Hansen J). Commit `897c31a`.
+  - **GPU offload (CuPy / CUDA) deliberately declined**: SciPy optimizers have
+    no GPU backend and BLAS matmuls are already CPU-multithreaded; transfer
+    overhead dominates at current fixture sizes. Rationale in
+    `methodology/performance-conventions.md`. Revisit only at 100k+ entities.
+  - Full suite green (1048 passed, excluding `synth_placebo`) before release.
+
 ---
 
 ### North Star (vision — not a commitment)
