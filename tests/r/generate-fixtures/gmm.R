@@ -272,13 +272,14 @@ se_hac_wind <- sqrt(diag(V2robust_hac))
 J_hac <- as.numeric(crossprod(g_2s, S_hac_inv %*% g_2s))
 
 # ====================================================================
-# 7b. Cluster-robust standard errors (over-identified) [NATIVE]
+# 7b. R gmm(vcov="iid") two-step over-identified [NATIVE]
 # ====================================================================
-# R's gmm package enables cluster-robust VCE via the cluster= argument
-# combined with vcov="iid" (per-group clustered S).  This is the genuine R
-# parity anchor for OE's cov_type="cluster", cluster="cluster"
-# (per-entity clustered S).  NOTE: vcov="CL" is NOT a valid gmm vcov value;
-# clustering is a cluster= modifier on the iid VCE.
+# IMPORTANT: R's gmm() cluster= argument is a NO-OP (not a real parameter;
+# it falls through ... and is never consumed in gmm/FinRes/.weightFct).  R
+# therefore has NO genuine cluster VCE.  The historical "R cluster" anchor is
+# simply R's plain gmm(vcov="iid") two-step GMM (homoskedastic efficient
+# weight).  OE reproduces it exactly via weight="iid".  We keep cluster=df$cluster
+# in the call only to mirror the original invocation; it has no effect.
 g_cl_oid <- gmm(y ~ x1 + x2, ~ z1 + z2 + z3 + z4 + z5, data = df,
                 wmatrix = "optimal", vcov = "iid", cluster = df$cluster,
                 centeredVcov = FALSE)
