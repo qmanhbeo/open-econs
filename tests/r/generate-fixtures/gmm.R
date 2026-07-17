@@ -272,6 +272,20 @@ se_hac_wind <- sqrt(diag(V2robust_hac))
 J_hac <- as.numeric(crossprod(g_2s, S_hac_inv %*% g_2s))
 
 # ====================================================================
+# 7b. Cluster-robust standard errors (over-identified) [NATIVE]
+# ====================================================================
+# R's gmm package enables cluster-robust VCE via the cluster= argument
+# combined with vcov="iid" (per-group clustered S).  This is the genuine R
+# parity anchor for OE's cov_type="cluster", cluster="cluster"
+# (per-entity clustered S).  NOTE: vcov="CL" is NOT a valid gmm vcov value;
+# clustering is a cluster= modifier on the iid VCE.
+g_cl_oid <- gmm(y ~ x1 + x2, ~ z1 + z2 + z3 + z4 + z5, data = df,
+                wmatrix = "optimal", vcov = "iid", cluster = df$cluster,
+                centeredVcov = FALSE)
+se_cl_oid <- sqrt(diag(vcov(g_cl_oid)))
+J_cl_oid <- as.numeric(specTest(g_cl_oid)$test)
+
+# ====================================================================
 # 8. Build JSON output
 # ====================================================================
 # Convention: "nr" and "r" both store robust VCE because:
@@ -314,6 +328,11 @@ out$oid_2s_r  <- list(coef = b2,
 out$oid_hac_2s <- list(coef = b2,
                         se = as.numeric(se_hac_wind),
                         J = J_hac, J_df = dof_j)
+
+# Cluster-robust two-step over-identified [NATIVE gmm(vcov="CL")]
+out$oid_2s_cl <- list(coef = as.numeric(coef(g_cl_oid)),
+                       se = as.numeric(se_cl_oid),
+                       J = J_cl_oid, J_df = dof_j)
 
 write_json(out, out_json, auto_unbox = TRUE, digits = 15)
 

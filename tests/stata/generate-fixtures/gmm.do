@@ -154,6 +154,43 @@ post handle ("N_oid_2s_r")      (e(N))
 post handle ("J_oid_2s_r")      (e(J))
 post handle ("Jdf_oid_2s_r")    (e(J_df))
 
+*--- Flavour 9: over-ID, two-step, cluster-robust (vce(cluster cluster)) ---
+* Stata gmm supports vce(cluster <var>) directly.  Coefficients are identical
+* to the vce(robust) twostep run above.  OE gmm(..., cov_type="cluster",
+* cluster="cluster") builds the per-entity clustered S (eq_entity = cluster).
+gmm (y - {b0} - {b1}*x1 - {b2}*x2), instruments(z1 z2 z3 z4 z5) winitial(unadjusted) twostep vce(cluster cluster)
+matrix b = e(b)
+matrix V = e(V)
+post handle ("b0_oid_2s_cl")    (b[1,1])
+post handle ("b1_oid_2s_cl")    (b[1,2])
+post handle ("b2_oid_2s_cl")    (b[1,3])
+post handle ("se0_oid_2s_cl")   (sqrt(V[1,1]))
+post handle ("se1_oid_2s_cl")   (sqrt(V[2,2]))
+post handle ("se2_oid_2s_cl")   (sqrt(V[3,3]))
+post handle ("N_oid_2s_cl")     (e(N))
+post handle ("J_oid_2s_cl")     (e(J))
+post handle ("Jdf_oid_2s_cl")   (e(J_df))
+
+*--- Flavour 10: over-ID, two-step, HAC-robust (Bartlett kernel, L=3 lags) ---
+* Stata gmm HAC requires a panel/time setup; the cross-sectional fixture is
+* declared a panel on (cluster, t).  wmatrix(hac ...)/vce(hac ...) apply the
+* Bartlett kernel.  NOTE: Stata's HAC convention for gmm differs from OE's
+* VCE-only-kernel convention, so two-step coefficients/SEs may diverge; this
+* fixture records Stata's native values for documentation, not a 1e-6 assertion.
+tsset cluster t
+gmm (y - {b0} - {b1}*x1 - {b2}*x2), instruments(z1 z2 z3 z4 z5) winitial(unadjusted) twostep wmatrix(hac bartlett 3) vce(hac bartlett 3)
+matrix b = e(b)
+matrix V = e(V)
+post handle ("b0_oid_2s_hac")    (b[1,1])
+post handle ("b1_oid_2s_hac")    (b[1,2])
+post handle ("b2_oid_2s_hac")    (b[1,3])
+post handle ("se0_oid_2s_hac")   (sqrt(V[1,1]))
+post handle ("se1_oid_2s_hac")   (sqrt(V[2,2]))
+post handle ("se2_oid_2s_hac")   (sqrt(V[3,3]))
+post handle ("N_oid_2s_hac")     (e(N))
+post handle ("J_oid_2s_hac")     (e(J))
+post handle ("Jdf_oid_2s_hac")   (e(J_df))
+
 *--- Metadata row ---
 post handle ("stata_version") (17.0)
 
