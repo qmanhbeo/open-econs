@@ -572,7 +572,11 @@ added.
   into the 4.5.2 user library).  It errors inside plm itself, NOT in our code,
   and fails on the **canonical plm `EmplUK` example** for `effect="twoways"` and
   `effect="individual"` alike.  Tested across **plm 2.6.3, 2.6.4, and 2.6.7** —
-  all fail identically.  Base `plm` (e.g. `plm(..., model="within")`) works, so
+  all fail identically.  A third R install, **R 2.5.0** (2007), was also checked
+  and is **non-viable**: CRAN no longer serves packages for it (no
+  `bin/windows/contrib/2.5`, and its network stack cannot fetch the modern
+  `src/contrib` index), and any `plm` that ran on R 2.5.0 predates the modern
+  `pgmm` two-part-formula API.  Base `plm` (e.g. `plm(..., model="within")`) works, so
   the breakage is specific to `pgmm`.  **This is a plm library bug, not an
   R-version or OE issue** — installing R 4.5.2 does NOT help.
 - **Exact source-level diagnosis (from `deparse(pgmm)`, plm 2.6.4):**
