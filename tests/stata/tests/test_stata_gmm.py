@@ -1,37 +1,36 @@
 """Stata parity tests for linear GMM (Stata `gmm` command, Stata/MP 17.0).
 
-All 8 flavors (exactly-ID / over-ID × one-step / two-step × non-robust / robust)
+All 8 flavors (exactly-ID / over-ID x one-step / two-step x non-robust / robust)
 verified against live Stata via read_stata().  See
 tests/stata/generate-fixtures/gmm.do.
 
-Convention notes (source-confirmed):
-  1. OE's gmm() always includes the intercept as its own instrument in Z.
+Convention notes (source-confirmed 2026-07-17):
+  1. OE's gmm() includes the intercept as its own instrument in Z.
      Stata's `gmm` allows the user to specify moment conditions directly;
-     our fixture matches OE's instrument set by including ``1*(y - Xb)`` as
-     an explicit moment condition.  For exactly-identified models the
-     estimates match OE to ≤1e-7.
-  2. For overidentified models, Stata's `gmm` uses iterative Gauss-Newton
-     optimization which does NOT converge to the exact closed-form 2SLS
-     solution for linear models.  The one-step overidentified coefficients
-     diverge at the ~6.8% level (Stata b2=1.267 vs exact 2SLS b2=1.354).
-     This is a source-confirmed implementation convention, not a bug —
-     the Gauss-Newton optimizer and the closed-form 2SLS estimator are
-     mathematically equivalent only for the exactly-identified case.
-  3. Two-step overidentified coefficients differ at the ~0.5% level
-     (OE/R closed-form vs Stata's iterative Gauss-Newton).
-  4. Two-step overidentified SEs differ at the ~15% level because Stata's
-     VCE uses the Gauss-Newton-estimated residuals (slightly different from
-     exact 2SLS), which feeds into the sandwich/robust VCE formula.
-  5. J-statistic convention: OE computes model-based J (g'(Z'Z)^{-1}g/sig2)
-     for one-step and efficient-weighting J (g'S^{-1}g) for two-step.
-     Stata's e(J) uses robust S with S_hat=(1/N)Σg_ig_i'.  The two-step
-     J values differ by ~4% (OE=4.048, Stata=3.886) due to the coefficient
-     divergence feeding into different J formulas.
+     our fixture matches OE's instrument set by using the single-equation
+     form with ``instruments(z1 z2 z3 z4 z5)`` (Stata adds _cons
+     automatically).  For exactly-identified models the estimates match
+     OE to <=1e-7.
+  2. For overidentified models, the fixture now uses Stata's
+     ``instruments()`` + ``winitial(unadjusted)`` form, which gives the
+     standard 2SLS one-step estimator.  Coefficients match OE to <=1e-7
+     in all cases (one-step and two-step).
+  3. Stata's ``gmm`` does NOT apply the Windmeijer (2005) finite-sample
+     correction for two-step robust VCE.  OE's gmm() always applies
+     Windmeijer when ``cov_type="robust"`` and ``step="two-step"``.
+     Two-step robust SEs therefore diverge (~15%) and are NOT valid
+     parity targets for SE assertions.  See GMM-WC in FUTURE_WORK.md.
+  4. One-step J-statistic: Stata's ``e(J)`` uses the model-based
+     weighting (from ``winitial(unadjusted)``) even when ``vce(robust)``
+     is specified.  OE uses the robust S matrix when
+     ``cov_type="robust"``.  Both values are valid under their
+     respective conventions.  See GMM-J in FUTURE_WORK.md.
+  5. Two-step J-statistic: matches OE to machine epsilon when coefficients
+     match (both use efficient S^{-1} weighting).
 """
 
 from __future__ import annotations
 
-import numpy as np
 import numpy.testing as npt
 import pytest
 
@@ -47,8 +46,8 @@ S = read_stata("gmm")
 
 class TestGmmExactlyIdentifiedOneStep:
     """Exactly-identified (3 instruments = 3 params), one-step, non-robust.
-    OE formula: y ~ x1 + x2 | z1 + z2 → Z = [intercept, z1, z2].
-    One-step with identity weighting = 2SLS; matches Stata to ≤1e-7.
+    OE formula: y ~ x1 + x2 | z1 + z2 -> Z = [intercept, z1, z2].
+    Expression form with winitial(identity) = 2SLS; matches OE to <=1e-7.
     """
 
     @pytest.fixture(autouse=True)
@@ -138,12 +137,10 @@ class TestGmmExactlyIdentifiedTwoStepRobust:
 
 class TestGmmOverIdentifiedOneStep:
     """Over-identified (6 instruments, 3 params, 3 df), one-step, non-robust.
-    OE formula: y ~ x1 + x2 | z1 + z2 + z3 + z4 + z5 → Z = [intercept, z1..z5].
+    OE formula: y ~ x1 + x2 | z1 + z2 + z3 + z4 + z5 -> Z = [intercept, z1..z5].
 
-    Convention: Stata's Gauss-Newton does NOT converge to exact closed-form 2SLS
-    for linear overidentified models.  Coefficient parity is therefore NOT
-    asserted against Stata (Stata b2=1.267 vs exact 2SLS b2=1.354, diff=6.8%).
-    This is a source-confirmed implementation convention, not a bug.
+    Fixture uses instruments()+winitial(unadjusted) giving standard 2SLS.
+    Coefficients and SEs match OE to machine epsilon.
     """
 
     @pytest.fixture(autouse=True)
@@ -154,25 +151,26 @@ class TestGmmOverIdentifiedOneStep:
             step="one-step", cov_type="robust",
         )
 
-    def test_coefficients_finite(self):
-        assert all(np.isfinite(self.oe_r.coefficients.values))
+    def test_coefficients(self):
+        expected = [self.s["b0_oid_1s_nr"], self.s["b1_oid_1s_nr"], self.s["b2_oid_1s_nr"]]
+        npt.assert_allclose(self.oe_r.coefficients.values, expected, atol=1e-6)
 
-    def test_standard_errors_positive(self):
-        assert all(self.oe_r.std_errors.values > 0)
+    def test_standard_errors(self):
+        expected = [self.s["se0_oid_1s_nr"], self.s["se1_oid_1s_nr"], self.s["se2_oid_1s_nr"]]
+        npt.assert_allclose(self.oe_r.std_errors.values, expected, atol=1e-6)
 
-    def test_hansen_j_overidentified(self):
+    def test_hansen_j(self):
         assert self.oe_r.hansen_j_dof == 3
+        # NOTE: One-step J not compared — Stata uses model-based weighting
+        # (winitial(unadjusted)); OE uses robust S when cov_type="robust".
+        # Both valid under their respective conventions (GMM-J in FUTURE_WORK).
         assert self.oe_r.hansen_j > 0
-        # NOTE: One-step J not compared against Stata's e(J) — OE uses
-        # robust S^{-1} when cov_type="robust"; Stata uses robust S with
-        # its own Gauss-Newton coefficients.  Both values are valid under
-        # their respective conventions (OE=4.085, Stata=4.028).
 
 
 class TestGmmOverIdentifiedTwoStep:
     """Over-identified, two-step, non-robust.
-    Stata's gmm default is two-step; this is the primary overidentified parity case.
-    Coefficient parity at ~0.5% level (OE/R closed-form two-step vs Stata iterative Gauss-Newton).
+    Coefficients match OE to machine epsilon.  SEs not asserted (Windmeijer
+    correction: OE applies it, Stata gmm does not — see GMM-WC in FUTURE_WORK).
     """
 
     @pytest.fixture(autouse=True)
@@ -183,29 +181,25 @@ class TestGmmOverIdentifiedTwoStep:
             step="two-step", cov_type="robust",
         )
 
-    def test_coefficients_close_to_stata(self):
+    def test_coefficients(self):
         expected = [self.s["b0_oid_2s_nr"], self.s["b1_oid_2s_nr"], self.s["b2_oid_2s_nr"]]
-        npt.assert_allclose(self.oe_r.coefficients.values, expected, rtol=5e-3)
+        npt.assert_allclose(self.oe_r.coefficients.values, expected, atol=1e-6)
 
-    def test_standard_errors_close_to_stata(self):
-        # NOTE: Two-step SEs differ at ~15% level because Stata's VCE uses
-        # Gauss-Newton residuals (slightly different from exact 2SLS residuals),
-        # which feeds into the sandwich/robust VCE formula.  Not compared here.
+    def test_standard_errors_not_asserted(self):
+        # NOTE: Two-step SEs differ at ~15% because Stata's gmm does not
+        # apply the Windmeijer (2005) finite-sample correction; OE always
+        # does.  See GMM-WC in FUTURE_WORK.md.
         pass
 
     def test_hansen_j(self):
         assert self.oe_r.hansen_j_dof == 3
-        npt.assert_allclose(self.oe_r.hansen_j, self.s["J_oid_2s_nr"], rtol=5e-2)
-        # NOTE: J differs by ~4% (OE=4.048, Stata=3.886) due to:
-        # (a) Stata's Gauss-Newton gives slightly different coefficients,
-        # (b) different J formulas (OE efficient-weighting J vs Stata robust-S J).
-        # Both are valid under their respective conventions.
+        npt.assert_allclose(self.oe_r.hansen_j, self.s["J_oid_2s_nr"], atol=1e-6)
 
 
 class TestGmmOverIdentifiedRobust:
     """Over-identified, one-step, robust.
-    Convention: same as TestGmmOverIdentifiedOneStep — Stata's Gauss-Newton
-    does not converge to exact 2SLS, so coefficient parity is not asserted.
+    Coefficients and SEs match OE to machine epsilon (one-step, no
+    Windmeijer).  J not compared (model-based vs robust weighting).
     """
 
     @pytest.fixture(autouse=True)
@@ -216,19 +210,26 @@ class TestGmmOverIdentifiedRobust:
             step="one-step", cov_type="robust",
         )
 
-    def test_coefficients_finite(self):
-        assert all(np.isfinite(self.oe_r.coefficients.values))
+    def test_coefficients(self):
+        expected = [self.s["b0_oid_1s_r"], self.s["b1_oid_1s_r"], self.s["b2_oid_1s_r"]]
+        npt.assert_allclose(self.oe_r.coefficients.values, expected, atol=1e-6)
 
-    def test_standard_errors_positive(self):
-        assert all(self.oe_r.std_errors.values > 0)
+    def test_standard_errors(self):
+        expected = [self.s["se0_oid_1s_r"], self.s["se1_oid_1s_r"], self.s["se2_oid_1s_r"]]
+        npt.assert_allclose(self.oe_r.std_errors.values, expected, atol=1e-6)
 
-    def test_hansen_j_overidentified(self):
+    def test_hansen_j(self):
         assert self.oe_r.hansen_j_dof == 3
+        # NOTE: One-step J not compared — same convention divergence as
+        # TestGmmOverIdentifiedOneStep.
         assert self.oe_r.hansen_j > 0
 
 
 class TestGmmOverIdentifiedTwoStepRobust:
-    """Over-identified, two-step, robust (Windmeijer-corrected)."""
+    """Over-identified, two-step, robust.
+    Coefficients match OE to machine epsilon.  SEs not asserted (Windmeijer).
+    J matches to machine epsilon.
+    """
 
     @pytest.fixture(autouse=True)
     def _run(self, df_gmm):
@@ -238,14 +239,14 @@ class TestGmmOverIdentifiedTwoStepRobust:
             step="two-step", cov_type="robust",
         )
 
-    def test_coefficients_close_to_stata(self):
+    def test_coefficients(self):
         expected = [self.s["b0_oid_2s_r"], self.s["b1_oid_2s_r"], self.s["b2_oid_2s_r"]]
-        npt.assert_allclose(self.oe_r.coefficients.values, expected, rtol=5e-3)
+        npt.assert_allclose(self.oe_r.coefficients.values, expected, atol=1e-6)
 
-    def test_standard_errors_close_to_stata(self):
-        # NOTE: same VCE convention divergence as non-robust two-step.
+    def test_standard_errors_not_asserted(self):
+        # NOTE: same Windmeijer correction divergence as non-robust two-step.
         pass
 
     def test_hansen_j(self):
         assert self.oe_r.hansen_j_dof == 3
-        npt.assert_allclose(self.oe_r.hansen_j, self.s["J_oid_2s_r"], rtol=5e-2)
+        npt.assert_allclose(self.oe_r.hansen_j, self.s["J_oid_2s_r"], atol=1e-6)
