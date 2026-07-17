@@ -304,48 +304,66 @@ relaxed tolerances (standing rule 2).
   and `gmm()` docstring. See commit `a941114`.
 - **No action required.**
 
-### GMM-HAC: HAC Kernel Scope Convention (Stata parity ACHIEVED 2026-07-17)
+### GMM-HAC: HAC Kernel Scope Convention (Stata + R parity, PARTIAL 2026-07-17)
 
-- **What:** OE applies Bartlett kernel to VCE only (not to weighting matrix).
-  R's `gmm(vcov="HAC")` applies kernel to BOTH weighting matrix AND VCE.
-  Stata's `gmm ..., wmatrix(hac bartlett L) vce(hac bartlett L)` applies the
-  kernel to BOTH the efficient weight AND the VCE (same as R's scope) — so OE
-  now matches **Stata HAC** to ≤1e-6 (coefficient AND SE) under
-  `windmeijer=False, robust_meat="two-step"`.
-  R's HAC two-step SEs still diverge from OE's (R=[0.158, 0.101, 0.900]
-  vs OE=[0.129, 0.094, 0.797] on the 300-obs fixture) — but R's HAC
-  *coefficient* `[0.870, 2.027, 1.464]` equals OE's plain robust coefficient
-  (the kerneled optimal weight collapses to the iid optimal weight for the
-  coefficient).  So R HAC coef is asserted; R HAC SE remains documented-only.
-- **Status:** Stata HAC parity: ACHIEVED (≤1e-6 coef+SE), tested in
-  `TestGmmOverIdentifiedTwoStepHAC`.  R HAC SE divergence: documented in
-  `test_r_gmm.py` (`TestGmmROverIdentifiedHACTwoStep`) — R coef asserted, SE
-  not.
-- **Implementation path (R HAC SE):** add a `hac_weighting=True` parameter to
-  `gmm()` that applies the kernel to both W and VCE, matching R.  Reference:
-  R `gmm` package `.myKernHAC` / `.weightFct`.  (OE HAC already matches Stata,
-  so this is purely for R-parity coverage.)
+- **What (two distinct conventions):**
+  1. **Stata / OE-default HAC** (per-entity): the HAC long-run S is Newey-West
+     *within each panel entity*, accumulated.  Matches Stata `gmm, wmatrix(hac
+     ...) vce(hac ...)`.  Coefficient `[0.892, 2.017, 1.570]`, SE `[0.129,
+     0.094, 0.797]` — matched to ≤1e-6 (coef AND SE) under
+     `windmeijer=False, robust_meat="two-step"`.
+  2. **R-pooled HAC** (`hac_weighting=True`): the HAC S is computed over the
+     **full sample as one time series** (each obs its own entity) — R's
+     `gmm(vcov="HAC")` applies the Bartlett kernel to BOTH weighting matrix AND
+     VCE over the pooled sample.  Coefficient `[0.885, 2.018, 1.534]`.
+- **Status:**
+  - Stata/per-entity HAC: ACHIEVED (≤1e-6 coef+SE), tested in
+    `TestGmmOverIdentifiedTwoStepHAC`.
+  - R-pooled HAC: `hac_weighting=True` toggle ADDED.  **Coefficient matches R
+    to ≤1e-6** (tested in `TestGmmROverIdentifiedHACWeighting`).  **SE matches
+    R to within ~6e-4** (R SE `[0.128, 0.097, 0.802]` vs OE `[0.128, 0.097,
+    0.803]`); a residual ~6e-4 gap remains in the VCE *meat* because R's exact
+    two-step-residual kernel accumulation in the meat is not yet
+    source-confirmed (R-internals detail, not a loosened tolerance — the SE
+    test asserts at atol=1e-3 with an explicit documented-divergence comment,
+    NOT at 1e-6).  The headline convention-parity win (coefficient) is exact.
+  - FIX (2026-07-17): the R fixture `oid_hac_2s` previously stored the PLAIN
+    optimal two-step coef `b2=[0.870,...]` as the "R HAC" coef — wrong.  R's
+    actual HAC coef is `[0.885,...]`.  `gmm.R` now stores `coef(g_hac_oid)` /
+    `vcov(g_hac_oid)`; the old `test_coefficients_match_r` asserting OE==b2 was
+    validating against an incorrect R value and has been corrected.
+- **Implementation path (residual R HAC SE gap):** read R `gmm` source
+  (`gmm:::.myKernHAC` / `.getVcov` HAC branch) to determine the exact meat
+  residual/normalization (suspect: R kernels the meat from a differently
+  centered or two-step residual).  Once confirmed, tighten the SE test to
+  1e-6.
 
 ### GMM-RCLUSTER: R Cluster Efficient-Weight Convention (OPEN — flagged gap)
 
-- **What:** R `gmm(..., vcov="iid", cluster=df$cluster)` uses an **iid**
-  efficient weight (bread = iid S) with a **cluster** meat, giving a distinct
-  two-step coefficient `b = [0.850, 2.012, 1.354]` — unlike both Stata's
-  cluster `gmm` (`[0.915, 1.989, 1.621]`, cluster bread) and OE's cluster
-  (Stata-style bread).  This is a genuine THIRD convention, not a bug.
-- **Status:** Flagged per rule 3/15.  `weight="iid"` toggle now EXISTS in
-  `gmm()` (bread = iid S, meat = cov-structure S) and is tested for
-  self-consistency (`TestGmmWeightToggleIidBread`) — it reproduces the textbook
-  iid-weighted two-step GMM coefficient to ≤1e-6.  HOWEVER, R's actual cluster
-  coefficient `b = [0.850, 2.012, 1.354]` is STILL NOT reproduced by
-  `weight="iid"` (OE gives `[0.870, 2.027, 1.464]`, = the iid-weight coef, which
-  differs from R's).  R's `gmm(..., vcov="iid", cluster=)` does not reduce to
-  the plain iid-weighted GMM for the coefficient — its `cluster=` argument
-  affects the two-step weighting in a way not yet reverse-engineered from R's
-  `gmm` source (suspect: `cluster=` feeds the *weighting* matrix, not just the
-  meat, but via a non-iid, non-plain-cluster aggregation).  `TestGmmROverIdentifiedClusterTwoStep`
-  pins the divergence (fails loudly if silently "fixed" without an explicit
-  R-parity assertion).
+- **What:** R `gmm(..., vcov="iid", cluster=df$cluster)` uses an efficient
+  weight (bread) that is **neither** the iid S (`[0.870, 2.027, 1.464]`) **nor**
+  the plain cluster S (`[0.915, 1.989, 1.621]`) — it gives a distinct
+  coefficient `b = [0.850, 2.012, 1.354]`.  This is a genuine THIRD convention.
+- **Status:** Flagged per rule 3/15.  `weight="iid"` toggle EXISTS in `gmm()`
+  (bread = iid S, meat = cov-structure S), tested for self-consistency
+  (`TestGmmWeightToggleIidBread`), but does NOT reproduce R's cluster coef.
+- **Root-cause narrowing (2026-07-17, reverse-engineered from R live object):**
+  R's `gmm` `cluster=` argument DOES modify the weighting matrix `gc$w` (not
+  just the meat).  Recovering the coefficient from `gc$w` exactly reproduces
+  `[0.850, 2.012, 1.354]`, confirming `gc$w` is the true weight.  But `gc$w`
+  differs from the plain per-entity cluster S (`solve(S_clust)`) by **max
+  1.22** — it is NOT a simple scaling of `S_clust` (tested `S_clust`,
+  `S_clust*n/(n-k)`, `S_clust*G/(G-1)`, `S_clust/n`, `S_clust` from e2 — none
+  match).  So R's `cluster=` weight is a structurally distinct aggregation
+  (likely a cluster-robust S with R-specific centering / finite-sample
+  handling in `gmm:::.getS` / `.weightFct`).  `TestGmmROverIdentifiedClusterTwoStep`
+  pins the divergence (fails loudly if silently "fixed").
+- **Implementation path (remaining):** read R `gmm` source for the `cluster=`
+  weight branch (the object `gc$w` is the target — reproduce `solve(gc$w^{-1})`
+  or the S it inverts).  Once the exact cluster-weight S is identified, extend
+  `weight=` (or add `weight="r-cluster"`) to reproduce `[0.850, 2.012, 1.354]`
+  and its cluster-robust SE `[0.132, 0.102, 0.805]`.  The plumbing
+  (`weight` param) is already in place.
 - **Implementation path:** Reverse-engineer R's `gmm` `cluster=` handling for
   the two-step weighting (likely in `gmm:::.solveGmm` / `gmm:::.weightFct` /
   the `cluster` branch of `specTest`) to determine the exact bread S R uses for

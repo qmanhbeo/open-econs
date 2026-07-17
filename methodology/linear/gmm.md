@@ -83,7 +83,10 @@ The literature and R's `gmm` (`vcov="MDS"`) set S2 = S1 (use e1 for both) → co
 - **Robust meat residuals**: Stata `gmm` uses e2 for S2; OE/R use e1. Toggle `robust_meat="two-step"` reproduces Stata.
 - **One-step J**: Stata uses model-based `A1 = (Z'Z)⁻¹/σ²`; OE uses robust S when `cov_type="robust"`. R's `specTest(tsls)` matches OE's model-based form. Both valid.
 - **Two-step J**: always uses `A2 = S⁻¹` (efficient weighting) → matches machine epsilon when coefficients match.
-- **HAC two-step (KNOWN DIVERGENCE vs R)**: R applies the Bartlett kernel to BOTH the weighting matrix and the VCE; OE applies it to the VCE only. R two-step HAC SEs therefore diverge from OE. Documented, not asserted in parity tests. **NOTE:** OE HAC now matches **Stata** `gmm ..., wmatrix(hac bartlett L) vce(hac bartlett L)` to ≤1e-6 (coefficients AND SEs) under `windmeijer=False, robust_meat="two-step"`. See below.
+- **HAC two-step — TWO conventions (source-confirmed 2026-07-17):**
+  1. **Per-entity HAC (OE default + Stata):** HAC S is Newey-West *within each panel entity*, accumulated. Matches Stata `gmm ..., wmatrix(hac bartlett L) vce(hac bartlett L)` to ≤1e-6 (coef AND SE) under `windmeijer=False, robust_meat="two-step"`. Coef `[0.892, 2.017, 1.570]`.
+  2. **Pooled-sample HAC (R):** R's `gmm(vcov="HAC")` applies the Bartlett kernel to BOTH weighting matrix AND VCE over the **full sample** (each obs its own entity). Selected in OE via `hac_weighting=True`. Coefficient matches R `[0.885, 2.018, 1.534]` to ≤1e-6; SE matches R to within ~6e-4 (residual meat gap, R-internals, not yet 1e-6 — see FUTURE_WORK GMM-HAC).
+  - **Fixture fix (2026-07-17):** `oid_hac_2s` previously stored the plain optimal coef `b2` as "R HAC" — wrong. Now stores R's actual HAC coef `[0.885,...]` / SE from `coef(g_hac_oid)` / `vcov(g_hac_oid)`.
 - **Intercept as instrument**: OE always includes `_cons` as its own instrument in Z; Stata `gmm` single-equation `instruments(...)` does this automatically. Fixtures match this.
 
 ## Implementation Details
@@ -138,8 +141,9 @@ The two-step coefficient changes across covariance types because the efficient w
 | **OE/Stata `gmm`, robust** | iid `S₁` (per-obs) | iid `S₂` (e2 if `robust_meat="two-step"`) | `[0.870, 2.027, 1.464]` |
 | **OE/Stata `gmm`, cluster** | **cluster** `S` | cluster `S` (e2 if `robust_meat="two-step"`) | `[0.915, 1.989, 1.621]` |
 | **OE/Stata `gmm`, HAC** | **HAC** `S` | HAC `S` (e2 if `robust_meat="two-step"`) | `[0.892, 2.017, 1.570]` |
-| **R `gmm`, cluster (`vcov="iid", cluster=`)** | iid `S₁` | cluster `S` | `[0.850, 2.012, 1.354]` |
-| **R `gmm`, HAC** | iid `S₁` (kernel-averaged) | HAC `S` | `[0.870, 2.027, 1.464]` (= OE robust) |
+| **R `gmm`, cluster (`vcov="iid", cluster=`)** | **cluster-adjusted `gc$w`** (structurally distinct from plain cluster S — see GMM-RCLUSTER) | cluster meat | `[0.850, 2.012, 1.354]` |
+| **R `gmm`, HAC (`vcov="HAC"`)** | **pooled-sample HAC** `S` (full sample, one entity) | pooled-sample HAC `S` | `[0.885, 2.018, 1.534]` |
+| **OE `gmm`, `hac_weighting=True`, HAC** | pooled-sample HAC `S` (full sample) | pooled-sample HAC `S` (e2) | `[0.885, 2.018, 1.534]` (= R HAC, coef ≤1e-6) |
 | **OE `gmm`, `weight="iid"` (any cov_type)** | iid `S₁` (per-obs) | cov-structure `S` (e2 if `robust_meat="two-step"`) | `[0.870, 2.027, 1.464]` (= OE robust coef) |
 
 **KEY (corrected):** Stata's `vce(cluster c)` and `wmatrix(hac ...) vce(hac ...)` build the efficient weight from the **same** covariance structure used for the VCE (cluster S / HAC S) — NOT an iid bread. An earlier hypothesis (iid bread + cluster meat for Stata cluster) was **WRONG**: it reproduced Stata's *SE* but forced the cluster coefficient to equal the robust coefficient, breaking the b-match. The correct reconstruction is bread = `S` (the covariance structure), meat = `S` from e2 (`robust_meat="two-step"`), no Windmeijer.
@@ -181,10 +185,10 @@ print(r.std_errors)   # [0.1260902, 0.0986776, 0.7745471]
 ## Limitations
 
 1. No nonlinear or substitutable-expression moment conditions.
-2. HAC two-step diverges from R (kernel applied to weight+VCE in R, VCE only in OE) — R *coefficient* still matches (kerneled weight collapses to iid optimal), only SEs diverge. Documented, SEs not asserted.
+2. HAC two-step: R applies the Bartlett kernel to BOTH weight and VCE over the **pooled sample** (`hac_weighting=True` reproduces R's HAC coefficient `[0.885,...]` ≤1e-6; SE within ~6e-4). OE default HAC is per-entity (Stata-style). Both conventions covered by tests.
 3. `small_sample_correction` not exposed via `gmm()` (only via `abond()`).
 4. No one-step J asserted against Stata (model-based vs robust weighting divergence).
-5. **R cluster convention not reproduced** (flagged gap, rule 3/15): R `gmm(..., vcov="iid", cluster=)` yields a distinct coefficient `[0.850,2.012,1.354]`. OE now exposes a `weight` toggle: `weight="stata"` (default, cov-structure bread) and `weight="iid"` (iid efficient-weight bread, meat stays cov-structure). `weight="iid"` reproduces the textbook iid-weighted two-step GMM coefficient `[0.870,2.027,1.464]` (self-consistency tested in `TestGmmWeightToggleIidBread`), but this is **NOT** R's cluster coefficient — R's `cluster=` argument affects the two-step weighting beyond a plain iid bread. So R cluster remains open; `TestGmmROverIdentifiedClusterTwoStep` pins the divergence (fails loudly if silently "fixed" without explicit R-parity assertion). See FUTURE_WORK GMM-RCLUSTER for the remaining reverse-engineering path.
+5. **R cluster convention not reproduced** (flagged gap, rule 3/15): R `gmm(..., vcov="iid", cluster=)` yields a distinct coefficient `[0.850,2.012,1.354]`. Reverse-engineered (2026-07-17): R's `cluster=` modifies the *weighting matrix* `gc$w` (recovering the coef from `gc$w` reproduces `[0.850,...]` exactly), and `gc$w` differs from the plain per-entity cluster S by max 1.22 — it is NOT a simple scaling of cluster S. So R cluster weight is a structurally distinct aggregation (R-internals). OE exposes `weight="iid"` (textbook iid-weight coef `[0.870,...]`, self-consistency tested in `TestGmmWeightToggleIidBread`), but this is NOT R's cluster coefficient. `TestGmmROverIdentifiedClusterTwoStep` pins the divergence. Remaining path: read R `gmm` source for the `cluster=` weight branch to reproduce `gc$w`. See FUTURE_WORK GMM-RCLUSTER.
 
 ## References
 
