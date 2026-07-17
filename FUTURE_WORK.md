@@ -316,25 +316,59 @@ relaxed tolerances (standing rule 2).
   parameter to `gmm()` that applies the kernel to both W and VCE.
   Reference: R `gmm` package `.myKernHAC` / `.weightFct`.
 
-### GMM-WC: Windmeijer Correction Parity Gap
+### GMM-WC: Windmeijer Correction + Robust-Meat Conventions (RESOLVED 2026-07-17)
 
-- **What:** OE's `gmm()` always applies the Windmeijer (2005) finite-sample
-  correction to the two-step robust VCE (`_gmm_core.py` lines 224-239).
-  Stata's `gmm` command does NOT apply this correction by default — confirmed
-  via gmm.ado source (no Windmeijer code, no WC-robust label, no toggle
-  option).  Contrast: Stata's `xtabond`/`xtdpd` DO apply it by default.
-  Two-step robust SEs therefore differ at ~15% (OE larger, as expected for
-  Windmeijer).  On the 300-obs fixture: OE SEs=[0.145, 0.103, 0.826] vs
-  Stata SEs=[0.126, 0.099, 0.775].
-- **Consequence:** Two-step robust SE assertions against Stata's `gmm` are
-  NOT valid parity targets.  Coefficients and J match to machine epsilon.
-- **Status:** Documented 2026-07-17 in `test_stata_gmm.py` (SE assertions
-  removed for two-step robust) and `FUTURE_WORK.md`.
-- **Decision required:** Whether to add a `windmeijer=True` parameter to
-  `gmm()` to allow disabling the correction for Stata `gmm` parity, or
-  to accept the gap as a deliberate OE improvement (Stata's `xtabond` also
-  applies Windmeijer, suggesting Stata's omission in `gmm` is the weaker
-  default).
+Two convention differences between OE's `gmm()` and Stata's `gmm` command
+were identified, both now exposed as toggles:
+
+**Difference 1 — Windmeijer (2005) correction.** OE applies the Windmeijer
+finite-sample correction to the two-step robust VCE by default.  Stata's
+`gmm` command does NOT (confirmed in `gmm.ado`: no Windmeijer code, no
+WC-robust label, no toggle).  Stata's `xtabond`/`xtdpd` DO apply it.
+→ Toggle `windmeijer` added (`gmm()`, `_gmm_core.estimate_gmm`); default True.
+- OE default (`windmeijer=True`): matches R `gmm` `vcov="MDS"` to machine
+  epsilon.  OE SEs=[0.145, 0.103, 0.826] vs Stata `gmm`=[0.126, 0.099, 0.775].
+
+**Difference 2 — robust MEAT moment-covariance (THE residual 2.7% gap).**
+Stata's `gmm` builds the robust VCE as the FULL sandwich
+`V = (G' S1^{-1} G)^{-1} (G' S1^{-1} S2 S1^{-1} G) (G' S1^{-1} G)^{-1}`
+where **S1** = one-step-residual moment cov (efficient weight / bread) and
+**S2** = **two-step-residual** moment cov (robust MEAT).  The econometric
+literature and R's `gmm` package (`vcov="MDS"`, `.weightFct` = `crossprod(gt)/n`)
+use S1 for BOTH bread and meat, collapsing to `V2 = (G' S1^{-1} G)^{-1}`.
+This is the residual ~2.7% gap (max |gap|=0.0208 with `windmeijer=False`
+alone).  Stata's two-step S2 lives inside the compiled Mata `_gmm_wrk()`,
+so it was confirmed numerically instead: Stata's extracted `e(S)` equals
+`(1/N)·Σᵢ(Zᵢ·e2ᵢ)(Zᵢ·e2ᵢ)'` to machine epsilon, and feeding Stata's OWN
+extracted `e(S)` into the full-sandwich formula reproduces Stata's `e(V)`
+to ~2e-8.
+→ Toggle `s_residuals` added; default `"one-step"` (literature/R collapse);
+  `"two-step"` builds S2 from e2 and assembles the full sandwich.
+
+**Resolution / parity:** With **`windmeijer=False, s_residuals="two-step"`**
+OE reproduces Stata `gmm` two-step robust SEs to **max |gap| = 2.06e-08**
+(≤1e-6).  Coefficients and two-step J match to machine epsilon in all cases.
+- Stata `gmm` SE: [0.1260902, 0.0986776, 0.7745471]
+- OE (`windmeijer=False, s_residuals="two-step"`): [0.1260902, 0.0986776, 0.7745471]
+- OE default (`windmeijer=True, s_residuals="one-step"`) = R `gmm`: [0.14527, 0.10322, 0.82625]
+
+**IMPORTANT semantics caution:** `s_residuals="two-step"` does NOT replace
+the whole S with e2 — it switches only the robust MEAT S2 to e2 while keeping
+the efficient-weight bread S1 at e1 (the full sandwich requires exactly this).
+Do not "simplify" it to globally replacing S1 with S2 (that regresses to a
+0.00013 gap).
+
+**Tests:** `tests/stata/tests/test_stata_gmm.py`
+`TestGmmOverIdentifiedTwoStepRobust` now asserts the ≤1e-6 SE parity with
+`windmeijer=False, s_residuals="two-step"`; the default (Windmeijer) path is
+documented as matching R rather than Stata `gmm` and is NOT asserted as Stata
+parity.  R `gmm` has no `s_residuals="two-step"` equivalent (always e1), so
+no R-side assertion is added (rule 3: no clean R anchor — documented, not
+forced).  `abond()` is unaffected (inherits `windmeijer=True,
+s_residuals="one-step"` defaults, correct for xtabond/xtdpd).
+
+**Status:** RESOLVED — both gaps closed and exposed as toggles; parity tests
+added.
 
 ### GMM-GN: Stata Expression-Form Weighting Matrix (Closed)
 
