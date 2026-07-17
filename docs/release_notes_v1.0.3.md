@@ -1,8 +1,8 @@
 # open-econs v1.0.3 — Release Notes
 
-**Status: PREPARED.** Version bumped to `1.0.3` in `pyproject.toml`; README,
-ROADMAP, and this document updated. Tagging `v1.0.3`, the GitHub Release, and
-the PyPI upload are downstream of maintainer sign-off.
+**Status: PUBLISHED.** Tagged `v1.0.3`, GitHub Release and PyPI upload
+completed. Version bumped to `1.0.3` in `pyproject.toml`; README, ROADMAP,
+and this document updated.
 
 ## Highlights
 
