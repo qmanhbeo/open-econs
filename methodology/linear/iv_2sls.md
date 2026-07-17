@@ -186,6 +186,34 @@ The default `"robust"` corresponds to HC0 without finite-sample correction. Use 
 | Cluster-robust SE | `cluster="<col>"` (one-way); `debiased=False` no SSC (Stata), `debiased=True` `G/(G−1)` SSC (R) | `ivregress 2sls, vce(cluster)` | `vcovCL` |
 | HAC SE | `cov_type="HAC", lags=, time=` | `ivregress 2sls, vce(hac)` **NOT supported (rc=111)** — R-ref only | Not directly |
 | Predict | Not implemented | Yes | `predict()` |
+| FE IV (`entity=`) | pyfixest `feols` within-path | `xtivreg y w (x=z), fe` | `plm`/`lfe` (no AER FE) |
+
+### Fixed-effects IV: Stata `xtivreg, fe` parity (source-verified 2026-07-17)
+
+`iv(..., entity="id")` routes through pyfixest `feols` (within-demeaned IV).
+Coefficients match Stata `xtivreg, fe` **exactly** (within-transform sweeps
+the intercept; both return only the exogenous/endogenous slopes).
+
+Standard errors, however, have a **cov_type-dependent** divergence from Stata
+`xtivreg, fe` (N=500, n_g=50, K=3):
+
+| `cov_type` | Stata SE(w) | OE SE(w) | match |
+|------------|-------------|----------|-------|
+| `nonrobust` | 0.0555038 | 0.0555038 | ✅ exact |
+| `robust`/`HC1` | 0.0523534 | 0.056824 | ❌ ~8.5% gap |
+
+**Root cause — NOT a DOF rescale.** Stata's `e(df_rz)` = 448 =
+`N − n_g + 1 − K`, identical to OE's pyfixest default `df_resid`
+(`n − n_absorbed − k`, `n_absorbed = n_g − 1`). A candidate
+`fe_dof="xtivreg"` toggle that rescaled V by `(N−n_g−K)/(N−2n_g−K+1)`
+(xtivreg.ado line 1816) was tested and made `robust` SEs *worse* (0.0602 vs
+Stata 0.0524) while leaving `nonrobust` unchanged — proving the gap lives in
+the **robust sandwich meat/bread** (Stata's within-transform robust VCE
+normalization), not the residual df. A correct toggle requires reproducing
+Stata's within-robust meat exactly; this is OPEN work (see FUTURE_WORK
+`iv() FE SE DOF Reconciliation`). `nonrobust` FE already matches Stata, so
+only `robust`/`HC1` FE is affected. Do **not** ship a `fe_dof` toggle that
+merely rescales df — it is incorrect (rule 2/6).
 
 ## Implementation Details
 

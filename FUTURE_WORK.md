@@ -168,12 +168,10 @@ available in R's `sandwich::NeweyWest` but not in OE.
     `ivregress` has no HAC VCE.  So iv() HAC parity is R-reference only
     (linearmodels/sandwich), NOT Stata.  Documented as a convention boundary.
   - **FE:** `ivregress` has no `absorb`; FE IV is `xtivreg, fe`.  Coefficients
-    match `xtivreg, fe` exactly (within-transform drops _cons).  **SEs differ
-    (~2%):** OE's pyfixest path uses HC1 (`N/(N-K)`) with `df_resid =
-    n - n_absorbed - k`, while Stata `xtivreg, fe` uses a different DOF
-    normalization.  Open item — needs DOF reconciliation (likely Stata uses
-    `N - K` where K includes absorbed entities differently, or a no-SSC
-    default).  See `iv() FE SE DOF` below.
+    match `xtivreg, fe` exactly (within-transform drops _cons).  **SEs:** the
+    divergence is NOT a clean DOF rescale (ruled out 2026-07-17 — see
+    `iv() FE SE DOF` below).  `nonrobust` matches Stata exactly; `robust`
+    diverges ~8.5% in the sandwich meat/bread.  Open item.
 - **R parity — ACHIEVED (≤1e-6, tested in tests/r/tests/test_r_iv.py, 2026-07-17):**
   - `AER` installed (R 4.6.1).  `ivreg2` is **UNAVAILABLE** for R 4.6.1
     (removed from CRAN) — parity established against `AER::ivreg` +
@@ -191,15 +189,44 @@ available in R's `sandwich::NeweyWest` but not in OE.
 - **HC0/HC2/HC3:** implemented in OE; no Stata/R parity test yet.  Low risk
   (standard HC definitions) but uncovered per rule 15.
 
-### iv() FE SE DOF Reconciliation (OPEN 2026-07-17)
+### iv() FE SE DOF Reconciliation (OPEN — re-diagnosed 2026-07-17)
 
-- **What:** `iv(..., entity="id")` (pyfixest FE path) matches Stata
-  `xtivreg, fe` **coefficients** exactly but **SEs differ by ~2%**.  Suspect
-  DOF normalization: OE `df_resid = n - n_absorbed - k` with HC1 `N/(N-K)`;
-  Stata `xtivreg, fe` likely uses `N - K` with K counting absorbed entities,
-  or a no-SSC default.  Needs source-confirmation against `xtivreg.ado`.
-- **Status:** Open.  Not yet covered by a test (would require accepting the
-  gap at atol~1e-2, which violates rule 2).  Diagnose before adding a test.
+- **Empirical result (source-verified, N=500, n_g=50, K=3, data
+  `df_iv_panel.csv`):** `iv(..., entity="id")` vs Stata `xtivreg y w (x=z1 z2), fe`.
+
+  | cov_type | Stata SE(w) | OE SE(w) | match? |
+  |----------|-------------|----------|--------|
+  | nonrobust | 0.0555038 | 0.0555038 | ✅ exact (≤1e-6) |
+  | robust | 0.0523534 | 0.056824 | ❌ ~8.5% gap |
+  | HC1 | (same as robust) | 0.056824 | ❌ same gap |
+
+  Coefficients match Stata exactly in all cases (within-transform drops _cons;
+  both return only `w`, `x`).
+
+- **Root cause (NOT a DOF rescale — ruled out):** Stata `e(df_rz)` = 448 =
+  `N - n_g + 1 - K` = `500 - 50 + 1 - 3`, which is **identical** to OE's
+  pyfixest default `df_resid` (`n - n_absorbed - k`, `n_absorbed = n_g - 1`).
+  So the residual df is the SAME.  A candidate `fe_dof="xtivreg"` toggle that
+  rescaled V by `(N-n_g-K)/(N-2*n_g-K+1)` (xtivreg.ado line 1816, the
+  non-cluster VCE rescale) was tried and made robust SEs WORSE (0.0602 vs
+  Stata 0.0524), and left nonrobust unchanged — confirming the divergence is in
+  the **robust sandwich meat/bread** (Stata's within-transform robust VCE), not
+  the DOF.  The line-1816 rescale applies to the demeaned-regression V, but
+  Stata's robust FE meat must be computed on the within-demeaned moments with a
+  different normalization than pyfixest's.
+
+- **Why no toggle yet:** a correct `fe_dof` toggle requires reproducing Stata's
+  within-robust meat exactly, which needs deeper reverse-engineering of
+  `xtivreg.ado`'s robust path (the `_regress ..., vce(robust)` on demeaned data
+  + the line-1816 rescale interaction).  Shipping a wrong toggle would violate
+  rule 2/6.  `nonrobust` FE already matches Stata, so only `robust`/`HC1` FE
+  is broken.
+
+- **Status:** Open.  No test (would need atol~1e-2, violating rule 2).  The
+  `iv_fe.do` + `iv_fe.dta` generator pair is archived under
+  `tests/stata/generate-fixtures/archive/` for re-tracing.  Next step: read
+  `xtivreg.ado` robust branch (around the `within` program, lines 1780-1840)
+  and compare the sandwich meat against pyfixest's `feols` FE-robust VCE.
 
 ---
 

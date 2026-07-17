@@ -27,6 +27,7 @@ from open_econs._internal import errors
 from open_econs.core.base import BaseModel
 from open_econs.core.call_capture import capture_call as _capture_call
 from open_econs.core.cov_type import validate_cov_type
+from open_econs.models.linear.iv import _warn_once
 from open_econs.models._gmm_core import estimate_gmm as _estimate_gmm
 from open_econs.models.linear.iv import _parse_iv_formula
 
@@ -307,6 +308,20 @@ def gmm(
                 "hac_weighting=True computes a pooled HAC S and is incompatible "
                 "with cluster=; drop cluster= for R-style pooled HAC."
             )
+
+    # Footgun (rule 18): R's gmm(vcov="HAC") is internally inconsistent (the
+    # two-step coefficient uses a HAC weight from 2SLS residuals, but the
+    # reported VCE uses two-step residuals). OE uses one consistent S, so SEs
+    # match R only to ~1e-3. Warn once when the R-equivalent path is selected.
+    if cov_type == "HAC" and hac_weighting:
+        _warn_once(
+            "gmm_hac_r_inconsistent",
+            "R's gmm(vcov='HAC') is internally inconsistent: its two-step "
+            "coefficient uses a HAC weight from 2SLS residuals while the reported "
+            "VCE uses two-step residuals. OE uses one consistent S, so SEs match "
+            "R only to ~1e-3 (not the usual 1e-6). This is an R-internals quirk, "
+            "not an OE bug.",
+        )
 
     if weight not in ("stata", "iid"):
         raise ValueError("weight must be 'stata' or 'iid'.")

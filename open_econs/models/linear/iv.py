@@ -13,6 +13,19 @@ from open_econs._internal.errors import VcovTypeNotSupportedError
 from open_econs.core.base import BaseModel
 from open_econs.core.cov_type import validate_cov_type
 
+import warnings as _warnings
+
+# One-time footgun warnings (rule 18): fired at most once per process so they
+# inform without nagging.
+_WARNED: set[str] = set()
+
+
+def _warn_once(key: str, message: str) -> None:
+    if key in _WARNED:
+        return
+    _WARNED.add(key)
+    _warnings.warn(message, UserWarning, stacklevel=2)
+
 
 class IVResult(BaseModel):
     def __init__(
@@ -285,6 +298,17 @@ def iv(
     has_fe = (entity is not None or time_fe is not None or fixed_effects is not None)
     if cov_type in ("HC2", "HC3") and has_fe:
         raise VcovTypeNotSupportedError(cov_type)
+
+    # Footgun (rule 18): default debiased=False uses Stata's SE convention
+    # (s2=SSR/N, no cluster SSC). R users comparing to AER::ivreg/sandwich
+    # will see different SEs. Warn once so the divergence is discoverable.
+    if not debiased:
+        _warn_once(
+            "iv_debiased_stata",
+            "iv() uses the Stata SE convention by default (s2=SSR/N; no cluster "
+            "SSC). R users comparing to AER::ivreg + sandwich should pass "
+            "debiased=True to match R's s2=SSR/(N-K) and G/(G-1) cluster SSC.",
+        )
 
     if cov_type == "clustered" and cluster is None:
         raise ValueError(
