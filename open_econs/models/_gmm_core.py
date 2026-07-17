@@ -98,6 +98,7 @@ def estimate_gmm(
     hac_adjust: bool = False,
     windmeijer: bool = True,
     robust_meat: str = "one-step",
+    weight: str = "stata",
 ) -> dict[str, Any]:
     """General two-step GMM estimator, mirroring xtabond2's Mata source (v3.7.2).
 
@@ -174,6 +175,23 @@ def estimate_gmm(
         evidence: Stata's ``e(S)`` extracted from a live run equals
         ``(1/N)·Σᵢ(Zᵢ·e2ᵢ)(Zᵢ·e2ᵢ)'`` to machine epsilon, whereas the
         one-step-residual ``S`` differs structurally.)
+    weight : {"stata", "iid"}, default "stata"
+        Which covariance structure feeds the efficient-weight BREAD ``A2 = S^{-1}``
+        of the two-step GMM.  The default ``"stata"`` uses the *same*
+        covariance structure as the VCE (cluster S for cluster, HAC S for HAC,
+        iid S for robust) — this matches Stata's ``gmm`` command and makes the
+        two-step coefficient change across robust/cluster/HAC.  ``"iid"``
+        instead always uses the plain heteroskedasticity-robust iid bread
+        (``S_iid = Σ_i (Z_i'e1_i)(Z_i'e1_i)'`` with each observation its own
+        group, i.e. the identity grouping), while the VCE meat keeps the
+        cov-structure S.  This is the convention used by R's ``gmm`` package
+        for cluster/HAC: ``vcov="iid", cluster=`` (iid weight) and
+        ``vcov="HAC"`` (iid weight + HAC meat).  Set ``weight="iid"`` to
+        reproduce R's ``gmm`` cluster/HAC coefficient (which differs from
+        Stata's coefficient).  The meat is unaffected by this flag — only the
+        efficient weight.  Source-confirmed: R cluster coef
+        ``[0.850, 2.012, 1.354]`` (iid bread) vs Stata cluster coef
+        ``[0.915, 1.989, 1.621]`` (cluster bread) on the gmm fixture.
     """
     n_eq = Y.shape[0]
     N = float(len(np.unique(eq_entity)))
@@ -232,6 +250,26 @@ def estimate_gmm(
             ze = Z[mask].T @ e1[mask]
             S += np.outer(ze, ze)
 
+    # Efficient-weight BREAD selection (``weight`` toggle, rule 15).
+    # Default ``"stata"``: bread uses the SAME cov-structure S as the VCE
+    # (cluster/HAC/iid), matching Stata ``gmm`` and changing b2 across
+    # robust/cluster/HAC.  ``"iid"``: bread uses the plain heteroskedastic
+    # iid S (each obs its own group, no kernel) regardless of cov_type,
+    # matching R's ``gmm`` cluster/HAC convention (iid weight + cov-structure
+    # meat).  Only the efficient weight switches; the VCE meat stays at the
+    # cov-structure S / S2 (see ``robust_meat`` path).  Do NOT move this
+    # inside the S2 block -- the bread governs b2 for every two-step branch.
+    if weight == "iid":
+        S_iid = np.zeros((L, L))
+        for i in range(n_eq):
+            ze = Z[i].T * e1[i]
+            S_iid += np.outer(ze, ze)
+        bread_S = S_iid
+    elif weight == "stata":
+        bread_S = S
+    else:
+        raise ValueError("weight must be 'stata' or 'iid'.")
+
     if onestepnonrobust:
         b = b1
         pV_pre = V1
@@ -243,9 +281,9 @@ def estimate_gmm(
             VXZA1 = V1 @ ZtX.T @ A1             # V1 * (ZX' A1)
             V1robust = VXZA1 @ S @ VXZA1.T
         try:
-            A2 = np.linalg.inv(S)
+            A2 = np.linalg.inv(bread_S)
         except np.linalg.LinAlgError:
-            A2 = np.linalg.pinv(S)
+            A2 = np.linalg.pinv(bread_S)
         G2 = ZtX.T @ A2 @ ZtX
         try:
             V2 = np.linalg.inv(G2)

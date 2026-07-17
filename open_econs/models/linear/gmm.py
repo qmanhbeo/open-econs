@@ -143,6 +143,7 @@ def gmm(
     hac_adjust: bool = False,
     windmeijer: bool = True,
     robust_meat: str = "one-step",
+    weight: str = "stata",
 ) -> GMMResult:
     """Estimate a linear-in-parameters GMM regression.
 
@@ -214,6 +215,20 @@ def gmm(
         of them yields a hybrid that matches neither R/literature nor Stata.
         Ignored when ``step="one-step"`` or ``cov_type``
         is not ``"robust"``.
+    weight : {"stata", "iid"}, default "stata"
+        Which covariance structure feeds the two-step efficient-weight BREAD.
+        The default ``"stata"`` uses the same structure as the VCE (cluster S
+        for ``cov_type="cluster"``, HAC S for ``cov_type="HAC"``, iid S for
+        ``cov_type="robust"``), matching Stata's ``gmm`` command and making the
+        two-step coefficient change across robust/cluster/HAC.  ``"iid"``
+        instead always uses the plain heteroskedasticity-robust iid weight
+        (each observation its own group), while the VCE meat keeps the
+        cov-structure S — matching R's ``gmm`` package for cluster/HAC.  Set
+        ``weight="iid"`` together with ``robust_meat="two-step"`` and
+        ``windmeijer=False`` to reproduce R's ``gmm(..., vcov="iid",
+        cluster=)`` coefficient and cluster-robust SEs.  This flag governs ONLY
+        the efficient weight; the meat is governed by ``robust_meat``.  See
+        GMM-RCLUSTER in ``FUTURE_WORK.md`` and ``methodology/linear/gmm.md``.
 
     Returns
     -------
@@ -274,10 +289,12 @@ def gmm(
         if time not in data.columns:
             raise errors.missing_column_error(time, data.columns.tolist())
 
+    if weight not in ("stata", "iid"):
+        raise ValueError("weight must be 'stata' or 'iid'.")
     call = _capture_call(
         formula=formula, step=step, cov_type=cov_type, cluster=cluster,
         lags=lags, time=time, hac_adjust=hac_adjust, windmeijer=windmeijer,
-        robust_meat=robust_meat,
+        robust_meat=robust_meat, weight=weight,
     )
 
     parsed = _parse_iv_formula(formula, data)
@@ -331,7 +348,7 @@ def gmm(
         Y, X, Z, eq_entity, core_step, robust=robust,
         time_labels=hac_time_labels, max_lags=hac_max_lags,
         hac_adjust=use_hac_adjust, windmeijer=windmeijer,
-        robust_meat=robust_meat,
+        robust_meat=robust_meat, weight=weight,
     )
 
     if cov_type == "HAC":
