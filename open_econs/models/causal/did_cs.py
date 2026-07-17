@@ -1,3 +1,4 @@
+import concurrent.futures as _cf
 import warnings
 from typing import Any
 
@@ -9,6 +10,15 @@ from open_econs._version import __version__
 from open_econs.core.base import BaseModel
 from open_econs.core.call_capture import capture_call as _capture_call
 from open_econs.core.cov_type import validate_cov_type
+
+# Below which the bootstrap permutation loop is run sequentially.  Each
+# bootstrap replication recomputes the full ATT (a DR-IPW or OLS 2x2 per
+# (g,t) cell), so the process pool pays a fixed spawn + per-item pickling
+# overhead (the DataFrame and the full ``open_econs`` import must be
+# re-created in every worker).  For small loops parallelising is a net loss.
+# The threshold is deliberately conservative so default behaviour never
+# regresses.  Mirrors the convention in ``open_econs/models/causal/placebo.py``.
+_MIN_PARALLEL_ITEMS = 8
 
 
 class AggteResult(BaseModel):
@@ -533,6 +543,91 @@ def _staggered_hac_se(
     return float(np.sqrt(cluster_se ** 2 * factor))
 
 
+def _one_bootstrap_rep(
+    boot_entities: np.ndarray,
+    df: pd.DataFrame,
+    entity: str,
+    y: str,
+    time: str,
+    treatment: str,
+    control_cohorts: str,
+    all_times: np.ndarray,
+    method: str,
+    covariates: list[str] | None,
+    cluster: str,
+    entities_unique: np.ndarray,
+) -> float | None:
+    """Compute one bootstrap replication's aggregated ATT.
+
+    Pure worker for the entity-resampling bootstrap in :func:`did_cs`.  Takes
+    a pre-generated resample array plus the (read-only) static inputs and
+    returns the weighted-average ATT for that replication, or ``None`` if no
+    cohort x post-period cell produced a finite ATT.  Kept at module level so
+    it is picklable across ``ProcessPoolExecutor`` (Windows spawn).
+
+    The body is identical to the sequential loop in :func:`did_cs`; only the
+    resample is passed in instead of drawn inside the worker, which keeps the
+    deterministic draw order the parent ``RandomState`` produced.
+    """
+    import statsmodels.api as sm
+
+    boot_df = pd.concat([df[df[entity] == e] for e in boot_entities], ignore_index=True)
+    boot_g = _first_treat_period(boot_df[treatment], boot_df[time], boot_df[entity])
+    boot_df["__g"] = boot_g.values
+    boot_never = boot_df["__g"] == np.inf
+    boot_cohorts = sorted(s for s in boot_df["__g"].unique() if np.isfinite(s))
+
+    boot_rows = []
+    for gco in boot_cohorts:
+        gco = float(gco)
+        pre = gco - 1
+        if pre not in all_times:
+            continue
+        for t in all_times:
+            if t < gco:
+                continue
+            if control_cohorts == "not_yet_treated":
+                ctrl_mask = (boot_df["__g"] > t) | boot_never
+            else:
+                ctrl_mask = boot_never
+            sub = boot_df[(((boot_df["__g"] == gco) | ctrl_mask) & (boot_df[time].isin([pre, t])))]
+            if sub.empty:
+                continue
+            sub = sub.copy()
+            if method == "dripw" and covariates:
+                try:
+                    res = _cell_dripw(sub, y, entity, time, treatment,
+                                      gco, t, pre, covariates, cluster,
+                                      entities_unique)
+                    if np.isfinite(res["att"]):
+                        boot_rows.append({"att": res["att"], "n_treat": res["n_treat"]})
+                except Exception:
+                    continue
+            else:
+                sub["__post"] = (sub[time] == t).astype(int)
+                sub["__grp"] = (sub["__g"] == gco).astype(int)
+                sub["__D"] = sub["__post"] * sub["__grp"]
+                yv = sub[y].values.astype(float)
+                Xv = np.column_stack([
+                    np.ones(len(sub)),
+                    sub["__post"].values,
+                    sub["__grp"].values,
+                    sub["__D"].values,
+                ]).astype(float)
+                try:
+                    fit = sm.OLS(yv, Xv).fit(cov_type="cluster", cov_kwds={"groups": sub[cluster].values})
+                    att = float(fit.params[3])
+                    n_treat = int(((sub["__g"] == gco) & (sub[time] == t)).sum())
+                    boot_rows.append({"att": att, "n_treat": n_treat})
+                except Exception:
+                    continue
+
+    if boot_rows:
+        boot_gt = pd.DataFrame(boot_rows)
+        return float(np.average(boot_gt["att"], weights=boot_gt["n_treat"]))
+    return None
+
+
 def did_cs(
     data: pd.DataFrame,
     y: str,
@@ -548,6 +643,7 @@ def did_cs(
     bootstrap: bool = False,
     bootstrap_reps: int = 500,
     seed: int | None = None,
+    parallel: bool = False,
     ) -> CsDiDResult:
     """Callaway & Sant'Anna (2021) staggered difference-in-differences.
 
@@ -603,6 +699,14 @@ def did_cs(
         Number of bootstrap replications (only used when ``bootstrap=True``).
     seed : int, optional
         Random seed for reproducible bootstrap.
+    parallel : bool, default False
+        If True and ``bootstrap=True`` with at least ``_MIN_PARALLEL_ITEMS``
+        replications, run the bootstrap resamples across a process pool
+        (``ProcessPoolExecutor``) instead of sequentially.  Sequential and
+        parallel paths are bit-identical: the resample sequence is drawn from
+        the seeded ``RandomState`` in the parent process and passed to each
+        worker, so the deterministic draw order is preserved.  The loop runs
+        sequentially below ``_MIN_PARALLEL_ITEMS`` to avoid spawn overhead.
 
     Returns
     -------
@@ -713,6 +817,7 @@ def did_cs(
         cluster=cluster, cov_type=cov_type, lags=lags,
         control_cohorts=control_cohorts,
         bootstrap=bootstrap, bootstrap_reps=bootstrap_reps, seed=seed,
+        parallel=parallel,
     )
 
     df = data.copy()
@@ -843,63 +948,37 @@ def did_cs(
     if bootstrap and bootstrap_reps > 0:
         rng = np.random.RandomState(seed)
         entities_unique = df[entity].unique()
-        boot_atts = []
-        for _ in range(bootstrap_reps):
-            boot_entities = rng.choice(entities_unique, size=len(entities_unique), replace=True)
-            boot_df = pd.concat([df[df[entity] == e] for e in boot_entities], ignore_index=True)
-            boot_g = _first_treat_period(boot_df[treatment], boot_df[time], boot_df[entity])
-            boot_df["__g"] = boot_g.values
-            boot_never = boot_df["__g"] == np.inf
-            boot_cohorts = sorted(s for s in boot_df["__g"].unique() if np.isfinite(s))
+        n_entities = len(entities_unique)
 
-            boot_rows = []
-            for gco in boot_cohorts:
-                gco = float(gco)
-                pre = gco - 1
-                if pre not in all_times:
-                    continue
-                for t in all_times:
-                    if t < gco:
-                        continue
-                    if control_cohorts == "not_yet_treated":
-                        ctrl_mask = (boot_df["__g"] > t) | boot_never
-                    else:
-                        ctrl_mask = boot_never
-                    sub = boot_df[(((boot_df["__g"] == gco) | ctrl_mask) & (boot_df[time].isin([pre, t])))]
-                    if sub.empty:
-                        continue
-                    sub = sub.copy()
-                    if method == "dripw" and covariates:
-                        try:
-                            res = _cell_dripw(sub, y, entity, time, treatment,
-                                              gco, t, pre, covariates, cluster,
-                                              entities_unique)
-                            if np.isfinite(res["att"]):
-                                boot_rows.append({"att": res["att"], "n_treat": res["n_treat"]})
-                        except Exception:
-                            continue
-                    else:
-                        sub["__post"] = (sub[time] == t).astype(int)
-                        sub["__grp"] = (sub["__g"] == gco).astype(int)
-                        sub["__D"] = sub["__post"] * sub["__grp"]
-                        yv = sub[y].values.astype(float)
-                        Xv = np.column_stack([
-                            np.ones(len(sub)),
-                            sub["__post"].values,
-                            sub["__grp"].values,
-                            sub["__D"].values,
-                        ]).astype(float)
-                        try:
-                            fit = sm.OLS(yv, Xv).fit(cov_type="cluster", cov_kwds={"groups": sub[cluster].values})
-                            att = float(fit.params[3])
-                            n_treat = int(((sub["__g"] == gco) & (sub[time] == t)).sum())
-                            boot_rows.append({"att": att, "n_treat": n_treat})
-                        except Exception:
-                            continue
+        # Draw the full resample sequence in the parent so the deterministic
+        # draw order is preserved regardless of how the reps are distributed
+        # across workers.  Each worker receives its own pre-generated resample.
+        boot_resamples = [
+            rng.choice(entities_unique, size=n_entities, replace=True)
+            for _ in range(bootstrap_reps)
+        ]
 
-            if boot_rows:
-                boot_gt = pd.DataFrame(boot_rows)
-                boot_atts.append(float(np.average(boot_gt["att"], weights=boot_gt["n_treat"])))
+        # Static, read-only inputs shared by every replication, packed once to
+        # match the positional args of :func:`_one_bootstrap_rep` after
+        # ``boot_entities``.
+        parent_args = (
+            df, entity, y, time, treatment, control_cohorts,
+            all_times, method, covariates, cluster, entities_unique,
+        )
+
+        if parallel and bootstrap_reps >= _MIN_PARALLEL_ITEMS:
+            with _cf.ProcessPoolExecutor() as ex:
+                boot_atts_raw = list(ex.map(
+                    _one_bootstrap_rep,
+                    boot_resamples,
+                    *[ [a] * bootstrap_reps for a in parent_args ],
+                ))
+        else:
+            boot_atts_raw = [
+                _one_bootstrap_rep(b, *parent_args) for b in boot_resamples
+            ]
+
+        boot_atts = [a for a in boot_atts_raw if a is not None]
 
         if boot_atts:
             overall = float(np.mean(boot_atts))
