@@ -15,11 +15,17 @@ Convention notes (source-confirmed 2026-07-17):
      ``instruments()`` + ``winitial(unadjusted)`` form, which gives the
      standard 2SLS one-step estimator.  Coefficients match OE to <=1e-7
      in all cases (one-step and two-step).
-  3. Stata's ``gmm`` does NOT apply the Windmeijer (2005) finite-sample
-     correction for two-step robust VCE.  OE's gmm() always applies
-     Windmeijer when ``cov_type="robust"`` and ``step="two-step"``.
-     Two-step robust SEs therefore diverge (~15%) and are NOT valid
-     parity targets for SE assertions.  See GMM-WC in FUTURE_WORK.md.
+   3. Stata's ``gmm`` does NOT apply the Windmeijer (2005) finite-sample
+      correction for two-step robust VCE, and it builds the robust MEAT of
+      the two-step VCE's full sandwich from the TWO-step residuals e2 (the
+      efficient-weight BREAD stays at the one-step residuals e1).  OE's
+      default ``gmm()`` applies Windmeijer and builds the robust S from e1
+      (the literature/R convention), so its two-step robust SEs diverge
+      (~15%) from Stata's ``gmm``.  Setting ``windmeijer=False`` AND
+      ``s_residuals="two-step"`` reproduces Stata's ``gmm`` two-step robust
+      VCE exactly (<=1e-6; see GMM-WC in FUTURE_WORK.md).  The default
+      (Windmeijer) path matches R's ``gmm`` package instead and is NOT a
+      Stata-parity target.
   4. One-step J-statistic: Stata's ``e(J)`` uses the model-based
      weighting (from ``winitial(unadjusted)``) even when ``vce(robust)``
      is specified.  OE uses the robust S matrix when
@@ -31,6 +37,7 @@ Convention notes (source-confirmed 2026-07-17):
 
 from __future__ import annotations
 
+import numpy as np
 import numpy.testing as npt
 import pytest
 
@@ -227,26 +234,51 @@ class TestGmmOverIdentifiedRobust:
 
 class TestGmmOverIdentifiedTwoStepRobust:
     """Over-identified, two-step, robust.
-    Coefficients match OE to machine epsilon.  SEs not asserted (Windmeijer).
-    J matches to machine epsilon.
+
+    DEFAULT (windmeijer=True, s_residuals="one-step") matches the
+    econometric literature / R's ``gmm`` package, NOT Stata's ``gmm``
+    command (which omits Windmeijer and uses two-step-residual S in the
+    robust meat).  Stata-parity is achieved with windmeijer=False,
+    s_residuals="two-step" — asserted below at <=1e-6.
     """
 
     @pytest.fixture(autouse=True)
     def _run(self, df_gmm):
         self.s = S
-        self.oe_r = oe.gmm(
+        # Default: matches R / literature convention.
+        self.oe_default = oe.gmm(
             "y ~ x1 + x2 | z1 + z2 + z3 + z4 + z5", df_gmm,
             step="two-step", cov_type="robust",
+        )
+        # Stata `gmm` parity: disable Windmeijer + use two-step-residual meat.
+        self.oe_stata = oe.gmm(
+            "y ~ x1 + x2 | z1 + z2 + z3 + z4 + z5", df_gmm,
+            step="two-step", cov_type="robust",
+            windmeijer=False, s_residuals="two-step",
         )
 
     def test_coefficients(self):
         expected = [self.s["b0_oid_2s_r"], self.s["b1_oid_2s_r"], self.s["b2_oid_2s_r"]]
-        npt.assert_allclose(self.oe_r.coefficients.values, expected, atol=1e-6)
+        npt.assert_allclose(self.oe_stata.coefficients.values, expected, atol=1e-6)
 
-    def test_standard_errors_not_asserted(self):
-        # NOTE: same Windmeijer correction divergence as non-robust two-step.
-        pass
+    def test_standard_errors_stata_parity(self):
+        # Stata `gmm` two-step robust SEs reproduced to <=1e-6
+        # (windmeijer=False + s_residuals="two-step").  See GMM-WC in FUTURE_WORK.
+        expected = [
+            self.s["se0_oid_2s_r"], self.s["se1_oid_2s_r"], self.s["se2_oid_2s_r"],
+        ]
+        npt.assert_allclose(self.oe_stata.std_errors.values, expected, atol=1e-6)
+
+    def test_default_matches_r_not_stata(self):
+        # The default path deliberately differs from Stata `gmm` (~15%) and
+        # instead matches R's gmm::gmm default.  Guard against accidental
+        # regression to Stata parity on the default toggle.
+        expected_stata = [
+            self.s["se0_oid_2s_r"], self.s["se1_oid_2s_r"], self.s["se2_oid_2s_r"],
+        ]
+        gap = np.max(np.abs(self.oe_default.std_errors.values - np.array(expected_stata)))
+        assert gap > 1e-3, "default gmm() unexpectedly matches Stata gmm two-step robust SEs"
 
     def test_hansen_j(self):
-        assert self.oe_r.hansen_j_dof == 3
-        npt.assert_allclose(self.oe_r.hansen_j, self.s["J_oid_2s_r"], atol=1e-6)
+        assert self.oe_stata.hansen_j_dof == 3
+        npt.assert_allclose(self.oe_stata.hansen_j, self.s["J_oid_2s_r"], atol=1e-6)
