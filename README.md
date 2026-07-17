@@ -7,8 +7,10 @@
 [![Downloads](https://img.shields.io/pypi/dm/open-econs)](https://pypi.org/project/open-econs/)
 
 **open-econs is a Python library for empirical economics and causal inference
-that reproduces Stata and R results to a verified numerical tolerance — the
-econometrics toolkit a Stata/R researcher would reach for, but native in Python.**
+that reproduces Stata and R results to a verified numerical tolerance — built
+for researchers migrating off Stata/R and for Python users who need causal
+inference, it is the econometrics toolkit a Stata/R researcher would reach for,
+but native in Python.**
 
 Unlike statsmodels, linearmodels, or fixest, open-econs is validated against
 Stata and R across the whole causal-inference stack: **550+ parity tests

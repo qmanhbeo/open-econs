@@ -2,6 +2,20 @@
 name = "open-econs"
 version = "1.0.3"
 description = "Empirical economics and causal inference in Python - a scikit-learn-style unified API with Stata/R-grade numerical parity."
+keywords = [
+    "econometrics",
+    "economics",
+    "causal inference",
+    "stata",
+    "r",
+    "difference-in-differences",
+    "synthetic control",
+    "panel data",
+    "regression discontinuity",
+    "instrumental variables",
+    "gmm",
+    "time series",
+]
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
