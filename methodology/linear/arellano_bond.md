@@ -539,13 +539,15 @@ print(f"sig2 = {result.sig2:.6f}")
   Stata uses `gmm(L.y, lag(2 4)) iv(x z) nolevel`, i.e. GMM instruments at
   lag depths 2–4; OE's `collapse=True` default with `max_iv_lag=4` reproduces
   this.
-- **R (`plm::pgmm`) — BLOCKED.** `pgmm` is broken on R 4.6.1 (the dev R on this
-  machine): it errors inside plm at `cbind(yX1[[i]], V1)` ("number of rows of
-  matrices must match"), reproducible on the canonical `EmplUK` example for
-  `effect="individual"` and `effect="twoways"`. plm 2.6.7 and 2.6.4 both fail;
-  base `plm` (within) works. Root cause is a plm/R-4.6.1 incompatibility, not
-  an OE bug. See FUTURE_WORK "ABOND R-Parity (BLOCKED)". When pgmm runs again,
-  generate `tests/r/fixtures/expected/abond.json` from
+- **R (`plm::pgmm`) — BLOCKED.** `pgmm` is broken on BOTH installed R versions
+  (R 4.6.1 and R 4.5.2, with plm 2.6.3/2.6.4/2.6.7 all tested): it errors inside
+  plm at `cbind(yX1[[i]], V1)` ("number of rows of matrices must match") for
+  `effect="twoways"` and at `cbind(W1[[i]], Z1[[i]])` / `seq_len(TL1-1)` NA for
+  `effect="individual"`, reproducible on the canonical `EmplUK` example. Base
+  `plm` (within) works. Root cause is a plm library bug (not R-version- or
+  OE-specific, and installing R 4.5.2 does NOT fix it). See FUTURE_WORK
+  "ABOND R-Parity (BLOCKED)" for the source-level diagnosis. When a known-good
+  plm/R combo exists, generate `tests/r/fixtures/expected/abond.json` from
   `tests/r/generate-fixtures/abond.R` using two-part formula
   `y | lag(y,-1)+lag(x,0)+lag(z,0) ~ lag(y,-2:-4)+lag(x,0)+lag(z,0)` with
   `effect="twoways", transformation="d"`, and add `tests/r/tests/test_r_abond.py`
