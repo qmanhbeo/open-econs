@@ -29,6 +29,16 @@ J-statistic convention (source-confirmed 2026-07-17):
     textbook GMM J test under homoskedasticity (Hansen 1982).  The
     two-step J always uses the efficient weighting ``A2 = S^{-1}``
     regardless of the robust flag.
+
+Windmeijer correction (source-confirmed 2026-07-17):
+    OE always applies the Windmeijer (2005) finite-sample correction
+    to the two-step robust VCE (lines 224-239).  Stata's ``gmm``
+    command does NOT apply this correction by default (confirmed via
+    gmm.ado source: no Windmeijer code, no WC-robust label, no
+    toggle option).  Contrast: Stata's ``xtabond``/``xtdpd`` DO apply
+    it.  Two-step robust SEs from ``gmm()`` therefore differ from
+    Stata's ``gmm`` at ~15% (OE larger, as expected for Windmeijer).
+    See GMM-WC in FUTURE_WORK.md.
 """
 
 from typing import Any

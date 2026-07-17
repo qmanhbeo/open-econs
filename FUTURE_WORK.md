@@ -293,10 +293,12 @@ relaxed tolerances (standing rule 2).
   (line 158 of `_gmm_core.py`). Stata's `e(J)` uses robust sandwich
   `S_hat = (1/N)Σg_ig_i'`. R's `specTest()` does NOT include `/sig2`.
   Two legitimate, source-confirmed conventions exist.
-- **Evidence:** Stata's `gmm.ado` line 1358: `e(J) = Q * N`. Empirically
-  verified: Stata's actual one-step estimate b=[0.830, 1.995, 1.267] with
-  robust S gives J=4.0276, matching Stata's `e(J)=4.0276` to 5 decimals.
-  OE's model-based J=3.770 matches R's `specTest` to machine epsilon.
+- **Evidence:** Stata's `gmm.ado` line 1358: `e(J) = Q * N`. With the
+  corrected fixture (single-equation + `winitial(unadjusted)`), Stata's
+  one-step J=3.7702 (model-based weighting from `winitial(unadjusted)`),
+  while OE's one-step J=4.085 (robust S when `cov_type="robust"`).
+  Both are valid under their respective conventions.  Two-step J matches
+  to machine epsilon (both use efficient S^{-1}).
 - **Status:** Resolved 2026-07-17. OE's `/sig2` convention was kept as-is.
   Documented in `_gmm_core.py` module docstring, inline comment at line 158,
   and `gmm()` docstring. See commit `a941114`.
@@ -314,25 +316,44 @@ relaxed tolerances (standing rule 2).
   parameter to `gmm()` that applies the kernel to both W and VCE.
   Reference: R `gmm` package `.myKernHAC` / `.weightFct`.
 
-### GMM-GN: Stata Gauss-Newton Non-Convergence to 2SLS
+### GMM-WC: Windmeijer Correction Parity Gap
 
-- **What:** Stata's `gmm` command uses iterative Gauss-Newton optimization
-  for expression-form moment conditions.  For linear overidentified models,
-  this does NOT converge to the exact closed-form 2SLS solution.  On the
-  300-obs fixture: Stata one-step b2=1.267 vs exact 2SLS b2=1.354 (diff
-  6.8%).  Two-step coefficients differ by ~0.5% (OE 0.870 vs Stata 0.867).
-  The exactly-identified case is unaffected (unique solution regardless of
-  method, diff ≤1.8e-7).
-- **Consequence:** One-step overidentified coefficient/SE/J assertions
-  against Stata are NOT valid parity targets.  Two-step coefficient assertions
-  are valid at ~0.5% tolerance.  Two-step SE assertions are NOT valid due to
-  the coefficient divergence feeding into the sandwich VCE formula.
-- **Status:** Documented 2026-07-17 in `test_stata_gmm.py` module docstring.
-  This is a real, distinct, previously-undocumented product-level fact that
-  could resurface in any future Stata-GMM parity work.
-- **No action required** (documented convention, not a bug).  If tighter
-  parity is desired for overidentified linear GMM, use Stata `ivregress gmm`
-  which has a different optimization path.
+- **What:** OE's `gmm()` always applies the Windmeijer (2005) finite-sample
+  correction to the two-step robust VCE (`_gmm_core.py` lines 224-239).
+  Stata's `gmm` command does NOT apply this correction by default — confirmed
+  via gmm.ado source (no Windmeijer code, no WC-robust label, no toggle
+  option).  Contrast: Stata's `xtabond`/`xtdpd` DO apply it by default.
+  Two-step robust SEs therefore differ at ~15% (OE larger, as expected for
+  Windmeijer).  On the 300-obs fixture: OE SEs=[0.145, 0.103, 0.826] vs
+  Stata SEs=[0.126, 0.099, 0.775].
+- **Consequence:** Two-step robust SE assertions against Stata's `gmm` are
+  NOT valid parity targets.  Coefficients and J match to machine epsilon.
+- **Status:** Documented 2026-07-17 in `test_stata_gmm.py` (SE assertions
+  removed for two-step robust) and `FUTURE_WORK.md`.
+- **Decision required:** Whether to add a `windmeijer=True` parameter to
+  `gmm()` to allow disabling the correction for Stata `gmm` parity, or
+  to accept the gap as a deliberate OE improvement (Stata's `xtabond` also
+  applies Windmeijer, suggesting Stata's omission in `gmm` is the weaker
+  default).
+
+### GMM-GN: Stata Expression-Form Weighting Matrix (Closed)
+
+- **What (corrected 2026-07-17):** The original claim — "Stata's Gauss-Newton
+  doesn't converge to 2SLS" — was **wrong**.  For linear models, the GMM
+  objective is quadratic and any Newton solver converges in one step (confirmed:
+  `e(converged)=1` in all configurations, tightening tolerances has zero effect).
+  The 6.8% gap was a **specification difference**: Stata's multi-equation
+  expression form with `winitial(identity)` minimizes `(Y-Xb)'ZZ'(Y-Xb)` —
+  the ZZ'-weighted objective — NOT the standard 2SLS objective
+  `g'(Z'Z)^{-1}g`.  These coincide only when L==p (exactly-identified).
+- **Resolution:** Regenerated the Stata fixture (`gmm.do`, `gmm.dta`) using
+  single-equation form with `instruments()` + `winitial(unadjusted)`, which
+  gives standard 2SLS.  All overidentified coefficients now match OE to ≤1e-7.
+  Confirmed: Stata single-equation b2=1.354058 = OE b2=1.354058 =
+  Python exact 2SLS b2=1.354058.
+- **Status:** Resolved 2026-07-17.  Fixture regenerated, tests rewritten with
+  valid parity assertions.  See `tests/stata/generate-fixtures/gmm.do` header
+  for the specification rationale.
 
 ### GMM-IVGMM: linearmodels.IVGMM Wrap Candidate (Rule 14)
 
@@ -347,4 +368,4 @@ relaxed tolerances (standing rule 2).
 
 ---
 
-*Last updated: 2026-07-17, GMM parity audit close-out.*
+*Last updated: 2026-07-17, GMM parity audit verification (Items 1-2 resolved).*

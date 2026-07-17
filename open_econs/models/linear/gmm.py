@@ -219,6 +219,13 @@ def gmm(
         ``gmm::specTest(tsls)`` but differs from Stata's ``e(J)`` which
         uses the robust sandwich S matrix.  Both are valid; see
         :mod:`open_econs.models._gmm_core` for the full derivation.
+      * **Windmeijer correction.**  For two-step GMM with
+        ``cov_type="robust"``, OE always applies the Windmeijer (2005)
+        finite-sample correction to the VCE.  Stata's ``gmm`` command
+        does NOT apply this correction by default (contrast:
+        ``xtabond``/``xtdpd`` DO apply it).  Two-step robust SEs
+        therefore differ at ~15% from Stata's ``gmm``.  See GMM-WC in
+        ``FUTURE_WORK.md``.
     """
     if step not in ("one-step", "two-step"):
         raise ValueError("step must be 'one-step' or 'two-step'.")
