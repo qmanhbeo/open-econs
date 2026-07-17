@@ -100,6 +100,7 @@ def estimate_gmm(
     robust_meat: str = "one-step",
     weight: str = "stata",
     hac_weighting: bool = False,
+    exog_idx: np.ndarray | None = None,
 ) -> dict[str, Any]:
     """General two-step GMM estimator, mirroring xtabond2's Mata source (v3.7.2).
 
@@ -178,21 +179,24 @@ def estimate_gmm(
         one-step-residual ``S`` differs structurally.)
     weight : {"stata", "iid"}, default "stata"
         Which covariance structure feeds the efficient-weight BREAD ``A2 = S^{-1}``
-        of the two-step GMM.  The default ``"stata"`` uses the *same*
-        covariance structure as the VCE (cluster S for cluster, HAC S for HAC,
-        iid S for robust) — this matches Stata's ``gmm`` command and makes the
-        two-step coefficient change across robust/cluster/HAC.  ``"iid"``
-        instead always uses the plain heteroskedasticity-robust iid bread
-        (``S_iid = Σ_i (Z_i'e1_i)(Z_i'e1_i)'`` with each observation its own
-        group, i.e. the identity grouping), while the VCE meat keeps the
-        cov-structure S.  This is the convention used by R's ``gmm`` package
-        for cluster/HAC: ``vcov="iid", cluster=`` (iid weight) and
-        ``vcov="HAC"`` (iid weight + HAC meat).  Set ``weight="iid"`` to
-        reproduce R's ``gmm`` cluster/HAC coefficient (which differs from
-        Stata's coefficient).  The meat is unaffected by this flag — only the
-        efficient weight.          Source-confirmed: R cluster coef
-        ``[0.850, 2.012, 1.354]`` (iid bread) vs Stata cluster coef
-        ``[0.915, 1.989, 1.621]`` (cluster bread) on the gmm fixture.
+        AND the robust meat of the two-step GMM.  The default ``"stata"`` uses the
+        *same* covariance structure as the VCE (cluster S for cluster, HAC S for
+        HAC, per-observation EHW S for robust) — this matches Stata's ``gmm``
+        command and makes the two-step coefficient/SE change across
+        robust/cluster/HAC.  ``"iid"`` instead uses the **homoskedastic** iid
+        weight ``S_iid = Z_iid' Z_iid / n`` where ``Z_iid`` is the intercept
+        column plus the *explicit* instruments (the exogenous regressors are
+        excluded — they are their own instruments in ``X``), i.e. R's
+        ``gmm(..., vcov="iid")`` convention.  Both the efficient weight and the
+        robust meat use this homoskedastic S (the meat scaled by the two-step
+        residual variance ``sig2``).  This reproduces R's ``gmm``
+        ``vcov="iid"`` coefficient ``[0.850, 2.012, 1.354]`` and SE
+        ``[0.132, 0.102, 0.805]`` to machine precision.  NOTE: R's ``gmm``
+        ``cluster=`` argument is a **no-op** (it is not a real parameter — it
+        falls through ``...`` and is never consumed), so R has *no* genuine
+        cluster VCE; the historical "R cluster" fixture value is simply R's
+        ``vcov="iid"`` two-step.  Source-confirmed against ``gmm`` v1.9-1 source
+        (``.weightFct`` iid branch, ``FinRes.baseGmm.res``).
     hac_weighting : bool, default False
         HAC sandwich scope (rule 15).  By default (``False``), the HAC long-run
         covariance ``S`` is computed **per-entity** (Newey-West within each
@@ -277,21 +281,29 @@ def estimate_gmm(
             ze = Z[mask].T @ e1[mask]
             S += np.outer(ze, ze)
 
-    # Efficient-weight BREAD selection (``weight`` toggle, rule 15).
+    # Efficient-weight BREAD + robust MEAT selection (``weight`` toggle, rule 15).
     # Default ``"stata"``: bread uses the SAME cov-structure S as the VCE
     # (cluster/HAC/iid), matching Stata ``gmm`` and changing b2 across
-    # robust/cluster/HAC.  ``"iid"``: bread uses the plain heteroskedastic
-    # iid S (each obs its own group, no kernel) regardless of cov_type,
-    # matching R's ``gmm`` cluster/HAC convention (iid weight + cov-structure
-    # meat).  Only the efficient weight switches; the VCE meat stays at the
-    # cov-structure S / S2 (see ``robust_meat`` path).  Do NOT move this
-    # inside the S2 block -- the bread governs b2 for every two-step branch.
+    # robust/cluster/HAC.  ``"iid"``: both bread and meat use the *homoskedastic*
+    # iid S ``S_iid = Z_iid' Z_iid / n`` where Z_iid = [intercept column] +
+    # the *explicit* instruments (exogenous regressors excluded — they are their
+    # own instruments in X).  This is R's ``gmm(..., vcov="iid")`` convention:
+    # the two-step coefficient becomes ``[0.850, 2.012, 1.354]`` and the SE
+    # ``[0.132, 0.102, 0.805]`` (scaled by the two-step residual variance sig2).
+    # The homoskedastic S is scale-free for the coefficient (sig cancels in A2)
+    # but its /n scaling is required for the SE to match R (which divides by n).
+    # Do NOT move this inside the S2 block -- the bread governs b2 for every
+    # two-step branch.
+    S_iid: np.ndarray | None = None
     if weight == "iid":
-        S_iid = np.zeros((L, L))
-        for i in range(n_eq):
-            ze = Z[i].T * e1[i]
-            S_iid += np.outer(ze, ze)
+        if exog_idx is None:
+            z_iid = Z
+        else:
+            n_exog = int(exog_idx.shape[0]) if hasattr(exog_idx, "shape") else len(exog_idx)
+            z_iid = np.column_stack([Z[:, 0], Z[:, n_exog:]])  # intercept + explicit instruments
+        S_iid = z_iid.T @ z_iid / n_eq
         bread_S = S_iid
+        S = S_iid  # V1robust / bread for the iid branch use the homoskedastic S
     elif weight == "stata":
         bread_S = S
     else:
@@ -337,7 +349,22 @@ def estimate_gmm(
         # only the robust meat S2 switches to e2.  Do not "simplify" this to a
         # global S swap -- that regresses parity to a 0.00013 gap.
         S2 = None
-        if (
+        if weight == "iid" and robust and step == "two-step":
+            # R gmm(..., vcov="iid") homoskedastic meat: S2 = sig2 * S_iid
+            # (the same homoskedastic S as the bread, scaled by the two-step
+            # residual variance).  Assemble the full sandwich explicitly so the
+            # /n scaling of S_iid (required to match R's V = (G' v^-1 G)^-1 / n)
+            # is preserved.
+            assert S_iid is not None
+            S2 = sig2 * S_iid
+            GwG = ZtX.T @ A2 @ ZtX                       # G' S_iid^{-1} G  (bread)
+            GwS2wG = ZtX.T @ A2 @ S2 @ A2 @ ZtX          # G' S_iid^{-1} S2 S_iid^{-1} G (meat)
+            invGwG = np.linalg.inv(GwG) if GwG.shape[0] == GwG.shape[1] else np.linalg.pinv(GwG)
+            V2 = invGwG @ GwS2wG @ invGwG * n_eq         # R: V = (G' v^-1 G)^-1 / n, v = sig*z'z/n
+            VXZA1 = V1 @ ZtX.T @ A1
+            V1robust = VXZA1 @ S2 @ VXZA1.T * n_eq
+            A2Ze = A2 @ (Z.T @ e2)
+        elif (
             robust
             and step == "two-step"
             and robust_meat == "two-step"

@@ -368,6 +368,7 @@ def gmm(
         time_labels=hac_time_labels, max_lags=hac_max_lags,
         hac_adjust=use_hac_adjust, windmeijer=windmeijer,
         robust_meat=robust_meat, weight=weight, hac_weighting=hac_weighting,
+        exog_idx=exog_idx,
     )
 
     if cov_type == "HAC":
