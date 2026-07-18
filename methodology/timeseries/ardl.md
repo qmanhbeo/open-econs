@@ -99,12 +99,27 @@ OE default and the only vintage asserted at ≤1e-6 cross-tool.
 | statsmodels             | PSS2001 asymptotic (simulated, k≤10)            | `asymptotic=False` → resimulate at T |
 
 OE `cv_vintage`:
-- `"pss2001"` **(default)** — asymptotic PSS(2001) I(0)/I(1) bounds; asserted
-  ≤1e-6 vs Stata `ardlbounds` (n≥83), R `ARDL` (`exact=FALSE`), statsmodels.
-- `"narayan2005"` — finite-sample (documented divergence, Stata `ardlbounds`
-  small-n / R `dynamac`).
-- Simulated bounds via statsmodels (`asymptotic=False`) reachable through the
-  raw statsmodels result; not a cross-tool parity anchor.
+- `"pss2001"` **(default)** — the **published asymptotic PSS(2001) Table CI
+  (F-bounds) and CII (t-bounds)** I(0)/I(1) critical values, cases 1-5, k=0-10,
+  α ∈ {0.10, 0.05, 0.025, 0.01}. **These are served from an OE-embedded table,
+  NOT from statsmodels' Monte-Carlo simulation** (see root-cause note below).
+  Asserted ≤1e-6 vs Stata `ardlbounds` (n≥83), R `ARDL` (`exact=FALSE`), and R
+  `dynamac::pssbounds` (n>80).
+- `"statsmodels"` — statsmodels' **simulated** finite-sample F-bounds
+  (`asymptotic=False`, re-simulated at the sample size). This is a documented
+  divergence, NOT a cross-tool parity anchor.
+
+**Root cause / footgun (rule 16, 18).** statsmodels' `UECMResults.bounds_test`
+with `asymptotic=True` does **not** return the published PSS(2001) table — it
+returns Monte-Carlo *simulated* asymptotic critical values (via
+`statsmodels.tsa.ardl._pss_critical_value`). For the canonical denmark case
+(case 3, k=3, α=1%) statsmodels gives an I(1) upper bound of ≈6.32, whereas the
+published PSS table (and R/Stata) give **5.61** — a ~0.7 gap, far outside 1e-6.
+OE therefore embeds the published table (extracted verbatim from
+`ARDL:::crit_val_bounds_pss2001`, which reproduces Pesaran-Shin-Smith 2001
+Tables CI/CII) and only uses the F-**statistic** from statsmodels (which *is*
+convention-free and matches to 1e-6). The `asymptotic` flag only ever affected
+statsmodels' CV table, never the statistic.
 
 **P-values do NOT match cross-tool** even when CVs agree: statsmodels uses a
 log-polynomial response surface, Stata uses MacKinnon(1996) auxiliary
@@ -148,25 +163,28 @@ order (what the bounds test needs) IC is irrelevant.
 import open_econs as oe
 
 # fixed-order ARDL(1, 1) of y on x, unrestricted constant (case 3)
-res = oe.ardl(df, "y", exog=["x"], order=(1, 1), trend="c")
+res = oe.ardl_fit(df, "y", exog=["x"], order=(1, 1), trend="c")
 res.summary()
 
 # error-correction form + long-run coefficients (Stata `ardl, ec`)
-u = oe.uecm(df, "y", exog=["x"], order=(1, 1), trend="c")
+u = oe.uecm_fit(df, "y", exog=["x"], order=(1, 1), trend="c")
 u.long_run          # −θ/ρ, Stata/R sign
 u.ec_term           # ρ, speed of adjustment
 
 # PSS bounds test for a level relationship
-bt = u.bounds_test(case=3)          # cv_vintage="pss2001" default
-bt.f_stat, bt.f_crit_vals           # F statistic + I(0)/I(1) bounds
-bt.t_stat, bt.t_crit_vals           # t-bounds (OE-computed)
+bt = u.bounds_test(case=3)          # cv_vintage="pss2001" default (published table)
+bt.f_stat, bt.f_crit_upper          # F statistic + I(0)/I(1) bounds
+bt.t_stat, bt.t_crit_upper          # t-bounds (OE-computed)
+
+# statsmodels' simulated finite-sample bounds (documented divergence)
+bt_sim = u.bounds_test(case=3, cv_vintage="statsmodels")
 
 # automatic order selection (pin IC for cross-tool parity)
 sel = oe.ardl_select_order(df, "y", exog=["x"], maxlag=4, maxorder=4, ic="bic")
 
 # via a TimeSeriesContext
-ctx = oe.TimeSeriesContext(df, time="date")
-ctx.ardl("y", exog=["x"], order=(1, 1))
+ctx = oe.TimeSeriesContext(df)
+ctx.ardl_fit("y", exog=["x"], order=(1, 1))
 ```
 
 Stata equivalent:
@@ -193,11 +211,10 @@ mult <- multipliers(m)          # long-run coefficients
 - **Assert ≤1e-6 cross-tool:** ARDL/UECM coefficients & SEs, the bounds
   **F-statistic**, the **t-statistic** (Stata / R `ARDL`), and the **PSS2001
   asymptotic I(0)/I(1) critical values**.
-- **Toggle + cover both (rule 15):** `cv_vintage` (pss2001 vs narayan2005),
-  `lr_sign` (stata vs statsmodels).
-- **Do NOT assert cross-tool:** p-values (method-specific), Narayan/KS
-  finite-sample CVs across different tools, automated IC selection unless `ic=`
-  is pinned.
+- **Toggle + cover both (rule 15):** `cv_vintage` (pss2001 published table vs
+  statsmodels simulated), `lr_sign` (stata vs statsmodels).
+- **Do NOT assert cross-tool:** p-values (method-specific), statsmodels'
+  simulated finite-sample CVs, automated IC selection unless `ic=` is pinned.
 
 *Recon source-verified 2026-07-18 against Stata `ardl.ado`/`ardlbounds.ado`,
 R `ARDL`/`dynamac` sources, and statsmodels `tsa/ardl/model.py`.*
