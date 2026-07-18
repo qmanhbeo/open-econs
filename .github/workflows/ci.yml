@@ -41,13 +41,15 @@ jobs:
       - name: Type-check with mypy
         run: mypy open_econs/ --ignore-missing-imports
 
-      # Tiering: ONLY the fast path (`pytest -m "not slow"`) runs on every
-      # push/PR. The `slow` marker (the multi-method V-optimization synth
-      # placebo sweeps) is run by a SEPARATE workflow (ci-slow.yml) on a nightly
-      # cron and manual `workflow_dispatch`, so it stays a safety net without
-      # gating every PR. Bare local `pytest` still runs everything (default
-      # addopts are unchanged) — this split is a CI feedback optimization, not a
-      # coverage reduction for local runs.
+      # Tiering: ONLY the fast path (`pytest -m "not slow and not
+      # synth_placebo"`) runs on every push/PR. The `slow` marker (the
+      # multi-method V-optimization synth placebo sweeps) and the
+      # `synth_placebo` marker (ADH placebo / permutation inference) are run by
+      # the nightly workflow (ci-nightly.yml, bare `pytest`) on a cron and manual
+      # `workflow_dispatch`, so they stay a safety net without gating every PR.
+      # Bare local `pytest` still runs everything (default addopts are unchanged)
+      # — this split is a CI feedback optimization, not a coverage reduction for
+      # local runs.
       #
       # Coverage: the min supported Python (3.10) keeps `--cov` (line-level
       # coverage gathered every PR); the max (3.13) deliberately runs WITHOUT
@@ -66,5 +68,12 @@ jobs:
             echo "cov=--cov=open_econs --cov-report=term-missing" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Run fast test suite (not slow)
-        run: python -m pytest -m "not slow" tests/ ${{ steps.covflag.outputs.cov }} -v --tb=short
+      # `synth_placebo` is excluded here (in addition to `slow`) per AGENTS.md
+      # rule 5: the ADH placebo / permutation tests are SLSQP-driven and behave
+      # differently across Python builds (they ran on 3.10 but not consistently
+      # on 3.13, producing a spurious per-version selection difference). They are
+      # a safety net, not a per-PR gate — the nightly `ci-nightly.yml` (bare
+      # `pytest`) still runs them in full. Keeping both markers out here makes the
+      # 3.10 and 3.13 legs select an identical, deterministic test set.
+      - name: Run fast test suite (not slow, not synth_placebo)
+        run: python -m pytest -m "not slow and not synth_placebo" tests/ ${{ steps.covflag.outputs.cov }} -v --tb=short
