@@ -31,8 +31,11 @@ from .core.panel_context import PanelContext
 from .models.timeseries import (
     TimeSeriesContext,
     adf,
+    ardl_fit,
+    ardl_select_order,
     arma,
     arima,
+    bounds_test,
     dfgls,
     garch,
     granger_causality,
@@ -40,6 +43,7 @@ from .models.timeseries import (
     johansen_cointegration,
     kpss,
     pp,
+    uecm_fit,
     var_fit,
     var_select_order,
     vec2var,
@@ -82,4 +86,5 @@ __all__ = [
     "var_fit", "var_select_order", "johansen_cointegration",
     "granger_causality", "instantaneous_causality",
     "vecm_fit", "vec2var",
+    "ardl_fit", "uecm_fit", "ardl_select_order", "bounds_test",
 ]

@@ -614,3 +614,361 @@ class VECMResult(BaseModel):
 
     def summary(self, alpha: float = 0.05) -> str:
         return self._sm_result.summary(alpha=alpha)
+
+
+class ARDLResult(BaseModel):
+    """Result of an ARDL(p, q1, ..., qk) model estimated via ``statsmodels``.
+
+    Wraps ``statsmodels.tsa.ardl.ARDLResults``.  The coefficient table matches
+    Stata SSC ``ardl`` and R ``ARDL::ardl`` to machine precision (all three
+    fit the same OLS ARDL regression).  The PSS (2001) bounds test for a level
+    relationship is reached through :meth:`bounds_test`, which reconciles the
+    F-bounds (the one cross-tool agreement anchor at 1e-6) and adds the
+    OE-computed t-bounds that statsmodels omits.
+    """
+
+    def __init__(
+        self,
+        *,
+        params: pd.Series,
+        std_errors: pd.Series,
+        t_stats: pd.Series,
+        p_values: pd.Series,
+        conf_int: pd.DataFrame,
+        llf: float,
+        aic: float,
+        bic: float,
+        hqic: float,
+        nobs: int,
+        resid: pd.Series,
+        fitted_values: pd.Series,
+        y_name: str,
+        exog_names: list[str],
+        trend: str,
+        order: Any,
+        lags: Any,
+        _sm_result: Any,
+        _is_uecm: bool,
+        call: dict,
+    ) -> None:
+        self.params = params
+        self.std_errors = std_errors
+        self.t_stats = t_stats
+        self.p_values = p_values
+        self.conf_int = conf_int
+        self.llf = float(llf)
+        self.aic = float(aic)
+        self.bic = float(bic)
+        self.hqic = float(hqic)
+        self.nobs = int(nobs)
+        self.resid = resid
+        self.fitted_values = fitted_values
+        self.y_name = y_name
+        self.exog_names = list(exog_names)
+        self.trend = trend
+        self.order = order
+        self.lags = lags
+        self._sm_result = _sm_result
+        self._is_uecm = _is_uecm
+        self.call = call
+        self._freeze()
+
+    def tidy(self) -> pd.DataFrame:
+        """Coefficient table, one row per ARDL parameter."""
+        return pd.DataFrame(
+            {
+                "term": self.params.index,
+                "estimate": self.params.values,
+                "std_error": self.std_errors.values,
+                "statistic": self.t_stats.values,
+                "p_value": self.p_values.values,
+                "ci_lower": self.conf_int.iloc[:, 0].values,
+                "ci_upper": self.conf_int.iloc[:, 1].values,
+            }
+        )
+
+    def bounds_test(
+        self,
+        case: int,
+        *,
+        cv_vintage: str = "pss2001",
+        signif: Any = (0.10, 0.05, 0.01),
+    ) -> "BoundsTestResult":
+        """PSS (2001) bounds test for a level relationship. See :func:`bounds_test`."""
+        from open_econs.models.timeseries.ardl import bounds_test as _bt
+
+        return _bt(self, case, cv_vintage=cv_vintage, signif=signif)
+
+    def summary(self) -> str:
+        tbl = self.tidy().to_string(index=False)
+        label = "UECM" if self._is_uecm else "ARDL"
+        head = (
+            f"{label} ({self.y_name} ~ {', '.join(self.exog_names)}, "
+            f"trend={self.trend}, n={self.nobs})\n"
+            f"Log-Likelihood: {self.llf:.6f}   AIC: {self.aic:.4f}   "
+            f"BIC: {self.bic:.4f}\n"
+            f"{'-' * 60}\n{tbl}"
+        )
+        return head
+
+
+class UECMResult(ARDLResult):
+    """Result of the unrestricted error-correction (UECM) form of an ARDL.
+
+    Extends :class:`ARDLResult` with the long-run (level) coefficients and the
+    speed-of-adjustment (error-correction) term.  Long-run coefficients follow
+    Stata ``ardl, ec`` / R ``ARDL::multipliers()`` (``LR = -theta / rho``) by
+    default; ``lr_sign="statsmodels"`` returns the raw ``ci_params`` sign.
+    """
+
+    def __init__(
+        self,
+        *,
+        params: pd.Series,
+        std_errors: pd.Series,
+        t_stats: pd.Series,
+        p_values: pd.Series,
+        conf_int: pd.DataFrame,
+        llf: float,
+        aic: float,
+        bic: float,
+        hqic: float,
+        nobs: int,
+        resid: pd.Series,
+        fitted_values: pd.Series,
+        y_name: str,
+        exog_names: list[str],
+        trend: str,
+        order: Any,
+        lags: Any,
+        long_run: pd.Series,
+        ec_term: float,
+        ec_term_se: float,
+        ec_term_t: float,
+        ec_term_pvalue: float,
+        ec_term_name: str,
+        lr_sign: str,
+        _sm_result: Any,
+        call: dict,
+    ) -> None:
+        # Set UECM-specific fields first; the parent initializer freezes last.
+        self.long_run = long_run
+        self.ec_term = float(ec_term)
+        self.ec_term_se = float(ec_term_se)
+        self.ec_term_t = float(ec_term_t)
+        self.ec_term_pvalue = float(ec_term_pvalue)
+        self.ec_term_name = ec_term_name
+        self.lr_sign = lr_sign
+        super().__init__(
+            params=params,
+            std_errors=std_errors,
+            t_stats=t_stats,
+            p_values=p_values,
+            conf_int=conf_int,
+            llf=llf,
+            aic=aic,
+            bic=bic,
+            hqic=hqic,
+            nobs=nobs,
+            resid=resid,
+            fitted_values=fitted_values,
+            y_name=y_name,
+            exog_names=exog_names,
+            trend=trend,
+            order=order,
+            lags=lags,
+            _sm_result=_sm_result,
+            _is_uecm=True,
+            call=call,
+        )
+
+    def long_run_table(self) -> pd.DataFrame:
+        """Long-run (level) coefficients as a tidy table."""
+        return pd.DataFrame(
+            {
+                "term": self.long_run.index,
+                "long_run": self.long_run.values,
+            }
+        )
+
+    def summary(self) -> str:
+        base = super().summary()
+        lr = self.long_run_table().to_string(index=False)
+        ec = (
+            f"\n\nError-correction (speed of adjustment): "
+            f"{self.ec_term_name} = {self.ec_term:.6f} "
+            f"(se={self.ec_term_se:.6f}, t={self.ec_term_t:.4f}, "
+            f"p={self.ec_term_pvalue:.4f})\n"
+            f"Long-run coefficients [lr_sign={self.lr_sign}]:\n{lr}"
+        )
+        return base + ec
+
+
+class OrderSelectionResult(BaseModel):
+    """Result of IC-based ARDL order selection via ``ardl_select_order``.
+
+    Default ``ic="bic"`` matches Stata ``ardl`` and statsmodels; R
+    ``ARDL::auto_ardl`` defaults to AIC, so ``ic=`` must be pinned explicitly
+    for cross-tool parity.
+    """
+
+    def __init__(
+        self,
+        *,
+        selected_ar_order: int,
+        selected_dl_orders: dict[str, int],
+        ic: str,
+        ic_value: float,
+        maxlag: int,
+        maxorder: Any,
+        trend: str,
+        y_name: str,
+        exog_names: list[str],
+        _sm_selection: Any,
+        call: dict,
+    ) -> None:
+        self.selected_ar_order = int(selected_ar_order)
+        self.selected_dl_orders = dict(selected_dl_orders)
+        self.ic = ic
+        self.ic_value = float(ic_value)
+        self.maxlag = int(maxlag)
+        self.maxorder = maxorder
+        self.trend = trend
+        self.y_name = y_name
+        self.exog_names = list(exog_names)
+        self._sm_selection = _sm_selection
+        self.call = call
+        self._freeze()
+
+    def tidy(self) -> pd.DataFrame:
+        """Selected orders as a one-row table."""
+        row: dict[str, Any] = {
+            "y": self.y_name,
+            "ar_order": self.selected_ar_order,
+            "ic": self.ic,
+            "ic_value": self.ic_value,
+        }
+        for name, o in self.selected_dl_orders.items():
+            row[f"dl_{name}"] = o
+        return pd.DataFrame([row])
+
+    def summary(self) -> str:
+        lines = [
+            "ARDL Order Selection",
+            "=" * 30,
+            f"Criterion : {self.ic.upper()} = {self.ic_value:.6f}",
+            f"Max lag   : {self.maxlag}",
+            f"Trend     : {self.trend}",
+            "",
+            f"Selected AR order (p): {self.selected_ar_order}",
+            "Selected DL orders (q):",
+        ]
+        for name, o in self.selected_dl_orders.items():
+            lines.append(f"  {name}: {o}")
+        return "\n".join(lines)
+
+
+class BoundsTestResult(BaseModel):
+    """Result of the Pesaran-Shin-Smith (2001) bounds test.
+
+    Reports both the F-bounds and the t-bounds test.  The F-statistic is the
+    one cross-tool agreement point (asserted at 1e-6 against Stata / R /
+    statsmodels).  The t-bounds is computed by OE on the ``y_{t-1}``
+    coefficient (statsmodels omits it) with restricted cases folding onto their
+    unrestricted sibling (2->3, 4->5), matching Stata.  p-values are engine-
+    specific and must not be compared cross-tool.
+    """
+
+    def __init__(
+        self,
+        *,
+        case: int,
+        cv_vintage: str,
+        f_stat: float,
+        f_crit_lower: dict[str, float],
+        f_crit_upper: dict[str, float],
+        f_pvalues: dict[str, float],
+        t_stat: float | None,
+        t_crit_lower: dict[str, float],
+        t_crit_upper: dict[str, float],
+        t_case: int,
+        k: int,
+        nobs: int,
+        null: str,
+        alternative: str,
+        call: dict,
+    ) -> None:
+        self.case = int(case)
+        self.cv_vintage = cv_vintage
+        self.f_stat = float(f_stat)
+        self.f_crit_lower = dict(f_crit_lower)
+        self.f_crit_upper = dict(f_crit_upper)
+        self.f_pvalues = dict(f_pvalues)
+        self.t_stat = None if t_stat is None else float(t_stat)
+        self.t_crit_lower = dict(t_crit_lower)
+        self.t_crit_upper = dict(t_crit_upper)
+        self.t_case = int(t_case)
+        self.k = int(k)
+        self.nobs = int(nobs)
+        self.null = null
+        self.alternative = alternative
+        self.call = call
+        self._freeze()
+
+    def tidy(self) -> pd.DataFrame:
+        """F- and t-bounds critical values across significance levels."""
+        rows: list[dict[str, Any]] = []
+        for lvl in self.f_crit_lower:
+            rows.append(
+                {
+                    "test": "F",
+                    "signif": lvl,
+                    "statistic": self.f_stat,
+                    "I(0)_lower": self.f_crit_lower.get(lvl),
+                    "I(1)_upper": self.f_crit_upper.get(lvl),
+                }
+            )
+        for lvl in self.t_crit_lower:
+            rows.append(
+                {
+                    "test": "t",
+                    "signif": lvl,
+                    "statistic": self.t_stat,
+                    "I(0)_lower": self.t_crit_lower.get(lvl),
+                    "I(1)_upper": self.t_crit_upper.get(lvl),
+                }
+            )
+        return pd.DataFrame(rows)
+
+    def summary(self) -> str:
+        lines = [
+            "PSS (2001) Bounds Test for a Level Relationship",
+            "=" * 47,
+            f"Case          : {self.case}",
+            f"Regressors (k): {self.k}",
+            f"Observations  : {self.nobs}",
+            f"CV vintage    : {self.cv_vintage}",
+            "",
+            f"H0: {self.null}",
+            f"Ha: {self.alternative}",
+            "",
+            f"F-statistic: {self.f_stat:.6f}",
+            "  signif   I(0)      I(1)",
+        ]
+        for lvl in self.f_crit_lower:
+            lines.append(
+                f"  {lvl:5s}  {self.f_crit_lower[lvl]:8.4f}  "
+                f"{self.f_crit_upper[lvl]:8.4f}"
+            )
+        if self.t_stat is not None:
+            lines.append("")
+            lines.append(
+                f"t-statistic: {self.t_stat:.6f}  (t-bounds case {self.t_case})"
+            )
+            lines.append("  signif   I(0)      I(1)")
+            for lvl in self.t_crit_lower:
+                lines.append(
+                    f"  {lvl:5s}  {self.t_crit_lower[lvl]:8.4f}  "
+                    f"{self.t_crit_upper[lvl]:8.4f}"
+                )
+        return "\n".join(lines)

@@ -14,6 +14,11 @@ from open_econs.models.timeseries.unitroot import (
     pp,
     zivot_andrews,
 )
+from open_econs.models.timeseries.ardl import (
+    ardl_fit,
+    ardl_select_order,
+    uecm_fit,
+)
 from open_econs.models.timeseries.var import (
     johansen_cointegration,
     var_fit,
@@ -170,6 +175,18 @@ class TimeSeriesContext:
         else:
             data = columns
         return vecm_fit(data, **kwargs)
+
+    def ardl_fit(self, y: str, **kwargs: Any) -> Any:
+        """Fit an ARDL(p, q1, ..., qk) model.  See :func:`open_econs.ardl_fit`."""
+        return ardl_fit(self._data, y, **kwargs)
+
+    def uecm_fit(self, y: str, **kwargs: Any) -> Any:
+        """Fit the UECM (error-correction) form of an ARDL.  See :func:`open_econs.uecm_fit`."""
+        return uecm_fit(self._data, y, **kwargs)
+
+    def ardl_select_order(self, y: str, **kwargs: Any) -> Any:
+        """Select ARDL order by IC.  See :func:`open_econs.ardl_select_order`."""
+        return ardl_select_order(self._data, y, **kwargs)
 
     def __repr__(self) -> str:
         head = f"TimeSeriesContext ({self._data.shape[0]} rows, {self._data.shape[1]} cols)"
