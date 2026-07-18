@@ -1,5 +1,42 @@
 # Changelog
 
+## [Unreleased]
+
+### Added — ARDL / UECM + PSS(2001) bounds test (v1.1.2)
+
+- `ardl_fit()` and `uecm_fit()` wrapping `statsmodels.tsa.ardl` (`ARDL` /
+  `UECM`), exposed at the top level.
+- `.bounds_test(case)` on the fitted UECM: Pesaran-Shin-Smith (2001) **F**- and
+  **t**-bounds tests for a level relationship across all 5 deterministic cases,
+  returning the F/t statistics, lower/upper critical-value bounds per
+  significance level (10% / 5% / 1% by default; 2.5% when `signif` includes
+  `0.025`), the long-run multipliers, and the error-correction term.
+- `cv_vintage` toggle: `"pss2001"` (default) serves the published PSS(2001)
+  critical-value tables (the cross-tool 1e-6 anchor); `"statsmodels"` serves
+  statsmodels' Monte-Carlo simulated bounds (a documented divergence).
+- `lr_sign` toggle for the long-run multiplier sign convention (`"stata"`
+  default = `−θ/ρ`).
+
+### Parity
+
+- Verified to **1e-6** against Stata SSC `ardl` (14 tests) and R `ARDL`
+  (10 tests) on the canonical Pesaran denmark example
+  (`LRM ~ LRY + IBO + IDE`, case 3): F-stat, t-stat, EC term, long-run
+  multipliers, and all critical values (incl. 2.5%) match. Conventions
+  source-verified against `ardl.ado` / `ardlbounds.ado` and the R `ARDL`
+  package source (AGENTS.md rule 1).
+
+### Fixed / documented
+
+- **Stata fixture footgun (rules 16, 18):** `import delimited` reads numeric
+  columns as single-precision `float` by default, which truncated the
+  near-collinear denmark inputs and produced a spurious ~1e-5 Stata-only gap on
+  F / t / EC / long-run coefficients. Fixed by `set type double` before import
+  in `tests/stata/generate-fixtures/ardl.do`; OE itself was always correct.
+  Root cause recorded in `methodology/timeseries/ardl.md`.
+- **Gate scope documented** in `TESTING.md`: `ruff` and `mypy` are scoped to
+  `open_econs/` only; `tests/` is intentionally not type-checked.
+
 ## [1.0.3] - 2026-07-17
 
 ### Performance hardening (bit-identical)

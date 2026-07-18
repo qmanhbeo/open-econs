@@ -24,8 +24,8 @@ GMM & Arellano-Bond, logit/probit/mlogit, Oaxaca-Blinder, nonlinear least
 squares, the full difference-in-differences family (Callaway-Sant'Anna,
 Sun-Abraham, Gardner DID2S, event studies), regression discontinuity,
 propensity-score & coarsened-exact matching, synthetic control with permutation
-inference, and a time-series module (ARIMA, VAR/VECM, GARCH, unit-root &
-cointegration).
+inference, and a time-series module (ARIMA, VAR/VECM, GARCH, ARDL/UECM with the
+Pesaran-Shin-Smith bounds test, unit-root & cointegration).
 
 ## Install
 

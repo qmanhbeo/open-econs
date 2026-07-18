@@ -28,6 +28,8 @@ control).
 | `synth_runner`       | `oe.synth()` / `oe.placebo_space()` / `oe.placebo_time()` |
 | `dfuller` / `pperron` / `vars` / `var` | `oe.adf()` / `oe.pp()` / `oe.var()` / `oe.arima()` |
 | `arch`               | `oe.garch()`                |
+| `ardl`               | `oe.ardl_fit()` / `oe.uecm_fit()` |
+| `ardl` (bounds) / `ardlbounds` | `oe.uecm_fit(...).bounds_test()` |
 
 ## R → open-econs
 
@@ -43,6 +45,7 @@ control).
 | `cobalt`             | `oe.balance()`             |
 | `rbounds`            | `oe.rosenbaum_bounds()`    |
 | `urca` / `vars`      | `oe.adf()` / `oe.var()`    |
+| `ARDL` / `dynamac`   | `oe.ardl_fit()` / `oe.uecm_fit()` / `.bounds_test()` |
 
 ## Full method catalog
 

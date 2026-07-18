@@ -151,7 +151,7 @@ dependencies), not a from-scratch numerical reimplementation.**
 - **Sub-milestones (all under committed v1.1):**
   - **1.1.0** — unit-root tests (`adf()`/`pp()`/`kpss()`/`dfgls()`/`zivot_andrews()`) + `arima()`/`arma()` + `garch()`. *(shipped)*
   - **1.1.1** — VAR/VECM + IRF/FEVD/Granger + Johansen cointegration + dual IC (Stata + Lütkepohl). *(shipped)*
-  - **1.1.2** — ARDL/ECM via `statsmodels.tsa.ardl` (`ARDL`, `UECM`, `.bounds_test()`). *(next)*
+  - **1.1.2** — ARDL/ECM via `statsmodels.tsa.ardl` (`ARDL`, `UECM`, `.bounds_test()`). *(shipped)*
 
 ##### v1.2 — Count & limited dependent variable models *(committed)*
 New `open_econs/models/limited/` module:
@@ -178,7 +178,7 @@ causal-inference-critical. They ship when a specific downstream need pulls
 them forward, or when capacity allows after core-path items are complete.
 
 ##### v1.x — Time-series breadth (secondary)
-- ARDL/UECM bounds test (v1.1.2, next — technically core-path but
+- ARDL/UECM bounds test (v1.1.2, shipped — technically core-path but
   time-series-specific, so listed here for visibility)
 - Additional VAR/VECM variants (structural VAR, Bayesian VAR)
 - Additional IC conventions beyond the two already implemented
@@ -217,6 +217,24 @@ with a parity test against an existing reference implementation before merge.**
   `oe.placebo_space` / `oe.placebo_time` work directly. The `synth_control.md`
   tutorial was updated to use the top-level path and drop the submodule-import
   note. No estimator logic changed. (Source-only + doc; no release.)
+
+- **v1.1.2 — ARDL / UECM + PSS(2001) bounds test (implemented; release
+  pending version bump)** — `ardl_fit()` / `uecm_fit()` wrapping
+  `statsmodels.tsa.ardl` (`ARDL` / `UECM`), plus a `.bounds_test(case)`
+  computing the Pesaran-Shin-Smith (2001) **F**- and **t**-bounds tests over
+  all 5 deterministic cases, long-run multipliers, and the error-correction
+  term. Parity anchored to the published PSS(2001) tables (`cv_vintage=
+  "pss2001"`, default) with `"statsmodels"` (simulated) as a documented toggle.
+  - Cross-tool parity to **1e-6** against Stata SSC `ardl` (14 tests) and R
+    `ARDL` (10 tests) on the canonical Pesaran denmark example; F-stat / t-stat
+    / EC term / LR multipliers / all critical values (incl. 2.5%) match.
+    Conventions source-verified against `ardl.ado` / `ardlbounds.ado` and the
+    R `ARDL` package source (rule 1).
+  - **Footgun fixed & recorded (rules 16, 18):** an apparent ~1e-5 Stata-only
+    gap was root-caused to `import delimited` reading numeric columns as
+    single-precision `float`; fixed with `set type double` in the generator.
+    OE was never wrong. See `methodology/timeseries/ardl.md`.
+  - Full suite green (1099 passed, excluding `synth_placebo`).
 
 - **v1.0.3 — Performance hardening (shipped, 2026-07-17)** — Python-strength
   audit of the hot loops, all **bit-identical** to the prior scalar code (no

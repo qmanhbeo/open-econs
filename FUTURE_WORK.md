@@ -712,4 +712,43 @@ estimator in OE. Recorded so future sessions do not re-open it.
 - **Next agent:** treat as blocked, not pending, unless the project lead budgets
   the R `Synth` re-parity pass.
 
+---
+
+## ARDL / UECM + PSS(2001) bounds test (v1.1.2): DONE
+
+- **What:** `ardl_fit()` / `uecm_fit()` + `.bounds_test(case)` (F- and t-bounds,
+  all 5 cases, LR multipliers, EC term), wrapping `statsmodels.tsa.ardl`.
+- **Status:** COMPLETE. Parity to 1e-6 vs Stata SSC `ardl` (14 tests) and R
+  `ARDL` (10 tests) + 27 backend tests. Conventions source-verified against
+  `ardl.ado` / `ardlbounds.ado` and R `ARDL` source (rule 1). Root causes and
+  the math/command manual are in `methodology/timeseries/ardl.md`.
+- **Toggles exposed (rule 15):** `cv_vintage` (`pss2001` default vs
+  `statsmodels`), `lr_sign` (`stata` default = −θ/ρ). Both branches tested.
+- **Deliberate default (not a bug):** `bounds_test` default `signif=(0.10, 0.05,
+  0.01)` — the `"2.5%"` critical-value key exists only when `signif` includes
+  `0.025`. The Stata fixture stores 2.5% CVs and `TestStataARDLCritVals25`
+  exercises that path. Revisit only if users want 2.5% in the default set.
+
+## Open follow-up — audit Stata `.do` generators for `set type double` (rule 18)
+
+- **What:** The ARDL parity work uncovered that Stata `import delimited` reads
+  numeric columns as single-precision `float` by default, which silently
+  truncated near-collinear inputs and produced a spurious ~1e-5 parity gap.
+  Fixed for `ardl.do` with `set type double`. **Other `.do` generators that
+  `import delimited` a CSV and then run a regression may carry the same latent
+  footgun** — it only bites when inputs are ill-conditioned enough that float
+  truncation exceeds 1e-6, so existing passing fixtures are not necessarily
+  safe under future data changes.
+- **Scope:** grep `tests/stata/generate-fixtures/*.do` for `import delimited`
+  without a preceding `set type double`; add it defensively and re-run the drift
+  check. Low risk, mechanical; good subagent task (rule 9).
+- **Status:** PENDING (out of scope for the v1.1.2 commit set). Recorded per
+  rules 12/18 so it is not lost.
+- **Context:** root cause fully written up in `methodology/timeseries/ardl.md`
+  and the inline comment block of `tests/stata/generate-fixtures/ardl.do`.
+
+---
+
+*Last updated: 2026-07-18, ARDL/UECM v1.1.2 completed to 1e-6 parity (Stata+R); flagged `set type double` audit for other `.do` generators.*
+
 *Last updated: 2026-07-17, GPU declined + Candidate A deferred (Candidate B did_cs bootstrap parallelization implemented and pushed).*
