@@ -576,6 +576,192 @@ class BinaryResult(BaseModel):
             return True
 
 
+class CountResult(BaseModel):
+    """Result of a count-data (Poisson PPML) fixed-effects regression.
+
+    Immutable result with the uniform interface (``.tidy()``, ``.summary()``,
+    ``.export()``, ``.vcov()``, ``.to_latex()`` / ``.to_html()``). Adds
+    ``.irr()`` (incidence-rate ratios ``exp(beta)`` with delta-method SEs),
+    ``.margins()`` (average marginal effects on the count scale), and
+    ``.predict()`` (fitted conditional means ``mu_i``). Coefficients, SEs, and
+    z-stats are reported on the **log (index) scale**, matching Stata
+    ``ppmlhdfe`` and R ``fixest::fepois``.
+
+    Notes
+    -----
+    ``vcov_backend`` (recorded in ``cov_type``) controls the cluster/robust
+    small-sample factor only; point estimates, deviance, and log-likelihood are
+    identical across the ``"fixest"`` (R-parity, default) and ``"stata"``
+    (``ppmlhdfe``-parity) conventions. See ``methodology/limited/poisson.md``.
+    """
+
+    def __init__(
+        self,
+        *,
+        formula: str,
+        rhs_formula: str,
+        nobs: int,
+        df_resid: int,
+        df_model: int,
+        cov_type: str,
+        coefficients: pd.Series,
+        std_errors: pd.Series,
+        z_stats: pd.Series,
+        p_values: pd.Series,
+        conf_int: pd.DataFrame,
+        llf: float,
+        deviance: float,
+        pseudo_r2: float,
+        n_absorbed: int,
+        fixed_effects: list[str],
+        fitted: pd.Series,
+        call: dict[str, Any],
+        vcov_backend: str,
+        _cov: pd.DataFrame,
+        _fit: Any = None,
+    ) -> None:
+        self.formula = formula
+        self.rhs_formula = rhs_formula
+        self.data_shape = (nobs, coefficients.shape[0])
+        self.cov_type = cov_type
+        self.call = call
+        self.timestamp = datetime.now()
+        self.package_version = __version__
+
+        self.nobs = nobs
+        self.df_resid = df_resid
+        self.df_model = df_model
+        self.coefficients = coefficients
+        self.std_errors = std_errors
+        self.z_stats = z_stats
+        self.p_values = p_values
+        self.conf_int = conf_int
+        self.llf = llf
+        self.deviance = deviance
+        self.pseudo_r2 = pseudo_r2
+        self.n_absorbed = n_absorbed
+        self.fixed_effects = fixed_effects
+        self.fitted_values = fitted if fitted is not None else pd.Series(dtype=float)
+        self.model_type = "poisson"
+        self.vcov_backend = vcov_backend
+        self._cov = _cov
+        self._fit = _fit
+
+        self._freeze()
+
+    def tidy(self) -> pd.DataFrame:
+        df = pd.DataFrame({
+            "Variable": self.coefficients.index,
+            "Coef": self.coefficients.values,
+            "Std Err": self.std_errors.values,
+            "z": self.z_stats.values,
+            "P>|z|": self.p_values.values,
+            "0.025": self.conf_int["lower"].values,
+            "0.975": self.conf_int["upper"].values,
+        })
+        df.index.name = None
+        return df
+
+    def irr(self) -> pd.DataFrame:
+        """Incidence-rate ratios ``exp(beta)`` with delta-method SEs.
+
+        Matches Stata ``ppmlhdfe, irr`` / ``poisson, irr``. The reported SE is
+        ``exp(beta) * SE(beta)`` (delta method); CIs are the exponentiated
+        coefficient CIs (equivalently ``exp(beta +/- z * SE)``).
+        """
+        beta = self.coefficients.values
+        se = self.std_errors.values
+        irr = np.exp(beta)
+        irr_se = irr * se
+        df = pd.DataFrame({
+            "Variable": self.coefficients.index,
+            "IRR": irr,
+            "Std Err": irr_se,
+            "z": self.z_stats.values,
+            "P>|z|": self.p_values.values,
+            "0.025": np.exp(self.conf_int["lower"].values),
+            "0.975": np.exp(self.conf_int["upper"].values),
+        })
+        df.index.name = None
+        return df
+
+    def summary(self) -> str:
+        llf_str = f"{self.llf:.3f}" if self.llf is not None and not self._isnan(self.llf) else "N/A"
+        dev_str = f"{self.deviance:.4f}" if self.deviance is not None and not self._isnan(self.deviance) else "N/A"
+        fe_str = " + ".join(self.fixed_effects) if self.fixed_effects else "(none)"
+        header = (
+            f"                 Poisson (PPML) FE Regression Results                 \n"
+            f"======================================================================\n"
+            f"Dep. Variable:               {self.formula.split('~')[0].strip()}\n"
+            f"Model:                       Poisson (PPML)\n"
+            f"Absorbed FE:                 {fe_str}\n"
+            f"No. Observations:            {self.nobs}\n"
+            f"Df Residuals:                {self.df_resid}\n"
+            f"Df Model:                    {self.df_model}\n"
+            f"Std. Errors:                 {self.cov_type}\n"
+            f"Pseudo R-squared:          {self.pseudo_r2:.6f}\n"
+            f"Deviance:                    {dev_str}\n"
+            f"Log-pseudolikelihood:        {llf_str}\n"
+            f"======================================================================\n"
+        )
+        tbl = self.tidy().to_string(index=False)
+        return (
+            header + tbl +
+            "\n======================================================================\n"
+        )
+
+    def margins(self) -> pd.DataFrame:
+        """Average marginal effects on the count scale.
+
+        For Poisson with ``mu_i = exp(x_i'b + a_i)``, the marginal effect of a
+        continuous regressor ``x_j`` for observation ``i`` is
+        ``b_j * mu_i``; the average marginal effect (AME) is
+        ``b_j * mean(mu_i)``. The delta-method SE uses the coefficient vcov.
+        """
+        mu_bar = float(np.mean(self.fitted_values.values)) if len(self.fitted_values) else float("nan")
+        beta = self.coefficients
+        ame = beta.values * mu_bar
+        ame_se = self.std_errors.values * mu_bar
+        with np.errstate(divide="ignore", invalid="ignore"):
+            z = np.where(ame_se > 0, ame / ame_se, np.nan)
+        p = 2.0 * _stats.norm.sf(np.abs(z))
+        crit = _stats.norm.ppf(0.975)
+        df = pd.DataFrame({
+            "Variable": beta.index,
+            "dy/dx": ame,
+            "Std Err": ame_se,
+            "z": z,
+            "P>|z|": p,
+            "0.025": ame - crit * ame_se,
+            "0.975": ame + crit * ame_se,
+        })
+        df.index.name = None
+        return df
+
+    def vcov(self) -> pd.DataFrame:
+        return self._cov
+
+    def predict(self, newdata: pd.DataFrame | None = None) -> pd.Series:
+        """Fitted conditional means ``mu_i = exp(x_i'b + a_i)``.
+
+        In-sample only (``newdata=None``). Out-of-sample prediction with
+        absorbed FE requires the estimated FE levels; not supported here.
+        """
+        if newdata is None:
+            return self.fitted_values
+        raise NotImplementedError(
+            "poisson().predict(newdata=...) is not supported: absorbed fixed "
+            "effects make out-of-sample prediction ill-defined for new FE "
+            "levels. Call predict() with no arguments for in-sample fitted means."
+        )
+
+    def _isnan(self, v: float) -> bool:
+        try:
+            return np.isnan(v)
+        except (TypeError, ValueError):
+            return True
+
+
 class OaxacaResult(BaseModel):
     """Result of an Oaxaca-Blinder (or Neumark) wage-gap decomposition.
 
