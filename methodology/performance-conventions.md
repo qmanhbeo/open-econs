@@ -47,10 +47,22 @@ GPU transfer overhead dominates at current fixture sizes. Revisit only at
   resamples (commit `3f56aea`). ~2x speedup at 400 entities / 200 reps,
   bit-identical for both `reg` and `dripw` methods.
 
-## Queued (see FUTURE_WORK.md top)
+## Completed vectorizations (bit-identical — do NOT re-touch)
 
-- Candidate C — `psm.py` vectorize (batched `cKDTree.query` + fancy-indexed
-  variance loops). Safe, no parity risk.
-- Candidate D — `_gmm_core._hac_S` vectorize (per-entity batched `einsum`).
-  Parity-sensitive (feeds abond/gmm VCE/J-stat to ≤1e-6); verify vs Stata
-  fixtures.
+- **Candidate C — `psm.py` vectorize (commit `cdb15be`).** Batched
+  `cKDTree.query` in `_within_treatment_matching` / `_opposite_treatment_matching`;
+  fancy-indexed `psi`; padded `(n,h)` / `(n,h,p)` tensor reduction for `xi2` and
+  `c_tau` (via `_padded_local_cov`); vectorized `matched_arr` mask.
+  **Bit-identical** (atol=0, rtol=0) — verified by `test_psm_*_bit_identical_to_scalar`
+  and `test_psm_c_tau_vectorization_bit_identical`; the Stata-pinned
+  `test_psm_se_nn*` (nn=2/5/10) still pass ≤1e-6. **~4× faster** on the Stata
+  `teffects psmatch` fixture (nn=10: 0.50s → 0.13s). Do NOT re-touch unless a new
+  neighborhood-size edge case breaks bit-identicality.
+- **Candidate D — `_gmm_core._hac_S` vectorize (commit `897c31a`).** Per-entity
+  batched `np.einsum("ti,tj->ij", moments[lag:], moments[:-lag])` replacing the
+  inner per-lag/per-t `np.outer` accumulation (ragged per-entity loop preserved).
+  **Bit-identical** (atol=0) — `TestHacSVectorization` in
+  `tests/non_stata_nor_r/test_gmm_core.py`; Stata anchors `test_stata_gmm.py`
+  (HAC two-step) + `test_stata_abond.py` still ≤1e-6. Full write-up in
+  `methodology/linear/gmm.md` (Root-Cause Knowledge). Do NOT re-touch unless a
+  new HAC edge case breaks bit-identicality.
