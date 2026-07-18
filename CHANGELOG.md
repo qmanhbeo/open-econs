@@ -1,8 +1,36 @@
 # Changelog
 
-## [Unreleased]
+## [1.1.0] - 2026-07-18
 
-### Added — ARDL / UECM + PSS(2001) bounds test (v1.1.2)
+First release of the **time-series econometrics** line. New
+`open_econs/models/timeseries/` module wrapping `statsmodels.tsa` + `arch`
+under the same source-verified Stata/R parity discipline as the rest of the
+library (wrapping is an implementation strategy, not a parity exemption). This
+release bundles the three internal time-series sub-milestones (unit-root/ARIMA/
+GARCH, VAR/VECM/Johansen, and ARDL/UECM) into one public `1.1.0`.
+
+### Added — unit-root tests, ARIMA/ARMA, GARCH
+
+- `adf()`, `pp()`, `kpss()`, `dfgls()`, `zivot_andrews()` — unit-root / stationarity
+  tests over the `arch.unitroot` backend, parity vs Stata `dfuller` / `pperron` /
+  `kpss` and R `urca`.
+- `arima()` / `arma()` — Box-Jenkins mean models via `statsmodels.tsa`, parity vs
+  Stata `arima` and R `forecast`.
+- `garch()` — full GARCH family via `arch.arch_model`, parity vs Stata `arch` and
+  R `rugarch`. Backcast convention matched to Stata/R (documented tolerance
+  exceptions in the test suite where the reference itself diverges).
+
+### Added — VAR / VECM / Johansen cointegration
+
+- `var()` — vector autoregression with `.irf()`, `.fevd()`, `.test_causality()`
+  (Granger + instantaneous), lag-order selection with dual IC conventions
+  (Stata `K*ln(2π)+K` offset and Lütkepohl). Parity vs Stata `var` / `vargranger`
+  / `fcast` and R `vars`.
+- `vecm()` + Johansen `coint_johansen` — trace and max-eigenvalue rank tests
+  across all 5 deterministic cases via Osterwald-Lenum critical-value tables,
+  parity vs Stata `vecrank` and R `urca::ca.jo`.
+
+### Added — ARDL / UECM + PSS(2001) bounds test
 
 - `ardl_fit()` and `uecm_fit()` wrapping `statsmodels.tsa.ardl` (`ARDL` /
   `UECM`), exposed at the top level.
@@ -17,7 +45,7 @@
 - `lr_sign` toggle for the long-run multiplier sign convention (`"stata"`
   default = `−θ/ρ`).
 
-### Parity
+### Parity — ARDL
 
 - Verified to **1e-6** against Stata SSC `ardl` (14 tests) and R `ARDL`
   (10 tests) on the canonical Pesaran denmark example
@@ -96,7 +124,13 @@ test class names updated to reflect the new naming convention.
 - `__init__.py` exports and `__all__` updated with deprecation shims
 - Stale `.log` artifacts removed from repo root
 
-## [1.1.0] - 2026-07-12
+## Pre-1.0 development — fe/ols/DID engine (2026-07-12)
+
+> **Note (2026-07-18):** this section was previously mislabeled `[1.1.0]`. It
+> actually records pre-1.0 fixed-effects / ols / DID engine work that shipped as
+> part of the **v1.0.0** stable release (it predates `[1.0.2]`/`[1.0.3]` above).
+> The real v1.1.0 release is the time-series line at the top of this file. The
+> header was corrected so the version numbers are monotonic and honest.
 
 > **⚠ SUPERSEDES ORIGINAL SPIKE REPORT §5** — The original eval report
 > claimed that pyfixest applies `√(n/(n−k))` to HC2, creating a

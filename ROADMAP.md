@@ -134,7 +134,7 @@ These are the methods that directly serve the project's primary purpose:
 causal inference for policy analysis and resource allocation. Items are
 ordered by dependency (later items build on earlier ones).
 
-##### v1.1 — Time-series econometrics *(in progress)*
+##### v1.1 — Time-series econometrics *(shipped — v1.1.0)*
 
 **Backend strategy: wrap-and-verify over `statsmodels.tsa` + `arch` (hard
 dependencies), not a from-scratch numerical reimplementation.**
@@ -152,6 +152,7 @@ dependencies), not a from-scratch numerical reimplementation.**
   - **1.1.0** — unit-root tests (`adf()`/`pp()`/`kpss()`/`dfgls()`/`zivot_andrews()`) + `arima()`/`arma()` + `garch()`. *(shipped)*
   - **1.1.1** — VAR/VECM + IRF/FEVD/Granger + Johansen cointegration + dual IC (Stata + Lütkepohl). *(shipped)*
   - **1.1.2** — ARDL/ECM via `statsmodels.tsa.ardl` (`ARDL`, `UECM`, `.bounds_test()`). *(shipped)*
+  - All three released together as the public **v1.1.0** tag (2026-07-18).
 
 ##### v1.2 — Count & limited dependent variable models *(committed)*
 New `open_econs/models/limited/` module:
@@ -178,7 +179,7 @@ causal-inference-critical. They ship when a specific downstream need pulls
 them forward, or when capacity allows after core-path items are complete.
 
 ##### v1.x — Time-series breadth (secondary)
-- ARDL/UECM bounds test (v1.1.2, shipped — technically core-path but
+- ARDL/UECM bounds test (shipped in v1.1.0 — technically core-path but
   time-series-specific, so listed here for visibility)
 - Additional VAR/VECM variants (structural VAR, Bayesian VAR)
 - Additional IC conventions beyond the two already implemented
@@ -218,8 +219,15 @@ with a parity test against an existing reference implementation before merge.**
   tutorial was updated to use the top-level path and drop the submodule-import
   note. No estimator logic changed. (Source-only + doc; no release.)
 
-- **v1.1.2 — ARDL / UECM + PSS(2001) bounds test (implemented; release
-  pending version bump)** — `ardl_fit()` / `uecm_fit()` wrapping
+- **v1.1.0 — Time-series econometrics line (shipped, 2026-07-18)** — the whole
+  `open_econs/models/timeseries/` module released as `1.1.0`: unit-root tests
+  (`adf`/`pp`/`kpss`/`dfgls`/`zivot_andrews`), `arima`/`arma`, `garch`,
+  `var`/`vecm` + Johansen cointegration, and ARDL/UECM + PSS(2001) bounds
+  (detailed below). Bundles the three internal sub-milestones (1.1.0/1.1.1/1.1.2
+  labels) into one public tag. Full suite green (1099 passed, excluding
+  `synth_placebo`); release notes `docs/release_notes_v1.1.0.md`.
+
+- **ARDL / UECM + PSS(2001) bounds test** — `ardl_fit()` / `uecm_fit()` wrapping
   `statsmodels.tsa.ardl` (`ARDL` / `UECM`), plus a `.bounds_test(case)`
   computing the Pesaran-Shin-Smith (2001) **F**- and **t**-bounds tests over
   all 5 deterministic cases, long-run multipliers, and the error-correction

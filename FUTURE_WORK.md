@@ -424,5 +424,6 @@ relaxed tolerances (standing rule 2).
 *Last updated: 2026-07-18. Reorganized: closed/resolved root causes moved to
 `methodology/<area>/<model>.md` (rule 16) and delivered features dropped (see
 git + CHANGELOG); this file now tracks OPEN + accepted-deferred work only.
-Latest completion: ARDL/UECM v1.1.2 (1e-6 parity, Stata+R) — write-up in
+Latest release: v1.1.0 — the time-series line (unit-root/ARIMA/GARCH,
+VAR/VECM/Johansen, ARDL/UECM+PSS bounds; 1e-6 parity, Stata+R). ARDL write-up in
 `methodology/timeseries/ardl.md`; follow-up `set type double` audit queued above.*

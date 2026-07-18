@@ -106,6 +106,7 @@ linearmodels, and fixest is here:
 - [Tutorials](docs/tutorials/README.md) — OLS, FE, IV, DiD, RDD, PSM, synthetic
   control walkthroughs.
 - [Roadmap](ROADMAP.md) · [Changelog](CHANGELOG.md) ·
+  [v1.1.0 release notes](docs/release_notes_v1.1.0.md) ·
   [v1.0.3 release notes](docs/release_notes_v1.0.3.md)
 
 ## Development
