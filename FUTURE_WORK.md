@@ -1,48 +1,18 @@
-# Future Work — Covariance Estimation Enhancements
+# Future Work — Open & Deferred Items
 
-Items below are **not blockers** for the v1.1 spike release. They represent
-capability gaps identified during the fe/iv/ols pyfixest integration. Each
-item names a specific implementation path, not a vague exploration.
+This file tracks **open capability gaps and accepted deferrals** only. Each
+item names a specific implementation path, not a vague exploration (rule 11),
+and every parity claim must hold to ≤1e-6 (rule 2) with synth placebo excluded
+from full runs (rule 5).
 
----
-
-## QUEUED — next-session prioritized performance work (rule 11, bounded prompts)
-
-These are the items from the 2026-07-17 Python-strength inspection plan, queued
-for their own **separate, single-concern sessions**. Each must be scoped as its
-own bounded supervisor prompt (do not bundle). Each must follow the parity gate
-(rule 2: ≤1e-6; rule 5: exclude synth placebo) and reuse the `parallel: bool`
-opt-in convention from `placebo.py` / `did_cs.py`. Full plan context: 2026-07-17
-handoff (GPU declined; Candidate A synth-analytic-gradient deferred — see bottom
-of this file).
-
-### Candidate D — _gmm_core._hac_S vectorize — DONE (commit `897c31a`)
-- Implemented 2026-07-17: the inner per-lag / per-t `np.outer` accumulation in
-  `_hac_S` (in `open_econs/models/_gmm_core.py`, NOT under `causal/`) replaced
-  by a single batched `np.einsum("ti,tj->ij", moments[lag:], moments[:-lag])`
-  reduction per entity. The per-entity loop is preserved (ragged time
-  dimensions). **Bit-identical** to the scalar loop (atol=0) — verified by new
-  `TestHacSVectorization` in `tests/non_stata_nor_r/test_gmm_core.py`
-  (parametrized over seeds/lags, adjust flag, full-sample hac_weighting path,
-  and no-time pooled path). The reduction order along the time axis is
-  unchanged, so `sum(axis=0)` of the (T-lag, L, L) tensor matches the
-  sequential `Gamma += np.outer(...)` loop exactly. The contemporaneous term
-  `S_ent = moments.T @ moments` (already a single BLAS call in the original)
-  is left as-is. Regression anchors `tests/stata/tests/test_stata_gmm.py`
-  (HAC two-step, 31 tests) and `test_stata_abond.py` (40 tests) all still pass
-  ≤1e-6. No parity drift. Do not re-touch unless a new HAC edge case breaks
-  bit-identicality.
-
-### Candidate C — psm.py vectorize — DONE (commit `cdb15be`)
-- Implemented 2026-07-17: batched `cKDTree.query` in `_within_treatment_matching`
-  / `_opposite_treatment_matching`; fancy-indexed `psi`; padded `(n,h)` /
-  `(n,h,p)` tensor reduction for `xi2` and `c_tau` (via `_padded_local_cov`);
-  vectorized `matched_arr` mask. **Bit-identical** to the scalar loops
-  (atol=0, rtol=0) — verified by new `test_psm_*_bit_identical_to_scalar` and
-  `test_psm_c_tau_vectorization_bit_identical`, plus the existing Stata-pinned
-  `test_psm_se_nn*` (nn=2/5/10) which still pass ≤1e-6. ~4x faster on the Stata
-  fixture (psm nn=10: 0.50s → 0.13s). No parity drift. Do not re-touch unless a
-  new neighborhood-size edge case breaks bit-identicality.
+**Where the finished work went (rule 13/16):** closed convention decisions and
+root-cause traces live in `methodology/<area>/<model>.md` — check there before
+re-investigating "why X differs." Delivered features are recorded in
+`CHANGELOG.md` and the git log. This file intentionally no longer duplicates
+them. Completed performance vectorizations (psm Candidate C `cdb15be`, `_hac_S`
+Candidate D `897c31a`) are recorded in `methodology/performance-conventions.md`
+and `methodology/linear/gmm.md`; the GPU decline is in
+`methodology/performance-conventions.md`.
 
 ---
 
@@ -240,44 +210,10 @@ available in R's `sandwich::NeweyWest` but not in OE.
   `1/(1-h)^2` HC3 hardening.  Stata `ivregress` has no HC0/HC2/HC3 VCE, so
   parity is R-reference only (rule 14/15).
 
-### iv() FE SE DOF Reconciliation (RESOLVED 2026-07-17)
-
-- **Empirical result (source-verified, N=500, n_g=50, K=3, data
-  `df_iv_panel.csv`):** `iv(..., entity="id")` vs Stata `xtivreg y w (x=z1 z2), fe`.
-
-  | cov_type | Stata SE(w) | OE SE(w) (fe_robust="xtivreg") | match? |
-  |----------|-------------|--------------------------------|--------|
-  | nonrobust | 0.0555038 | 0.0555038 | ✅ exact (≤1e-6) |
-  | robust (default `fe_robust="xtivreg"`) | 0.0523534 | 0.0523534 | ✅ exact (≤1e-6) |
-  | robust (`fe_robust="hetero"`) | — | 0.056824 | legacy pyfixest HC1, documented non-Stata |
-
-  Coefficients match Stata exactly in all cases (within-transform drops _cons;
-  both return only `w`, `x`).
-
-- **Root cause (RESOLVED):** Stata `vce(robust)` on `xtivreg, fe` is **cluster-robust
-  by the entity id**, not a heteroskedastic HC estimator.  Verified against
-  `xtivreg.ado` `within` program: `vce(robust)` sets the `cluster` local to `2`, which runs
-  `_regress ..., cluster(`id')` on the demeaned data.  The line-1816 rescale
-  `(e(df_r)/(e(df_r)-n_g+1))` applies ONLY to `cluster==0` (nonrobust `conventional`),
-  never to robust — so the prior `fe_dof` df-rescale hypothesis was wrong (a rescale
-  made SEs worse: 0.0602 vs Stata 0.0524).  The inner `_regress, cluster(id)` returns
-  SE(w)=0.0523534 (df_r=49), identical to the outer `xtivreg, fe vce(robust)` (df_rz=448)
-  — confirming the path.  Stata's reported `e(df_rz)` = 448 = `N - n_g + 1 - K`, identical to
-  OE's pyfixest `df_resid`, so df was never the issue.
-
-- **Fix (rule 15 toggle):** new `fe_robust: str = "xtivreg"` param on `iv()`.  When FE is
-  present and `cov_type in (robust, HC1, heteroskedastic)` with no explicit `cluster`,
-  `fe_robust="xtivreg"` → pyfixest `vcov={"CRV1": <entity col>, "debiased": debiased}`
-  (matches Stata); `fe_robust="hetero"` → pyfixest `vcov="HC1"` (legacy behavior, does NOT
-  match Stata, preserved as an explicit alternative).  An explicit `cluster=` argument
-  takes precedence.  `debiased` still applies its `G/(G-1)` SSC; below 1e-6 at G=50.
-
-- **Status:** RESOLVED.  `tests/stata/tests/test_stata_iv.py::TestIVFEStata` asserts both
-  `nonrobust` and `robust` coef+SE against `iv_fe.dta` (regenerated 2026-07-17) to ≤1e-6.
-  Methodology note updated in `methodology/linear/iv_2sls.md`.  The diagnostic `.do`
-  (`iv_fe_diag.do`) + `iv_fe_diag.dta` live in `tests/stata/generate-fixtures/archive/` for
-  re-tracing.  Next agent: no further work unless the user wants an R-parity FE-IV test
-  (R `AER::ivreg` has no FE; would need `plm`/`lfe`).
+> **iv() FE SE DOF reconciliation — RESOLVED** (2026-07-17); full write-up in
+> `methodology/linear/iv_2sls.md` (Stata `xtivreg, fe vce(robust)` is
+> cluster-robust by entity id; OE `fe_robust="xtivreg"` toggle matches ≤1e-6;
+> diagnostic `.do` archived). Moved out of the open queue.
 
 ---
 
@@ -295,77 +231,14 @@ available in R's `sandwich::NeweyWest` but not in OE.
   marginal; the risk is real.
 - **Decision:** D10 (2026-07-14).
 
-### D11: did_cs() Aggregation Modes — `.aggte()` Delivered
-
-- **What:** Expose `aggte()`-style dynamic/group/calendar aggregation
-  modes in `did_cs()`. R's `did::aggte()` supports
-  `type = "dynamic"` (event-time ATTs), `type = "group"` (cohort-specific
-  ATTs), and `type = "calendar"` (calendar-time ATTs).
-- **Status:** Delivered (2026-07-14). `CsDiDResult.aggte(type=)`
-  implements all three types with R parity at `rtol=1e-6`. Four bugs
-  found and fixed during validation (wrong divisor, wrong RIF index,
-  wrong two-stage aggregation, missing centering in per-level group SE).
-  See CHANGELOG for details.
-- **Remaining:** `did_sa()` and `did_gardner()` extensions
-  still queued (citations verified: Sun & Abraham 2021, Gardner 2022).
-
-### D12: did_gardner() — Gardner (2022) Two-Stage DID — Delivered
-
-- **What:** `did_gardner(data, y, first_stage, second_stage, treatment, cluster=)`
-  implements the Gardner (2022) DID2S estimator with cluster-robust SEs via
-  two-stage influence functions.  Returns `GardnerResult`.
-- **Status:** Delivered (2026-07-14). R parity at `rtol=1e-6` against
-  `did2s::did2s()` v1.2.1 (non-bootstrap). 14 tests, 0 regressions.
-- **Key finding:** Two-stage IF formula `IF = IF_fs - IF_ss` with
-  `gamma = (X10'X10)^{-1} (X1'X2)` (original x1, not zeroed-out x10).
-  Naive single-stage VCE underestimates SE by ~17%.
-- **Remaining:** `did_sa()` still queued for next session.
-
-### D13: did_sa() — Sun & Abraham (2021) Interaction-Weighted DID — Delivered (R parity)
-
-- **What:** `did_sa(data, y, cohort, period, ref_period, entity, time,
-  cluster, covariates)` implements the Sun & Abraham (2021) interaction-weighted
-  estimator with cluster-robust SEs. Returns `SaDiDResult` with ATT/SE/t/p,
-  period-level and cohort-level aggregated views, full 9×9 VCE.
-- **Status:** Delivered (2026-07-14). R parity at `rtol=1e-6` against
-  `fixest::sunab()` v0.14.2. 23 tests, 0 regressions.
-- **Key findings:**
-  - SSC formula confirmed from fixest source (`vcov_cluster_internal`,
-    `ssc_compute_K`): `G/(G-1) × (n-1)/(n-K)` where `K = nparams - (G-1)`.
-  - Collinearity detection via sequential projection (Gram-Schmidt in original
-    column order) matches fixest's Cholesky-based detection.
-  - ATT is the time::0 period-level aggregate (cohort-weighted), not the
-    mean of all interaction coefficients.
-- **Stata-parity gap:** No Stata anchor exists for the Sun-Abraham estimator.
-  Stata equivalent would be `csdid` (Callaway & Sant'Anna 2021) with
-  `aggte(type="simple")`, or `eventstudyinteract` (Sun & Abraham 2021
-  Stata implementation by Sun). These are distinct packages with different
-  defaults; parity work is deferred.
-  - **Reference:** `csdid` (R & Stata), `eventstudyinteract` (Stata, by Liyang Sun).
-  - **Decision required:** Whether to implement Stata parity for D13 using
-    `csdid` or `eventstudyinteract` as the anchor, or to treat R fixest as the
-    sole parity anchor for this estimator.
-
----
-
-## Test Layout — Deferred Migrations
-
-### Root-Level Test Files → `non_stata_nor_r/`
-
-- **What:** ~20 unit/cross-check test files at the `tests/` root
-  (`test_cem.py`, `test_psm.py`, `test_nls.py`, `test_synth.py`,
-  `test_synth_placebo.py`, `test_did.py`, `test_event_study.py`,
-  `test_fe.py`, `test_ols.py`, `test_iv.py`, etc.) should migrate to
-  `tests/non_stata_nor_r/` per the finalized 4-role taxonomy.
-- **Why deferred:** Large scope (~20 files), complex cross-references
-  to both Stata and R fixture directories, purely cosmetic (no parity
-  impact), real regression risk if paths break. The Stata/R parity
-  tests (the core product per standing rule 2) are already correctly
-  organized; this is polish, not substance.
-- **Status:** Delivered (2026-07-14). 36 files migrated, 4 relative
-  imports fixed (`from .r.r_runner` → `from ..r.r_runner`), full suite
-  804 passed, 0 regressions.
-- **Decision:** 2026-07-14, layout migration session.
+> **Delivered DID extensions moved out (see CHANGELOG + git + methodology):**
+> D11 `did_cs().aggte()` (dynamic/group/calendar), D12 `did_gardner()`
+> (Gardner 2022 DID2S, `methodology/causal_inference/did_gardner.md`), and D13
+> `did_sa()` (Sun & Abraham 2021, `methodology/causal_inference/did_sa.md`) are
+> all delivered with R parity ≤1e-6. The only remaining D13 open question — a
+> Stata anchor for Sun-Abraham (`csdid` w/ `aggte(type="simple")` or
+> `eventstudyinteract`) — is folded into the did_sa methodology note as a
+> deferred decision.
 
 ---
 
@@ -421,172 +294,12 @@ relaxed tolerances (standing rule 2).
 
 ## GMM Convention Differences (Documented, Not Bugs)
 
-### GMM-J: J-Statistic Convention (Closed)
-
-- **What:** OE's one-step J uses model-based S: `J = g'(Z'Z)^{-1}g / sig2`
-  (line 158 of `_gmm_core.py`). Stata's `e(J)` uses robust sandwich
-  `S_hat = (1/N)Σg_ig_i'`. R's `specTest()` does NOT include `/sig2`.
-  Two legitimate, source-confirmed conventions exist.
-- **Evidence:** Stata's `gmm.ado` line 1358: `e(J) = Q * N`. With the
-  corrected fixture (single-equation + `winitial(unadjusted)`), Stata's
-  one-step J=3.7702 (model-based weighting from `winitial(unadjusted)`),
-  while OE's one-step J=4.085 (robust S when `cov_type="robust"`).
-  Both are valid under their respective conventions.  Two-step J matches
-  to machine epsilon (both use efficient S^{-1}).
-- **Status:** Resolved 2026-07-17. OE's `/sig2` convention was kept as-is.
-  Documented in `_gmm_core.py` module docstring, inline comment at line 158,
-  and `gmm()` docstring. See commit `a941114`.
-- **No action required.**
-
-### GMM-HAC: HAC Kernel Scope Convention (Stata + R parity, PARTIAL 2026-07-17)
-
-- **What (two distinct conventions):**
-  1. **Stata / OE-default HAC** (per-entity): the HAC long-run S is Newey-West
-     *within each panel entity*, accumulated.  Matches Stata `gmm, wmatrix(hac
-     ...) vce(hac ...)`.  Coefficient `[0.892, 2.017, 1.570]`, SE `[0.129,
-     0.094, 0.797]` — matched to ≤1e-6 (coef AND SE) under
-     `windmeijer=False, robust_meat="two-step"`.
-  2. **R-pooled HAC** (`hac_weighting=True`): the HAC S is computed over the
-     **full sample as one time series** (each obs its own entity) — R's
-     `gmm(vcov="HAC")` applies the Bartlett kernel to BOTH weighting matrix AND
-     VCE over the pooled sample.  Coefficient `[0.885, 2.018, 1.534]`.
-- **Status:**
-  - Stata/per-entity HAC: ACHIEVED (≤1e-6 coef+SE), tested in
-    `TestGmmOverIdentifiedTwoStepHAC`.
-  - R-pooled HAC: `hac_weighting=True` toggle ADDED.  **Coefficient matches R
-    to ≤1e-6** (tested in `TestGmmROverIdentifiedHACWeighting`).  **SE matches
-    R to within ~6e-4** (R SE `[0.128, 0.097, 0.802]` vs OE `[0.128, 0.097,
-    0.803]`).  The residual ~6e-4 gap is **diagnosed and explained** (NOT a
-    bug, NOT a loosened tolerance — see below).  The SE test asserts at
-    atol=1e-3 with an explicit documented-divergence comment, NOT at 1e-6.
-  - **Root cause of the ~6e-4 SE gap (source-confirmed 2026-07-17):** R's
-    `gmm(..., vcov="HAC")` is **internally inconsistent** between the coefficient
-    and the reported VCE.  The two-step *coefficient* is optimized with a HAC
-    weight `W = S⁻¹` built from the **first-stage 2SLS residuals** (`.weightFct`
-    is called with `res1$par` = the 2SLS theta in `momentEstim.baseGmm.
-    twoStep.formula`).  But the *reported* `vcov` (`FinRes.baseGmm.res`) builds
-    `v = .weightFct(z$coefficient, x, "HAC")` from the **final two-step
-    residuals**, and uses it for BOTH `z$w` and `z$vcov`.  Empirically: the
-    e1-HAC (2SLS-residual) bread reproduces R's coefficient to 2e-15, while the
-    e2-HAC (two-step-residual) bread reproduces R's *SE* to 6 decimals
-    (`[0.127674, 0.096713, 0.802281]`) — but gives a DIFFERENT coefficient
-    (`[0.888, 2.016, 1.510]`).  So R's own `coef(g)` and `vcov(g)` come from
-    two different S matrices.  OE uses ONE consistent S (e1-HAC bread → also
-    used in the meat sandwich), so it matches R's coefficient exactly and lands
-    within 6e-4 of R's (internally-inconsistent) SE.  **Do NOT "fix" this to
-    1e-6** by switching OE's bread to e2-HAC — that would replicate R's
-    inconsistency, break OE's own coef↔SE consistency, AND break the exact
-    coefficient match.  Keep atol=1e-3 with this note.
-  - FIX (2026-07-17): the R fixture `oid_hac_2s` previously stored the PLAIN
-    optimal two-step coef `b2=[0.870,...]` as the "R HAC" coef — wrong.  R's
-    actual HAC coef is `[0.885,...]`.  `gmm.R` now stores `coef(g_hac_oid)` /
-    `vcov(g_hac_oid)`; the old `test_coefficients_match_r` asserting OE==b2 was
-    validating against an incorrect R value and has been corrected.
-- **Implementation path (residual R HAC SE gap):** NONE remaining — the gap is
-  a confirmed R-internals inconsistency (coefficient weight from 2SLS residuals
-  vs reported VCE from two-step residuals).  No source-dive needed; no code
-  change warranted.  Documented as above; SE test stays at atol=1e-3.
-
-### GMM-RCLUSTER: R "cluster=" is a NO-OP — RESOLVED as R `vcov="iid"` (2026-07-17)
-
-- **Correction (rule 6):** The prior audit treated R's `gmm(..., vcov="iid",
-  cluster=df$cluster)` as a distinct "cluster" convention with coef
-  `[0.850, 2.012, 1.354]`.  Source-reading `gmm` v1.9-1 (`.weightFct`,
-  `FinRes.baseGmm.res`, `gmm()`) proves the `cluster=` argument is **NOT a
-  real parameter** — it falls through `...` and is never consumed.  R's `gmm`
-  has **NO cluster VCE at all**.  The "R cluster" fixture value is simply R's
-  plain `gmm(..., vcov="iid")` two-step GMM.  (The earlier `gc$w` reverse-
-  engineering was chasing an ignored argument; the recovered coef was just the
-  iid two-step coef.)
-- **R `vcov="iid"` recipe (source-confirmed, reproduced to machine precision):**
-  homoskedastic efficient weight `S_iid = Z_iid' Z_iid / n` where `Z_iid` =
-  [intercept column] + the *explicit* instruments (exogenous regressors
-  excluded — they are their own instruments in X).  Meat = `sig2 * S_iid`
-  (scaled by two-step residual variance `sig2 = e2'e2/n`).  Coefficient
-  `[0.850433, 2.011863, 1.354058]`, SE `[0.131726, 0.101611, 0.804557]`.
-  Note R `vcov="MDS"` (EHW robust) instead matches OE's default
-  `cov_type="robust"` coef `[0.870, 2.027, 1.464]`; R `vcov="iid"` matches
-  OE `weight="iid"` coef `[0.850, 2.012, 1.354]`.
-- **OE implementation:** `weight="iid"` toggle now builds this homoskedastic
-  S for BOTH bread and meat (with the `n`-scaling required to match R's
-  `V = (G' v^-1 G)^-1 / n`).  `TestGmmROverIdentifiedIidTwoStep` asserts
-  coef+SE parity to <=1e-6; `TestGmmWeightToggleIidBread` asserts the toggle
-  matches R `vcov="iid"` and differs from the Stata-style bread.  DONE.
-- **Residual (closed):** none for the coefficient; R's HAC SE residual gap
-  (GMM-HAC) is tracked separately.
-
-### GMM-WC: Windmeijer Correction + Robust-Meat Conventions (RESOLVED 2026-07-17)
-
-Two convention differences between OE's `gmm()` and Stata's `gmm` command
-were identified, both now exposed as toggles:
-
-**Difference 1 — Windmeijer (2005) correction.** OE applies the Windmeijer
-finite-sample correction to the two-step robust VCE by default.  Stata's
-`gmm` command does NOT (confirmed in `gmm.ado`: no Windmeijer code, no
-WC-robust label, no toggle).  Stata's `xtabond`/`xtdpd` DO apply it.
-→ Toggle `windmeijer` added (`gmm()`, `_gmm_core.estimate_gmm`); default True.
-- OE default (`windmeijer=True`): matches R `gmm` `vcov="MDS"` to machine
-  epsilon.  OE SEs=[0.145, 0.103, 0.826] vs Stata `gmm`=[0.126, 0.099, 0.775].
-
-**Difference 2 — robust MEAT moment-covariance (THE residual 2.7% gap).**
-Stata's `gmm` builds the robust VCE as the FULL sandwich
-`V = (G' S1^{-1} G)^{-1} (G' S1^{-1} S2 S1^{-1} G) (G' S1^{-1} G)^{-1}`
-where **S1** = one-step-residual moment cov (efficient weight / bread) and
-**S2** = **two-step-residual** moment cov (robust MEAT).  The econometric
-literature and R's `gmm` package (`vcov="MDS"`, `.weightFct` = `crossprod(gt)/n`)
-use S1 for BOTH bread and meat, collapsing to `V2 = (G' S1^{-1} G)^{-1}`.
-This is the residual ~2.7% gap (max |gap|=0.0208 with `windmeijer=False`
-alone).  Stata's two-step S2 lives inside the compiled Mata `_gmm_wrk()`,
-so it was confirmed numerically instead: Stata's extracted `e(S)` equals
-`(1/N)·Σᵢ(Zᵢ·e2ᵢ)(Zᵢ·e2ᵢ)'` to machine epsilon, and feeding Stata's OWN
-extracted `e(S)` into the full-sandwich formula reproduces Stata's `e(V)`
-to ~2e-8.
-→ Toggle `robust_meat` added; default `"one-step"` (literature/R collapse);
-  `"two-step"` builds S2 from e2 and assembles the full sandwich.
-
-**Resolution / parity:** With **`windmeijer=False, robust_meat="two-step"`**
-OE reproduces Stata `gmm` two-step robust SEs to **max |gap| = 2.06e-08**
-(≤1e-6).  Coefficients and two-step J match to machine epsilon in all cases.
-- Stata `gmm` SE: [0.1260902, 0.0986776, 0.7745471]
-- OE (`windmeijer=False, robust_meat="two-step"`): [0.1260902, 0.0986776, 0.7745471]
-- OE default (`windmeijer=True, robust_meat="one-step"`) = R `gmm`: [0.14527, 0.10322, 0.82625]
-
-**IMPORTANT semantics caution:** `robust_meat="two-step"` does NOT replace
-the whole S with e2 — it switches only the robust MEAT S2 to e2 while keeping
-the efficient-weight bread S1 at e1 (the full sandwich requires exactly this).
-Do not "simplify" it to globally replacing S1 with S2 (that regresses to a
-0.00013 gap).
-
-**Tests:** `tests/stata/tests/test_stata_gmm.py`
-`TestGmmOverIdentifiedTwoStepRobust` now asserts the ≤1e-6 SE parity with
-`windmeijer=False, robust_meat="two-step"`; the default (Windmeijer) path is
-documented as matching R rather than Stata `gmm` and is NOT asserted as Stata
-parity.  R `gmm` has no `robust_meat="two-step"` equivalent (always e1), so
-no R-side assertion is added (rule 3: no clean R anchor — documented, not
-forced).  `abond()` is unaffected (inherits `windmeijer=True,
-robust_meat="one-step"` defaults, correct for xtabond/xtdpd).
-
-**Status:** RESOLVED — both gaps closed and exposed as toggles; parity tests
-added.
-
-### GMM-GN: Stata Expression-Form Weighting Matrix (Closed)
-
-- **What (corrected 2026-07-17):** The original claim — "Stata's Gauss-Newton
-  doesn't converge to 2SLS" — was **wrong**.  For linear models, the GMM
-  objective is quadratic and any Newton solver converges in one step (confirmed:
-  `e(converged)=1` in all configurations, tightening tolerances has zero effect).
-  The 6.8% gap was a **specification difference**: Stata's multi-equation
-  expression form with `winitial(identity)` minimizes `(Y-Xb)'ZZ'(Y-Xb)` —
-  the ZZ'-weighted objective — NOT the standard 2SLS objective
-  `g'(Z'Z)^{-1}g`.  These coincide only when L==p (exactly-identified).
-- **Resolution:** Regenerated the Stata fixture (`gmm.do`, `gmm.dta`) using
-  single-equation form with `instruments()` + `winitial(unadjusted)`, which
-  gives standard 2SLS.  All overidentified coefficients now match OE to ≤1e-7.
-  Confirmed: Stata single-equation b2=1.354058 = OE b2=1.354058 =
-  Python exact 2SLS b2=1.354058.
-- **Status:** Resolved 2026-07-17.  Fixture regenerated, tests rewritten with
-  valid parity assertions.  See `tests/stata/generate-fixtures/gmm.do` header
-  for the specification rationale.
+> **Closed convention decisions moved to `methodology/linear/gmm.md`**
+> (Root-Cause Knowledge section, rule 16): the J-statistic `/sig2` split
+> (GMM-J), the HAC kernel-scope convention (GMM-HAC), the R `cluster=` NO-OP
+> (GMM-RCLUSTER), the Windmeijer + `robust_meat` conventions (GMM-WC), and the
+> Stata expression-form weighting matrix (GMM-GN). Only the open IVGMM
+> wrap-candidate remains below.
 
 ### GMM-IVGMM: linearmodels.IVGMM Wrap Candidate (Rule 14)
 
@@ -667,32 +380,6 @@ added.
   to match Stata's `gmm(L.y, lag(2 4)) iv(x z)`.  Also update `r_runner.R_EXE`/
   docs if a second R is added.
 
-*Last updated: 2026-07-17, GMM parity audit verification (Items 1-2 resolved); abond R-parity flagged BLOCKED.*
-
----
-
-## GPU acceleration — DECLINED project-wide (rule 19 finding)
-
-**Decision (2026-07-17):** GPU (CuPy / numba-cuda) is **not adopted** for any
-estimator in OE. Recorded so future sessions do not re-open it.
-
-- **Why:** The genuine hot spots are (1) `scipy.optimize` SLSQP/Nelder-Mead in
-  `synth.py` (no GPU backend; reimplementing the solver on GPU is out of scope
-  and would break R `Synth` parity), and (2) numpy matmuls that **already run
-  multithreaded on CPU** via the bundled BLAS. This environment ships
-  **OpenBLAS 0.3.31, DYNAMIC_ARCH, MAX_THREADS=24** — so any vectorized numpy
-  loop auto-parallelizes on the CPU without a GPU. GPU transfer overhead
-  dominates at the current fixture sizes (tens-to-hundreds of entities /
-  periods).
-- **Revisit only if:** a user has 100k+ entity panels or a genuinely
-  GPU-amenable kernel (e.g. large dense matmul-dominated GMM with no scipy
-  optimizer in the hot path). Until then, prefer **vectorize-then-let-BLAS-
-  thread** and **ProcessPoolExecutor for Python/GIL-bound loops** (see
-  `methodology/performance-conventions.md`).
-- **Note:** `ThreadPoolExecutor` is **useless** for numpy/BLAS-bound work
-  (GIL held during BLAS calls); only `ProcessPoolExecutor` helps genuinely
-  GIL-bound Python loops. Mirrored in `methodology/performance-conventions.md`.
-
 ---
 
 ## Candidate A — synth analytic gradient for SLSQP: DEFERRED (blocked)
@@ -714,21 +401,6 @@ estimator in OE. Recorded so future sessions do not re-open it.
 
 ---
 
-## ARDL / UECM + PSS(2001) bounds test (v1.1.2): DONE
-
-- **What:** `ardl_fit()` / `uecm_fit()` + `.bounds_test(case)` (F- and t-bounds,
-  all 5 cases, LR multipliers, EC term), wrapping `statsmodels.tsa.ardl`.
-- **Status:** COMPLETE. Parity to 1e-6 vs Stata SSC `ardl` (14 tests) and R
-  `ARDL` (10 tests) + 27 backend tests. Conventions source-verified against
-  `ardl.ado` / `ardlbounds.ado` and R `ARDL` source (rule 1). Root causes and
-  the math/command manual are in `methodology/timeseries/ardl.md`.
-- **Toggles exposed (rule 15):** `cv_vintage` (`pss2001` default vs
-  `statsmodels`), `lr_sign` (`stata` default = −θ/ρ). Both branches tested.
-- **Deliberate default (not a bug):** `bounds_test` default `signif=(0.10, 0.05,
-  0.01)` — the `"2.5%"` critical-value key exists only when `signif` includes
-  `0.025`. The Stata fixture stores 2.5% CVs and `TestStataARDLCritVals25`
-  exercises that path. Revisit only if users want 2.5% in the default set.
-
 ## Open follow-up — audit Stata `.do` generators for `set type double` (rule 18)
 
 - **What:** The ARDL parity work uncovered that Stata `import delimited` reads
@@ -749,6 +421,8 @@ estimator in OE. Recorded so future sessions do not re-open it.
 
 ---
 
-*Last updated: 2026-07-18, ARDL/UECM v1.1.2 completed to 1e-6 parity (Stata+R); flagged `set type double` audit for other `.do` generators.*
-
-*Last updated: 2026-07-17, GPU declined + Candidate A deferred (Candidate B did_cs bootstrap parallelization implemented and pushed).*
+*Last updated: 2026-07-18. Reorganized: closed/resolved root causes moved to
+`methodology/<area>/<model>.md` (rule 16) and delivered features dropped (see
+git + CHANGELOG); this file now tracks OPEN + accepted-deferred work only.
+Latest completion: ARDL/UECM v1.1.2 (1e-6 parity, Stata+R) — write-up in
+`methodology/timeseries/ardl.md`; follow-up `set type double` audit queued above.*
