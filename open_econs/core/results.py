@@ -762,6 +762,227 @@ class CountResult(BaseModel):
             return True
 
 
+class OrderedResult(BaseModel):
+    """Result of an ordered logit / ordered probit regression.
+
+    Immutable result with the uniform interface (``.tidy()``, ``.summary()``,
+    ``.export()``, ``.vcov()``, ``.to_latex()`` / ``.to_html()``). Adds
+    ``.cutpoints`` (the threshold parameters in Stata convention),
+    ``.predict(type="class"|"probs")`` (predicted class / class probabilities),
+    and ``.margins()`` (average marginal effects on ``P(Y = j)``).
+
+    Notes
+    -----
+    Cutpoints are reported in **Stata convention**: cumulative, increasing
+    thresholds ``cut1 < cut2 < ...`` with ``P(Y <= j) = F(cut_j - x'b)`` where
+    ``F`` is the logistic or standard-normal CDF. R ``MASS::polr`` stores the
+    same cumulative thresholds under ``zeta`` (identical sign to Stata's
+    cutpoints); statsmodels ``OrderedModel`` internally stores them as
+    ``[cut1, log(cut2 - cut1), log(cut3 - cut2), ...]`` and is transformed back
+    to the Stata convention here. See ``methodology/limited/ordered.md``.
+    """
+
+    def __init__(
+        self,
+        *,
+        formula: str,
+        rhs_formula: str,
+        nobs: int,
+        df_resid: int,
+        df_model: int,
+        cov_type: str,
+        distr: str,
+        endog_name: str,
+        categories: list[int],
+        coefficients: pd.Series,
+        cutpoints: pd.Series,
+        std_errors: pd.Series,
+        z_stats: pd.Series,
+        p_values: pd.Series,
+        conf_int: pd.DataFrame,
+        llf: float,
+        fitted_probs: pd.DataFrame,
+        fitted_class: pd.Series,
+        call: dict[str, Any],
+        model_type: str,
+        _cov: pd.DataFrame,
+        _fit: Any = None,
+        _params: Any = None,
+    ) -> None:
+        self.formula = formula
+        self.rhs_formula = rhs_formula
+        self.data_shape = (nobs, coefficients.shape[0])
+        self.cov_type = cov_type
+        self.call = call
+        self.timestamp = datetime.now()
+        self.package_version = __version__
+
+        self.nobs = nobs
+        self.df_resid = df_resid
+        self.df_model = df_model
+        self.distr = distr
+        self.endog_name = endog_name
+        self.categories = categories
+        self.coefficients = coefficients
+        self.cutpoints = cutpoints
+        self.std_errors = std_errors
+        self.z_stats = z_stats
+        self.p_values = p_values
+        self.conf_int = conf_int
+        self.llf = llf
+        self.fitted_probs = fitted_probs
+        self.fitted_class = fitted_class
+        self.model_type = model_type
+        self._cov = _cov
+        self._fit = _fit
+        self._params = _params
+
+        self._freeze()
+
+    def tidy(self) -> pd.DataFrame:
+        df = pd.DataFrame({
+            "Variable": self.coefficients.index,
+            "Coef": self.coefficients.values,
+            "Std Err": self.std_errors.values,
+            "z": self.z_stats.values,
+            "P>|z|": self.p_values.values,
+            "0.025": self.conf_int["lower"].values,
+            "0.975": self.conf_int["upper"].values,
+        })
+        df.index.name = None
+        return df
+
+    def summary(self) -> str:
+        llf_str = f"{self.llf:.4f}" if self.llf is not None and not self._isnan(self.llf) else "N/A"
+        model_label = "Ordered Logit" if self.distr == "logit" else "Ordered Probit"
+        header = (
+            f"                 {model_label} Regression Results                 \n"
+            f"======================================================================\n"
+            f"Dep. Variable:               {self.endog_name}\n"
+            f"Model:                       {model_label}\n"
+            f"No. Observations:            {self.nobs}\n"
+            f"Df Residuals:                {self.df_resid}\n"
+            f"Df Model:                    {self.df_model}\n"
+            f"Std. Errors:                 {self.cov_type}\n"
+            f"Log-Likelihood:              {llf_str}\n"
+            f"======================================================================\n"
+        )
+        tbl = self.tidy().to_string(index=False)
+        cut_tbl = "\nCutpoints (thresholds):\n" + self.cutpoints.to_string()
+        return (
+            header + tbl + cut_tbl +
+            "\n======================================================================\n"
+        )
+
+    def margins(self) -> pd.DataFrame:
+        """Average marginal effects of each regressor on ``P(Y = j)``.
+
+        For ordered models the marginal effect of ``x_k`` on the probability of
+        category ``j`` is ``d P(Y=j)/d x_k = -beta_k * [f_j - f_{j-1}]`` where
+        ``f_j`` is the PDF of the latent error evaluated at the standardized
+        threshold ``(cut_j - x'b)`` (with ``f_0 = f_J = 0``). The average
+        marginal effect (AME) averages over observations. Computed from the
+        fitted statsmodels ``OrderedModel`` at the polished parameters.
+        """
+        if self._fit is None or self._params is None:
+            raise RuntimeError(
+                "margins() requires the fitted statsmodels OrderedModel. "
+                "This should not happen with the standard ologit()/oprobit() API."
+            )
+        model = self._fit
+        params = self._params
+        X = model.exog
+        xb = X @ params[: X.shape[1]]
+        thr = model.transform_threshold_params(params)[1:-1]  # cut1..cut_{J-1}
+        J = len(self.categories)
+        cats = self.categories
+        # standardized thresholds relative to xb: z_j = cut_j - xb
+        z = thr[None, :] - xb[:, None]  # (n, J-1)
+        if self.distr == "logit":
+            from scipy.stats import logistic as _log
+            pdf = _log.pdf(z)        # f(cut_j - xb)
+        else:
+            from scipy.stats import norm as _norm
+            pdf = _norm.pdf(z)
+        # f_j = pdf of the latent error at (cut_j - xb), for j=1..J-1;
+        # f_0 = f_J = 0. P(Y=j) = F(cut_j - xb) - F(cut_{j-1} - xb)
+        # with cut_0 = -inf (F=0), cut_J = +inf (F=1). Hence
+        # d P(Y=j)/d xb = f_{j-1} - f_j (f_0 = f_J = 0).
+        f = np.zeros((xb.shape[0], J + 1))  # index 0..J, f_0=f_J=0
+        f[:, 1:J] = pdf  # f_1..f_{J-1}
+        beta = self.coefficients.values  # (k,)
+        n, k = X.shape
+        ame = np.zeros((k, J))
+        for j in range(J):
+            dPj_dxb = f[:, j] - f[:, j + 1]   # f_{j-1} - f_j
+            contrib = dPj_dxb[:, None] * (-beta[None, :])  # (n, k); d xb/d x_k = beta_k
+            ame[:, j] = contrib.mean(axis=0)
+        rows = []
+        for ki, name in enumerate(self.coefficients.index):
+            for j, cval in enumerate(cats):
+                rows.append({
+                    "Variable": name,
+                    "Category": cval,
+                    "dy/dx": ame[ki, j],
+                })
+        return pd.DataFrame(rows)
+
+    def vcov(self) -> pd.DataFrame:
+        return self._cov
+
+    def predict(
+        self,
+        newdata: pd.DataFrame | None = None,
+        type: str = "probs",
+    ) -> pd.DataFrame | pd.Series:
+        """Predicted class probabilities or class labels.
+
+        Parameters
+        ----------
+        newdata : pd.DataFrame, optional
+            Out-of-sample covariates. If ``None``, returns the in-sample
+            fitted probabilities / classes.
+        type : {"probs", "class"}, default "probs"
+            ``"probs"`` returns a ``DataFrame`` of per-category probabilities
+            (columns = category labels). ``"class"`` returns the predicted
+            category (argmax) as a ``Series``.
+
+        Returns
+        -------
+        pandas.DataFrame or pandas.Series
+        """
+        if newdata is None:
+            if type == "class":
+                return self.fitted_class
+            return self.fitted_probs
+        if self._fit is None or self._params is None:
+            raise RuntimeError(
+                "predict(newdata=...) requires the fitted statsmodels OrderedModel."
+            )
+        from formulaic import Formula
+        matrices = Formula(self.rhs_formula).get_model_matrix(newdata, na_action="drop")
+        XX = matrices.rhs if hasattr(matrices, "rhs") else matrices
+        # OrderedModel supplies its own thresholds; drop any intercept column.
+        intercept_cols = [c for c in XX.columns if str(c).strip() in ("Intercept", "const", "1")]
+        if intercept_cols:
+            XX = XX.drop(columns=intercept_cols)
+        proba = self._fit.predict(self._params, exog=XX.values, which="prob")
+        cols = [str(c) for c in self.categories]
+        proba_df = pd.DataFrame(proba, index=XX.index, columns=cols)
+        if type == "class":
+            return pd.Series(
+                np.array(self.categories)[np.argmax(proba, axis=1)],
+                index=XX.index, name="predicted_class",
+            )
+        return proba_df
+
+    def _isnan(self, v: float) -> bool:
+        try:
+            return np.isnan(v)
+        except (TypeError, ValueError):
+            return True
+
+
 class OaxacaResult(BaseModel):
     """Result of an Oaxaca-Blinder (or Neumark) wage-gap decomposition.
 

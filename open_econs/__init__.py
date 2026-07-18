@@ -11,7 +11,8 @@ from .models.discrete.logit import logit
 from .models.discrete.probit import probit
 from .models.discrete.mlogit import mlogit
 from .models.limited.poisson import poisson
-from .core.results import CountResult
+from .models.limited.ordered import ologit, oprobit
+from .core.results import CountResult, OrderedResult
 from .models.linear.fe import fe
 from .models.linear.iv import iv
 from .models.linear.abond import abond
@@ -73,7 +74,7 @@ def did_sun_abraham(*args: Any, **kwargs: Any) -> object:
 
 
 __all__ = [
-    "ols", "reg", "logit", "probit", "mlogit", "poisson", "CountResult", "fe", "iv", "oaxaca",
+    "ols", "reg", "logit", "probit", "mlogit", "poisson", "CountResult", "ologit", "oprobit", "OrderedResult", "fe", "iv", "oaxaca",
     "did", "event_study", "balance", "abond", "did_cs", "density_test", "cem",
     "psm", "rdd", "rosenbaum_bounds", "gmm", "GMMResult",
     "nls", "NLSResult",
