@@ -427,3 +427,29 @@ git + CHANGELOG); this file now tracks OPEN + accepted-deferred work only.
 Latest release: v1.1.0 — the time-series line (unit-root/ARIMA/GARCH,
 VAR/VECM/Johansen, ARDL/UECM+PSS bounds; 1e-6 parity, Stata+R). ARDL write-up in
 `methodology/timeseries/ardl.md`; follow-up `set type double` audit queued above.*
+
+---
+
+## v1.2 poisson: ppmlhdfe non-clustered robust SE (OPEN parity gap)
+
+- **What:** `oe.poisson(..., vcov_backend="stata", cluster=None)` (Stata
+  `ppmlhdfe` non-clustered default) does **not** reproduce ppmlhdfe's SE to
+  1e-6. ppmlhdfe reports a *robust (sandwich) SE*, not an OIM iid SE, and its
+  robust factor uses the Correia-Guimaraes-Zylkin (2019) nonlinear Poisson
+  adjustment. fixest/pyfixest `ssc(k_adj=False, G_adj=True, k_fixef="none")`
+  reproduces it only to ~4e-4 (x2: OE 0.03967 vs ppmlhdfe 0.04183), even via R
+  `fixest::fepois` directly. So this is a genuine algorithm-level gap, not a
+  toggle miss.
+- **In scope / passing:** the **cluster-robust** SE — the headline PPML use
+  case — matches ppmlhdfe to 1e-6 (`vcov_backend="stata"` + `cluster=...`).
+  Verified: x1 0.041178 / x2 0.047180 (= ppmlhdfe). Point estimates, deviance,
+  and log-pseudolikelihood match to 1e-6 across Stata/R/pyfixest.
+- **Where OE lives:** `open_econs/models/limited/poisson.py`; root cause written
+  up in `methodology/limited/poisson.md` §2.
+- **Status:** OPEN. The non-clustered-SE gap is asserted as `skip` (not
+  loosened) in `tests/stata/tests/test_stata_poisson.py::TestStataPoissonIidSE`.
+  Resolve only by either (a) wrapping ppmlhdfe's exact robust meat, or (b)
+  exposing a documented `robust` convention toggle and accepting the fixest
+  number. Do NOT silently tighten the tolerance to paper over it (rule 2).
+- **Next agent:** treat as open, not pending-merge-blocker; cluster parity is
+  the shipped deliverable.
