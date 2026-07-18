@@ -453,3 +453,37 @@ VAR/VECM/Johansen, ARDL/UECM+PSS bounds; 1e-6 parity, Stata+R). ARDL write-up in
   number. Do NOT silently tighten the tolerance to paper over it (rule 2).
 - **Next agent:** treat as open, not pending-merge-blocker; cluster parity is
   the shipped deliverable.
+
+---
+
+## v1.2 ologit/oprobit: Stata-R coefficient divergence & robust-SE gap (OPEN parity gaps)
+
+- **What (a):** Stata ologit/oprobit and R MASS::polr MLEs differ by
+  ~1e-5 on **coefficients and cutpoints** (independent optimizer convergence;
+  both report the *same* log-likelihood to 1e-8 and the *same* OIM SEs to 1e-7,
+  so it is precision, not a formula difference). OE anchors to Stata (the
+  project's primary reference) and matches it to 1e-6 after an L-BFGS-B polish
+  pass on the statsmodels log-likelihood (gtol=1e-12, ftol=1e-14). R
+  coef/cutpoint assertions are skip-ped at 1e-6 with the exact magnitude
+  recorded (rule 15). R log-likelihood and OIM SE match OE to 1e-6 and ARE
+  asserted.
+- **What (b):** oe.ologit(..., cov_type="HC1") (and HC0/HC2/HC3) robust SEs
+  diverge from Stata ologit, vce(robust) by ~4e-4 — same root cause as the
+  poisson non-clustered robust gap: numerical-score bread vs Stata's exact OIM
+  bread + Stata's small-sample factor. OIM (
+onrobust) SE matches Stata to
+  1e-6 (the validated deliverable). Robust SE assertions are skip-ped in
+  	ests/stata/tests/test_stata_ordered.py::TestStataOrderedRobustSE.
+- **Cutpoint sign:** task brief assumed polr/OrderedModel negates Stata's
+  cutpoints — **FALSE** (source-verified). All three store cumulative,
+  increasing thresholds with P(Y<=j)=F(c_j - x'ß) and the SAME sign. OE stores
+  Stata convention; no negation. See methodology/limited/ordered.md (rule 18
+  footgun).
+- **Where OE lives:** open_econs/models/limited/ordered.py; OrderedResult
+  in open_econs/core/results.py; root cause in methodology/limited/ordered.md.
+- **Status:** OPEN (both). Both are documented skips (never loosened, rule 2).
+  Resolve (b) only by wrapping Stata's exact robust bread; (a) is inherent to
+  the reference engines and is accepted as Stata-anchored.
+- **Next agent:** treat as open; Stata coef/cutpoint/OIM-SE parity is the
+  shipped deliverable. Do NOT "tighten" the skipped tolerances to paper over
+  either gap.

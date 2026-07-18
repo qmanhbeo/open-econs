@@ -157,7 +157,8 @@ dependencies), not a from-scratch numerical reimplementation.**
 ##### v1.2 — Count & limited dependent variable models *(committed)*
 New `open_econs/models/limited/` module:
 - `poisson()` *(shipped 2026-07-19)* — FE-backed PPML wrapping `pyfixest.fepois`, reconciled to Stata `ppmlhdfe` (2.3.3) and R `fixest::fepois` (0.14.2) to 1e-6. `vcov_backend` toggle: `"fixest"` (R parity, default) vs `"stata"` (ppmlhdfe cluster-robust parity). `CountResult` adds `.irr()`, `.margins()`, `.predict()`. Open gap: ppmlhdfe non-clustered robust SE (not iid) diverges ~4e-4 from fixest — recorded in FUTURE_WORK.md, cluster-robust SE is the validated deliverable.
-- `nbreg()` (NB1/NB2), `ologit()` / `oprobit()` (ordered) — *pending*
+- `nbreg()` (NB1/NB2) — *pending*
+- `ologit()` / `oprobit()` (ordered) — *shipped 2026-07-19* — wrap `statsmodels.miscmodels.ordinal_model.OrderedModel`, polished with an L-BFGS-B pass (gtol=1e-12) so point estimates, cutpoints, OIM SEs, and loglik match Stata `ologit`/`oprobit` (and R `MASS::polr` loglik/SE) to 1e-6. `OrderedResult` adds `.cutpoints`, `.predict(type="class"|"probs")`, `.margins()`. `cov_type` ∈ {nonrobust, HC0, HC1, HC2, HC3}. OPEN gaps (documented skips): Stata-vs-R coef/cutpoint divergence ~1e-5; HC1 robust SE vs Stata `vce(robust)` ~4e-4. See `methodology/limited/ordered.md` and FUTURE_WORK.md.
 - **`poisson()` / `nbreg()` MUST be FE-backed via the existing HDFE demeaning core** (Correia 2016 / Guimarães & Portugal, the `fixest::fepois` convention). Validation target is Stata `ppmlhdfe` and R `fixest::fepois` at the option level, not just coefficient equality.
 - `tobit()` — MLE (statsmodels has no Tobit); validate vs R `censReg` / `AER::tobit`
 - `heckman()` — selection model (two-step + MLE); validate vs R `sampleSelection`
