@@ -1,6 +1,6 @@
 [project]
 name = "open-econs"
-version = "1.0.3"
+version = "1.1.0"
 description = "Empirical economics and causal inference in Python - a scikit-learn-style unified API with Stata/R-grade numerical parity."
 keywords = [
     "econometrics",
