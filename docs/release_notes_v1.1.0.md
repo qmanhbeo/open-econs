@@ -1,9 +1,10 @@
 # open-econs v1.1.0 — Release Notes
 
-**Status: PENDING.** Version bumped to `1.1.0` in `pyproject.toml`; CHANGELOG,
-ROADMAP, README, and this document updated. Tag `v1.1.0` + GitHub Release + PyPI
-upload to follow (the GitHub Release `published` event triggers the trusted-
-publisher PyPI workflow).
+**Status: PUBLISHED.** Version bumped to `1.1.0` in `pyproject.toml`; CHANGELOG,
+ROADMAP, README, and this document updated. Tagged `v1.1.0`; the GitHub Release
+`published` event triggers the trusted-publisher PyPI upload workflow
+(`publish.yml`), and the release parity gate (`ci-parity.yml`) runs on the same
+event.
 
 ## Highlights
 
