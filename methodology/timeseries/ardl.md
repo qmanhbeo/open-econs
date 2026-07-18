@@ -56,6 +56,20 @@ where `R` selects the `m` level coefficients tested in the given case
 also tested). This F definition is **identical across Stata `ardl`, R `ARDL`,
 R `dynamac`, and statsmodels** — it is the one cross-tool ≤1e-6 agreement point.
 
+**Fixture footgun (rule 18) — Stata `import delimited` reads `float`.** When the
+Stata parity fixture is generated, `import delimited` reads numeric columns as
+**single-precision (`float`) by default**. On this example (R²=0.988, near-
+collinear lags) that input truncation shifts the OLS level coefficients by ~3e-6
+and `e(F_pss)` by ~4e-5, producing a *spurious* Stata-vs-(R/statsmodels)
+divergence that looks like a convention difference but is not — R `read.csv` and
+pandas `read_csv` both default to double, so only the Stata leg was affected. The
+fix (verified to restore <1e-6 parity on F/t/EC/LR) is `set type double` **before**
+`import delimited` in `tests/stata/generate-fixtures/ardl.do`. This was diagnosed
+by refitting the identical level regression with numpy QR *and* normal-equations
+(both = statsmodels = R to 1e-14) while Stata-default alone disagreed; adding
+`set type double` collapsed the gap to 1e-13. Do not "fix" a future recurrence by
+loosening the tolerance.
+
 A companion **t-bounds test** on `ρ` (the `y_{t-1}` coefficient) exists in
 Stata / R `ARDL` / `dynamac` but **NOT in statsmodels' `bounds_test`** — OE
 computes it directly (`t = ρ̂ / se(ρ̂)`) to reach parity.
