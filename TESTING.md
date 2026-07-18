@@ -13,6 +13,24 @@ executes the full suite (including `stata`/`r` parity tests) against committed
 fixtures. The `-m "not stata and not r"` expression is kept only as an opt-in
 *fast mode* for quick local iteration that skips the parity tests.
 
+## Lint / type-check gate scope (quirk — do not re-trace)
+
+The CI gate (`.github/workflows/ci.yml`, `ci-nightly.yml`) scopes **both**
+static checks to the library only:
+
+```
+ruff check open_econs/
+mypy open_econs/ --ignore-missing-imports
+```
+
+**`tests/` is intentionally NOT type-checked or ruff-gated.** `pyproject.toml`
+sets `disallow_untyped_defs = true`, so running `mypy` directly on a test file
+will report dozens of `no-untyped-def` errors for un-annotated pytest
+functions/fixtures — these are **expected and irrelevant to the gate**. Do NOT
+add type annotations to test functions to silence them; no other test file in
+the repo carries them. When reproducing the gate locally, run exactly the two
+commands above (scoped to `open_econs/`), then `pytest -m "not synth_placebo"`.
+
 ## Markers
 
 | Marker | Meaning |
