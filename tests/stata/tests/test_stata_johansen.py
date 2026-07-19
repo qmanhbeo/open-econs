@@ -239,3 +239,42 @@ class TestJohansenCVRegression:
         )
         # Case 2 trace 5% CV at K-r=2: Stata rconst col = 19.96
         assert result.cvt.iloc[0, 1] == pytest.approx(19.96, abs=1e-6)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Documented CV-table disparity (docs/var-vecm-backend-recon.md §2.3, "
+        "Decision 1). OE's default cvt/cvm use Osterwald-Lenum (1992) to match "
+        "Stata vecrank / R urca; statsmodels' native coint_johansen returns the "
+        "MacKinnon-Haug-Michelis (1996) surface. Case 3, r=0, 5% trace: O-L = "
+        "15.41 vs MacKinnon = 15.4943 (gap ~0.084 >> 1e-6). OE surfaces the "
+        "MacKinnon table as cvt_mackinnon/cvm_mackinnon; the two are not equal. "
+        "Intentionally not unified (would flip rank selection)."
+    ),
+)
+class TestJohansenCVMackinnonDivergence:
+    """OE default CVs do NOT equal statsmodels' native MacKinnon CVs.
+
+    This is a source-confirmed convention split, not a bug. The xfail marks
+    exactly what is left: a parity assertion that holds only if OE abandoned
+    its O-L default. It fails today and is expected to stay failed until the
+    lead decides to change the authoritative table.
+    """
+
+    def test_ol_vs_mackinnon_trace_5pc_r0(self):
+        result = oe.johansen_cointegration(
+            DF_VAR_INPUT, case=3, k_ar_diff=1, signif=0.05,
+        )
+        # If there were no disparity this would hold to 1e-6. It does not:
+        npt.assert_allclose(
+            result.cvt.iloc[0, 1], result.cvt_mackinnon.iloc[0, 1], rtol=1e-6,
+        )
+
+    def test_ol_vs_mackinnon_maxeig_5pc_r0(self):
+        result = oe.johansen_cointegration(
+            DF_VAR_INPUT, case=3, k_ar_diff=1, signif=0.05,
+        )
+        npt.assert_allclose(
+            result.cvm.iloc[0, 1], result.cvm_mackinnon.iloc[0, 1], rtol=1e-6,
+        )
