@@ -107,6 +107,19 @@ point estimates, deviance, or log-likelihood (those are identical across tools).
 Do not "simplify" by hardcoding one factor — that silently breaks the other
 engine's parity.
 
+### 2.4 Open gap — ppmlhdfe non-clustered (iid) SE (rule 6/15/16)
+
+ppmlhdfe's SE **without** `cluster()` is a *robust (sandwich) SE*, not an OIM
+iid SE, and it applies the Correia-Guimaraes-Zylkin (2019) nonlinear Poisson
+robust factor. fixest/pyfixest — even with
+`ssc(k_adj=False, G_adj=True, k_fixef="none")` — reproduces it only to ~4e-4
+(example: x2 SE, OE/pyfixest 0.03967 vs ppmlhdfe 0.04183). This is an
+**algorithm-level divergence**, not a recoverable ssc toggle. The cluster-robust
+SE (the standard PPML use case) is matched to 1e-6 by `vcov_backend="stata"`,
+which is the validated deliverable. The iid/non-clustered gap is recorded in
+`FUTURE_WORK.md` and asserted as `skip` (never loosened) in
+`tests/stata/tests/test_stata_poisson.py`.
+
 ---
 
 ## 3. Reported quantities
