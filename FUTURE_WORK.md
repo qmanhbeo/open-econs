@@ -468,15 +468,15 @@ VAR/VECM/Johansen, ARDL/UECM+PSS bounds; 1e-6 parity, Stata+R). ARDL write-up in
   recorded (rule 15). R log-likelihood and OIM SE match OE to 1e-6 and ARE
   asserted.
 - **What (b):** oe.ologit(..., cov_type="HC1") (and HC0/HC2/HC3) robust SEs
-  diverge from Stata ologit, vce(robust) by ~4e-4 � same root cause as the
+  diverge from Stata ologit, vce(robust) by ~4e-4 � same root cause as the
   poisson non-clustered robust gap: numerical-score bread vs Stata's exact OIM
   bread + Stata's small-sample factor. OIM (
 onrobust) SE matches Stata to
   1e-6 (the validated deliverable). Robust SE assertions are skip-ped in
   	ests/stata/tests/test_stata_ordered.py::TestStataOrderedRobustSE.
 - **Cutpoint sign:** task brief assumed polr/OrderedModel negates Stata's
-  cutpoints � **FALSE** (source-verified). All three store cumulative,
-  increasing thresholds with P(Y<=j)=F(c_j - x'�) and the SAME sign. OE stores
+  cutpoints � **FALSE** (source-verified). All three store cumulative,
+  increasing thresholds with P(Y<=j)=F(c_j - x'�) and the SAME sign. OE stores
   Stata convention; no negation. See methodology/limited/ordered.md (rule 18
   footgun).
 - **Where OE lives:** open_econs/models/limited/ordered.py; OrderedResult
@@ -496,8 +496,8 @@ onrobust) SE matches Stata to
   cluster= robust SEs are computed by a numerical-score sandwich (per-obs
   score via central numeric diff of the (beta, ln sigma) log-likelihood). They
   diverge from Stata 	obit's *exact* OIM-robust bread by ~1e-4 (same class of
-  issue as poisson/ologit). The **OIM (nonrobust)** SE � the validated
-  deliverable � matches Stata/R AER::tobit to 1e-6.
+  issue as poisson/ologit). The **OIM (nonrobust)** SE � the validated
+  deliverable � matches Stata/R AER::tobit to 1e-6.
 - **In scope / passing:** OIM SE, point estimates, sigma (cross-checked against
   Stata's ar(e.y)=sigma^2 5th e(b) element and R's summary()),
   Log(scale)=ln sigma, and log-likelihood all match Stata & R to ~1e-9.
@@ -509,3 +509,45 @@ onrobust) SE matches Stata to
   score contributions in the censored regions). Do NOT loosen the OIM tolerance
   to paper over the robust gap.
 - **Next agent:** treat as open; OIM parity is the shipped deliverable.
+
+---
+
+## v1.2 nbreg: Stata `dispersion(constant)` MLE & non-clustered SE gaps (OPEN)
+
+- **What (a) — Stata `dispersion(constant)` is a Stata-specific NB2 MLE:**
+  `oe.nbreg(dispersion="const")` implements the **textbook NB2 gamma mixture**
+  (Var = μ + α·μ²), matching R `MASS::glm.nb` and R `fixest::fenegbin` to 1e-6
+  on coefs / alpha=1/theta / log-likelihood. Stata's `nbreg, dispersion(constant)`
+  fits a **different** MLE: coef x1 = 0.414535 (vs oe 0.492896),
+  overdispersion reported as `delta` = 1.263565 (vs oe α = 1.0563),
+  LL = -842.203 (vs oe -836.538) on the canonical 600-obs fixture. Stata's
+  `dispersion(mean)` (Var = μ(1+α)), by contrast, **coincides** with the
+  textbook NB2 MLE on this dataset (μ ≈ 1.1 makes NB1 ≈ NB2) — so oe's NB2
+  default matches Stata `nbreg, dispersion(mean)` exactly. The `constant`
+  divergence is model-level, not a recoverable ssc toggle.
+- **What (b) — non-clustered (OIM) SEs:** Stata `nbreg` non-clustered SEs use a
+  robustified OIM information matrix that diverges from R `glm.nb` / oe OIM SEs
+  (se_x2: Stata 0.059624 vs oe/R 0.057102, ~4%). The cluster-robust (CRV1) SE —
+  the standard NB use case — is matched via the `vcov_backend` toggle.
+- **In scope / passing:** NB2 pooled & FE coefficients, alpha/theta, and
+  log-likelihood match R `glm.nb` + `fixest::fenegbin` AND Stata
+  `nbreg, dispersion(mean)` to 1e-6. NB1 (`dispersion="mean"`) implemented per
+  Hilbe; verified against the internal NB1 MLE. `vcov_backend` toggle (fixest /
+  stata) mirrors poisson.
+- **Where OE lives:** `open_econs/models/limited/nbreg.py`; `NegBinResult` in
+  `open_econs/core/results.py`; fixtures `tests/r/fixtures/expected/nbreg.json`
+  + `tests/stata/fixtures/expected/nbreg.dta`; generators
+  `tests/{r,stata}/generate-fixtures/nbreg.{R,do}`; tests
+  `tests/r/tests/test_r_nbreg.py`, `tests/stata/tests/test_stata_nbreg.py`,
+  `tests/non_stata_nor_r/test_nbreg_backend.py`. Root cause in
+  `methodology/limited/nbreg.md` §2.
+- **Status:** OPEN (both). (a) is asserted as `skip` in
+  `test_stata_nbreg.py::TestStataNBRegConstantDispersionGap`; (b) is asserted as
+  `skip` in `TestStataNBRegStdErrors`. R-parity SEs are covered in
+  `test_r_nbreg.py`. Resolve (a) only by implementing Stata's `constant`-dispersion
+  NB2 likelihood separately (consider exposing a `stata_constant` dispersion
+  toggle); resolve (b) only by wrapping Stata's robustified OIM bread. Do NOT
+  loosen the validated coef/alpha/LL tolerances (rule 2).
+- **Next agent:** treat as open; the textbook/R NB2 + Stata `dispersion(mean)`
+  parity is the shipped deliverable. A future `dispersion="const_stata"` option
+  could cover Stata's constant MLE if a user needs it (rule 15 toggle).

@@ -1,0 +1,24 @@
+-------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:\Users\manhn\Desktop\open-econs\tmp_nb_log.txt
+  log type:  text
+ opened on:  19 Jul 2026, 10:21:42
+
+. disp "NB2 ln(alpha)=" ln2
+NB2 ln(alpha)=.
+
+. disp "NB1 ln(alpha)=" ln1
+NB1 ln(alpha)=.05477199
+
+. disp "NB2 alpha=" e(alpha)
+NB2 alpha=1.0562997
+
+. disp "NB1 alpha=" e(alpha)
+NB1 alpha=1.0562997
+
+. log close
+      name:  <unnamed>
+       log:  C:\Users\manhn\Desktop\open-econs\tmp_nb_log.txt
+  log type:  text
+ closed on:  19 Jul 2026, 10:21:42
+-------------------------------------------------------------------------------

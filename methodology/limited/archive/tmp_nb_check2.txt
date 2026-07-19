@@ -1,0 +1,123 @@
+-------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:/Users/manhn/Desktop/open-econs/tmp_nb_check2.txt
+  log type:  text
+ opened on:  19 Jul 2026, 10:31:39
+
+. 
+. nbreg y x1 x2, dispersion(constant)
+
+Fitting Poisson model:
+
+Iteration 0:   log likelihood = -945.48178  
+Iteration 1:   log likelihood = -945.48178  
+
+Fitting constant-only model:
+
+Iteration 0:   log likelihood = -881.39862  
+Iteration 1:   log likelihood = -874.15659  
+Iteration 2:   log likelihood = -873.63689  
+Iteration 3:   log likelihood = -873.63647  
+Iteration 4:   log likelihood = -873.63647  
+
+Fitting full model:
+
+Iteration 0:   log likelihood = -873.63647  
+Iteration 1:   log likelihood = -845.15481  
+Iteration 2:   log likelihood = -842.20715  
+Iteration 3:   log likelihood = -842.20281  
+Iteration 4:   log likelihood = -842.20281  
+
+Negative binomial regression                            Number of obs =    600
+                                                        LR chi2(2)    =  62.87
+Dispersion: constant                                    Prob > chi2   = 0.0000
+Log likelihood = -842.20281                             Pseudo R2     = 0.0360
+
+------------------------------------------------------------------------------
+           y | Coefficient  Std. err.      z    P>|z|     [95% conf. interval]
+-------------+----------------------------------------------------------------
+          x1 |   .4145353   .0544272     7.62   0.000       .30786    .5212106
+          x2 |  -.1496215   .0498492    -3.00   0.003    -.2473241   -.0519189
+       _cons |   .0179712   .0625883     0.29   0.774    -.1046995     .140642
+-------------+----------------------------------------------------------------
+    /lndelta |   .2339372   .1436876                     -.0476854    .5155598
+-------------+----------------------------------------------------------------
+       delta |   1.263565   .1815587                      .9534337    1.674576
+------------------------------------------------------------------------------
+LR test of delta=0: chibar2(01) = 206.56               Prob >= chibar2 = 0.000
+
+. matrix list e(b)
+
+e(b)[1,4]
+             y:          y:          y:          /:
+            x1          x2       _cons     lndelta
+y1    .4145353  -.14962152   .01797124   .23393721
+
+. scalar _b2_x1 = _b[x1]
+
+. scalar _b2_x2 = _b[x2]
+
+. scalar _a2 = e(alpha)
+
+. scalar _ll2 = e(ll)
+
+. disp "NB2: b1=" _b2_x1 " b2=" _b2_x2 " alpha=" _a2 " ll=" _ll2
+NB2: b1=.4145353 b2=-.14962152 alpha=. ll=-842.20281
+
+. 
+. nbreg y x1 x2, dispersion(mean)
+
+Fitting Poisson model:
+
+Iteration 0:   log likelihood = -945.48178  
+Iteration 1:   log likelihood = -945.48178  
+
+Fitting constant-only model:
+
+Iteration 0:   log likelihood = -878.36681  
+Iteration 1:   log likelihood = -873.77275  
+Iteration 2:   log likelihood = -873.63651  
+Iteration 3:   log likelihood = -873.63647  
+
+Fitting full model:
+
+Iteration 0:   log likelihood =   -841.962  
+Iteration 1:   log likelihood = -836.67077  
+Iteration 2:   log likelihood = -836.53813  
+Iteration 3:   log likelihood = -836.53808  
+
+Negative binomial regression                            Number of obs =    600
+                                                        LR chi2(2)    =  74.20
+Dispersion: mean                                        Prob > chi2   = 0.0000
+Log likelihood = -836.53808                             Pseudo R2     = 0.0425
+
+------------------------------------------------------------------------------
+           y | Coefficient  Std. err.      z    P>|z|     [95% conf. interval]
+-------------+----------------------------------------------------------------
+          x1 |   .4928961   .0609589     8.09   0.000     .3734189    .6123734
+          x2 |  -.2077544   .0596237    -3.48   0.000    -.3246147   -.0908941
+       _cons |  -.0244143   .0609452    -0.40   0.689    -.1438647    .0950361
+-------------+----------------------------------------------------------------
+    /lnalpha |    .054772   .1311178                     -.2022143    .3117583
+-------------+----------------------------------------------------------------
+       alpha |     1.0563   .1384998                      .8169199    1.365824
+------------------------------------------------------------------------------
+LR test of alpha=0: chibar2(01) = 217.89               Prob >= chibar2 = 0.000
+
+. scalar _b1_x1 = _b[x1]
+
+. scalar _b1_x2 = _b[x2]
+
+. scalar _a1 = e(alpha)
+
+. scalar _ll1 = e(ll)
+
+. disp "NB1: b1=" _b1_x1 " b2=" _b1_x2 " alpha=" _a1 " ll=" _ll1
+NB1: b1=.49289614 b2=-.20775441 alpha=1.0562997 ll=-836.53808
+
+. log close
+      name:  <unnamed>
+       log:  C:/Users/manhn/Desktop/open-econs/tmp_nb_check2.txt
+  log type:  text
+ closed on:  19 Jul 2026, 10:31:41
+-------------------------------------------------------------------------------
