@@ -195,7 +195,7 @@ them forward, or when capacity allows after core-path items are complete.
 ##### v1.x — Method breadth (aspirational; no committed version)
 - **v1.4** — SHIPPED 2026-07-19. Quantile regression + outlier-robust regression:
   - `quantile_reg(formula, tau, method="qreg"|"sqreg"|"bsqreg", se_method="stata"|"ker")` — coefficients match Stata `qreg` and R `rq(method="br")` to 1e-6; `se_method="stata"` matches Stata `e(V)`, `se_method="ker"` matches R `summary.rq(se="ker", hs=TRUE)`.
-  - `robust_reg(formula, parity="stata"|"rlm")` — bisquare M-estimator (default `parity="stata"`, pure-Python, targets Stata `rreg`) plus R `MASS::rlm` toggle (exact 1e-6). Documented Stata `rreg` coef/SE residual gap (~1.2e-4 / ~8e-4) tracked in `FUTURE_WORK.md` (`ROBUST-REG-STATA`, xfailed strict).
+  - `robust_reg(formula, parity="stata"|"rlm")` — bisquare M-estimator (default `parity="stata"`, pure-Python, targets Stata `rreg`) plus R `MASS::rlm` toggle (exact 1e-6). Documented Stata `rreg` coef/SE residual gap (~1.2e-4 / ~8e-4) tracked in `FUTURE_WORK.md` (`ROBUST-REG-STATA`, xfailed strict). — robust_reg(parity='stata') Stata rreg coef+SE parity closed to <3e-10 in v1.4.2 (was xfail in v1.4.0/v1.4.1).
 - **v1.5** — Dynamic panel breadth: Blundell-Bond system GMM, extending the existing `abond()`/GMM-core foundation
 - **v1.6** — Complex survey design (`.svy`): weighting, stratification, replicate-weight variance estimation
 - **v1.7** — High-dimensional methods: LASSO/post-double-selection for inference with many controls

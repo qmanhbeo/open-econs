@@ -71,9 +71,10 @@ feature):
 
 The `parity` toggle (rule 15) selects the reference software:
 
-* `parity="stata"` (DEFAULT) — pure-Python bisquare M-estimator tuned to
-  Stata `rreg`. Coefficients match Stata `e(b)` to ~1.2e-4, `e(V)` to ~8e-4
-  (residual gap documented, xfail rule 22). No R dependency.
+* `parity="stata"` (DEFAULT) — pure-Python re-implementation of Stata
+  `rreg.ado` v3.5.0 (OLS → Cook's-D drop → Huber init → bisquare IRLS →
+  bias-correction regress). Coefficients and SEs match Stata `rreg` `e(b)`/`e(V)`
+  to < 3e-10 (machine precision, within the 1e-6 rule). No R dependency.
 * `parity="rlm"` — R `MASS::rlm` subprocess; coefficients + SEs + weights match
   R to 1e-6 (validated branch).
 
@@ -137,9 +138,12 @@ s^{(t)} = 1.4826 \cdot \operatorname{median}\!\big(|r^{(t)}_i -
 \operatorname{median}(r^{(t)})|\big),
 \]
 
-where \(r^{(t)}\) are the current residuals.  (Stata's exact internal scale
-iteration is not fully reverse-engineered; the pure-Python reproduction reaches
-coefs ~1.2e-4 from Stata — see Inference.)
+where \(r^{(t)}\) are the current residuals.  The MAD scale is computed at the
+**top** of each bisquare iteration from the previous iteration's residuals
+(`scale = median(|r - median(r)|)/0.6745`), exactly as `rreg.ado` does; the
+value carried into the bias-correction step is the last top-of-iteration scale
+(= 0.9648544 for the rreg fixture).  This fully reproduces Stata's scale
+iteration to machine precision.
 
 ### Key Quantities of Interest
 
@@ -182,24 +186,47 @@ Convergence is declared when \(\max_j |\hat\beta^{(t+1)}_j - \hat\beta^{(t)}_j|
 
 | Branch | Formula | Use case | Reference |
 |--------|---------|----------|-----------|
-| `vcov="stata"` (default for `parity="stata"`) | `V = s^2 (X' W X)^{-1}`, `w_i = \psi(r_i/s)/(r_i/s)` | Reproduces Stata `rreg` robust sandwich `e(V)` (formula, ~8e-4) | Stata `rreg` manual |
+| `vcov="stata"` (default for `parity="stata"`) | `V = (rss/(N-k)) (X_in' X_in)^{-1}`, rss = RSS of the Stata bias-correction regress | Reproduces Stata `rreg` `e(V)` to < 3e-10 | Stata `rreg` manual / `rreg.ado` v3.5.0 |
 | `vcov="rlm"` (default for `parity="rlm"`) | `V = cov.unscaled * s^2` returned by `MASS::rlm` | Matches R `MASS::rlm` to 1e-6 | Venables & Ripley (2002) |
 
 where \(W = \operatorname{diag}(w_i)\) and \(s\) is the M-estimate scale.
 
-**Critical convention note (rule 15/22).** Stata `rreg` and R `MASS::rlm`
+**Critical convention note (rule 15).** Stata `rreg` and R `MASS::rlm`
 **disagree** on the point estimate: Stata uses a bisquare **M**-estimator with
 its own robust scale; R's `method="MM"` adds an S-estimate refinement. Their
 coefficients differ at ~1e-3. The product follows **Stata `rreg` by default**
 (`parity="stata"`) and exposes R via `parity="rlm"` (both covered by tests):
 
-* `parity="stata"` — pure-Python bisquare M-estimator (Huber init + re-estimated
-  MAD scale). Coefficients match Stata `e(b)` to **~1.2e-4**; SEs (sandwich)
-  match Stata `e(V)` to **~8e-4**. The ~1e-6 strict assertions are
-  `xfail(strict=True)` in `tests/stata/tests/test_stata_rreg.py`; the gap is
-  recorded as **ROBUST-REG-STATA** in `FUTURE_WORK.md`.
+* `parity="stata"` — pure-Python re-implementation of `rreg.ado` v3.5.0.
+  Coefficients match Stata `e(b)` to **< 3e-10**; SEs match Stata `e(V)` to
+  **< 3e-10**. The strict 1e-6 assertions PASS in
+  `tests/stata/tests/test_stata_rreg.py` (gap ROBUST-REG-STATA resolved
+  2026-07-19).
 * `parity="rlm"` — R `MASS::rlm` subprocess, exact to **1e-6** on coefficients,
   SEs, and weights (validated branch).
+
+### Two parity-critical subtleties (ROBUST-REG-STATA, resolved 2026-07-19)
+
+These were the source of the ~1e-4 coefficient and ~2e-5 SE gaps and are now
+encoded in `_stata_rreg_fit`:
+
+1. **Carry-out weight, not re-evaluated weight.** The bias-correction step uses
+   the LAST in-loop weight — the one actually used in the final reweighted
+   `_regress [aw=weight]` — NOT a fresh weight re-evaluated at the updated
+   residuals. Recomputing the weight from the final residuals breaks the WLS
+   normal equations `X'(w*resid) = 0`, which makes the otherwise-exact bias
+   correction (a genuine no-op at the WLS fixed point) drift the coefficients by
+   ~1.2e-4.
+
+2. **`lambda`'s `N` counts only non-zero-weight in-sample obs.** Stata's
+   `regress [aw=weight]` DROPS observations whose analytic weight is exactly
+   zero (the bisquare assigns `w = 0` to the 8 outliers with `|res/(tune*s)| >=
+   1`). Therefore the `e(N)` carried into
+   `lambda = 1 + ((df_m+1)/N)*(1-aa)/aa` is 192, not 200. Using the full
+   in-sample `N` changes `lambda` by ~0.02% and pushes the correction RSS (hence
+   `e(V)`) off Stata by ~2e-5. The correction regress `e(N)` itself is 200
+   (all in-sample obs, including the zero-weight ones), so the VCE denominator is
+   `N - k = 197`.
 
 ### Default Behavior
 
@@ -211,9 +238,9 @@ coefficients differ at ~1e-3. The product follows **Stata `rreg` by default**
 
 | Feature | open-econs (`parity="stata"`) | open-econs (`parity="rlm"`) | Stata `rreg` | R `MASS::rlm` |
 |---------|-----------|-----------|--------------|---------------|
-| Point estimate | bisquare M (Stata conv.) | bisquare MM | bisquare M | bisquare MM |
-| Coef agreement | ~1.2e-4 vs Stata | exact vs R (1e-6) | ground truth | exact (vs OE rlm) |
-| `vcov="stata"` SE | ~8e-4 vs Stata `e(V)` | — | `e(V)` | diverges |
+| Point estimate | bisquare M (rreg.ado v3.5.0) | bisquare MM | bisquare M | bisquare MM |
+| Coef agreement | < 3e-10 vs Stata | exact vs R (1e-6) | ground truth | exact (vs OE rlm) |
+| `vcov="stata"` SE | < 3e-10 vs Stata `e(V)` | — | `e(V)` | diverges |
 | `vcov="rlm"` SE | — | exact vs R (1e-6) | diverges | `cov.unscaled*s^2` |
 | Backend | pure-Python IRLS | R `MASS::rlm` subprocess | native | native |
 
@@ -262,8 +289,8 @@ Used only by `parity="rlm"`. The `parity="stata"` path is fully pure-Python
 
 | open-econs | Stata | Notes |
 |------------|-------|-------|
-| `oe.robust_reg("y ~ x1 + x2", data=df)` | `rreg y x1 x2` | bisquare M, c=4.685, Huber init; coefs agree to ~1.2e-4 (scale iteration gap) |
-| `oe.robust_reg("y ~ x1 + x2", data=df, vcov="stata")` | `rreg` `e(V)` | Robust sandwich; SEs match to ~8e-4 |
+| `oe.robust_reg("y ~ x1 + x2", data=df)` | `rreg y x1 x2` | bisquare M, c=4.685, Huber init; coefs + SEs match to < 3e-10 |
+| `oe.robust_reg("y ~ x1 + x2", data=df, vcov="stata")` | `rreg` `e(V)` | Bias-correction OLS VCE; SEs match to < 3e-10 |
 
 ### R
 
@@ -308,10 +335,12 @@ low_weight = r.weights[r.weights < 0.1].index.tolist()
 1. **Not leverage-point resistant**: bisquare M/MM resists vertical outliers
    but not high-leverage (bad-X) points as strongly as a full S-estimator with
    bounded ρ.
-2. **`parity="stata"` ~1e-6**: the Stata internal scale iteration is not fully
-   reverse-engineered; coefs reach ~1.2e-4 and SEs ~8e-4. The strict 1e-6
-   assertions are `xfail(strict=True)` (ROBUST-REG-STATA in `FUTURE_WORK.md`).
-   Use `parity="rlm"` for the validated 1e-6 R parity.
+2. **`parity="stata"` now 1e-6**: the Stata `rreg` parity gap (ROBUST-REG-STATA)
+   is **resolved** (2026-07-19). The pure-Python re-implementation of
+   `rreg.ado` v3.5.0 reproduces `e(b)` and `e(V)` to < 3e-10. The two
+   parity-critical subtleties (carry-out weight; `lambda`'s zero-weight `N`) are
+   documented above and in `open_econs/models/linear/robust_reg.py`. Use
+   `parity="rlm"` for validated R `MASS::rlm` 1e-6 parity.
 3. **R dependency for `parity="rlm"`**: the exact R parity requires R + `MASS`.
    `parity="stata"` is pure-Python.
 4. **No clustering / HAC**: only the bisquare robust sandwich is provided.

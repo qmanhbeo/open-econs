@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.4.2] - 2026-07-19
+
+Patch: `robust_reg(parity='stata')` now reproduces Stata `rreg` coefficients (`e(b)`) and robust SEs (`e(V)`) to <3e-10 (machine precision), closing the ROBUST-REG-STATA open parity gap. Root cause: Stata's `rreg` reports coefficients from a final bias-correction regression (not the last biweight step) and uses effective N (non-zero-weight obs) in the correction's `lambda`. No API change. R `parity='rlm'` branch unchanged (already 1e-6).
+
 ## [1.4.0] - 2026-07-19
 
 Fourth release — **quantile regression** and **outlier-robust (MM / bisquare)

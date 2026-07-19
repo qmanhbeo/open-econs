@@ -78,11 +78,18 @@ class TestRobustRegWeightProperties:
         assert np.all(w <= 1.0 + 1e-12)
 
     def test_outliers_downweighted(self):
-        # Inject an extreme outlier; its weight should collapse to ~0.
+        # Inject an extreme outlier.  Stata rreg.ado drops obs with Cook's D > 1
+        # (so the weight at that obs is excluded -> NaN), otherwise the bisquare
+        # collapses its weight toward 0.  Either way the outlier must not keep a
+        # material weight, and the fit must not be driven by it.
         df = self.df.copy()
         df.loc[0, "y"] = df.loc[0, "y"] + 1e4
         r = oe.robust_reg("y ~ x1 + x2", data=df, parity="stata")
-        assert r.weights.iloc[0] < 1e-3
+        w0 = r.weights.iloc[0]
+        assert (np.isnan(w0) or w0 < 1e-3)
+        # The outlier must not pull the coefficient off the clean-data fit.
+        r_clean = oe.robust_reg("y ~ x1 + x2", data=self.df, parity="stata")
+        assert np.allclose(r.coefficients.values, r_clean.coefficients.values, atol=1e-2)
 
     def test_inliers_keep_high_weight(self):
         r = oe.robust_reg("y ~ x1 + x2", data=self.df, parity="stata")
