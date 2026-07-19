@@ -983,6 +983,497 @@ class OrderedResult(BaseModel):
             return True
 
 
+class NegBinResult(BaseModel):
+    """Result of a negative binomial regression (NB1 / NB2), pooled or FE.
+
+    Immutable result with the uniform interface (``.tidy()``, ``.summary()``,
+    ``.export()``, ``.vcov()``, ``.to_latex()`` / ``.to_html()``). Adds
+
+    * ``.alpha()`` — the overdispersion parameter ``alpha`` (Stata ``e(alpha)``).
+    * ``.lnalpha()`` — ``log(alpha)`` (Stata ``e(lnalpha)`` display).
+    * ``.theta()`` — ``1 / alpha`` (R ``glm.nb`` / ``fenegbin`` ``theta`` /
+      NB2 size parameter).
+    * ``.irr()`` — incidence-rate ratios ``exp(beta)`` with delta-method SEs.
+    * ``.margins()`` — average marginal effects on the count scale.
+    * ``.predict()`` — fitted conditional means ``mu_i``.
+
+    Coefficients, SEs, and z-stats are on the **log (index) scale**.
+
+    Notes
+    -----
+    ``dispersion`` records which NB flavour was estimated:
+    ``"const"`` (NB2, ``Var = mu + alpha*mu**2``) or ``"mean"`` (NB1,
+    ``Var = mu*(1+alpha)``). ``vcov_backend`` rescales only the cluster/robust
+    variance, identical to :class:`CountResult`. See
+    ``methodology/limited/nbreg.md``.
+    """
+
+    def __init__(
+        self,
+        *,
+        formula: str,
+        rhs_formula: str,
+        nobs: int,
+        df_resid: int,
+        df_model: int,
+        cov_type: str,
+        dispersion: str,
+        coefficients: pd.Series,
+        std_errors: pd.Series,
+        z_stats: pd.Series,
+        p_values: pd.Series,
+        conf_int: pd.DataFrame,
+        llf: float,
+        deviance: float,
+        pseudo_r2: float,
+        alpha: float,
+        n_absorbed: int,
+        fixed_effects: list[str],
+        fitted: pd.Series,
+        call: dict[str, Any],
+        vcov_backend: str,
+        _cov: pd.DataFrame,
+        _x_terms: list[str],
+        _work: pd.DataFrame,
+        _y: np.ndarray,
+        _X: np.ndarray,
+        _fe_groups: list[np.ndarray],
+        _fe_effects: list[np.ndarray],
+        _off: np.ndarray,
+        _wts: np.ndarray,
+        _has_fe: bool,
+    ) -> None:
+        self.formula = formula
+        self.rhs_formula = rhs_formula
+        self.data_shape = (nobs, coefficients.shape[0])
+        self.cov_type = cov_type
+        self.call = call
+        self.timestamp = datetime.now()
+        self.package_version = __version__
+
+        self.nobs = nobs
+        self.df_resid = df_resid
+        self.df_model = df_model
+        self.dispersion = dispersion
+        self.coefficients = coefficients
+        self.std_errors = std_errors
+        self.z_stats = z_stats
+        self.p_values = p_values
+        self.conf_int = conf_int
+        self.llf = llf
+        self.deviance = deviance
+        self.pseudo_r2 = pseudo_r2
+        self._alpha = float(alpha)
+        self.n_absorbed = n_absorbed
+        self.fixed_effects = fixed_effects
+        self.fitted_values = fitted if fitted is not None else pd.Series(dtype=float)
+        self.model_type = "negbin"
+        self.vcov_backend = vcov_backend
+        self._cov = _cov
+        self._x_terms = _x_terms
+        self._work = _work
+        self._y = _y
+        self._X = _X
+        self._fe_groups = _fe_groups
+        self._fe_effects = _fe_effects
+        self._off = _off
+        self._wts = _wts
+        self._has_fe = _has_fe
+
+        self._freeze()
+
+    # -- overdispersion parameter crosswalk (rule 15) --
+    def alpha(self) -> float:
+        """Overdispersion ``alpha`` (Stata ``e(alpha)``)."""
+        return self._alpha
+
+    def lnalpha(self) -> float:
+        """``log(alpha)`` (Stata ``e(lnalpha)`` display)."""
+        return float(np.log(self._alpha))
+
+    def theta(self) -> float:
+        """NB2 size parameter ``theta = 1 / alpha`` (R ``glm.nb`` /
+        ``fenegbin`` ``theta``). For NB1 this is still ``1 / alpha`` and is the
+        Stata-equivalent ``theta`` conversion; R ``fenegbin`` is NB2-only."""
+        return 1.0 / self._alpha
+
+    def tidy(self) -> pd.DataFrame:
+        df = pd.DataFrame({
+            "Variable": self.coefficients.index,
+            "Coef": self.coefficients.values,
+            "Std Err": self.std_errors.values,
+            "z": self.z_stats.values,
+            "P>|z|": self.p_values.values,
+            "0.025": self.conf_int["lower"].values,
+            "0.975": self.conf_int["upper"].values,
+        })
+        df.index.name = None
+        return df
+
+    def irr(self) -> pd.DataFrame:
+        """Incidence-rate ratios ``exp(beta)`` with delta-method SEs.
+
+        Matches Stata ``nbreg, irr`` and ``poisson, irr``. SE is
+        ``exp(beta) * SE(beta)``; CIs are exponentiated coefficient CIs.
+        """
+        beta = self.coefficients.values
+        se = self.std_errors.values
+        irr = np.exp(beta)
+        irr_se = irr * se
+        df = pd.DataFrame({
+            "Variable": self.coefficients.index,
+            "IRR": irr,
+            "Std Err": irr_se,
+            "z": self.z_stats.values,
+            "P>|z|": self.p_values.values,
+            "0.025": np.exp(self.conf_int["lower"].values),
+            "0.975": np.exp(self.conf_int["upper"].values),
+        })
+        df.index.name = None
+        return df
+
+    def summary(self) -> str:
+        llf_str = f"{self.llf:.4f}" if self.llf is not None and not self._isnan(self.llf) else "N/A"
+        dev_str = f"{self.deviance:.4f}" if self.deviance is not None and not self._isnan(self.deviance) else "N/A"
+        fe_str = " + ".join(self.fixed_effects) if self.fixed_effects else "(none)"
+        disp_label = "NB2 (Var = mu + alpha*mu^2)" if self.dispersion == "const" else "NB1 (Var = mu*(1+alpha))"
+        header = (
+            f"            Negative Binomial Regression Results            \n"
+            f"======================================================================\n"
+            f"Dep. Variable:               {self.formula.split('~')[0].strip()}\n"
+            f"Model:                       NegBin ({self.dispersion})\n"
+            f"Dispersion:                  {disp_label}\n"
+            f"Absorbed FE:                 {fe_str}\n"
+            f"No. Observations:            {self.nobs}\n"
+            f"Df Residuals:                {self.df_resid}\n"
+            f"Df Model:                    {self.df_model}\n"
+            f"Std. Errors:                 {self.cov_type}\n"
+            f"alpha (overdisp):            {self._alpha:.6f}\n"
+            f"ln(alpha):                   {self.lnalpha():.6f}\n"
+            f"theta (1/alpha):             {self.theta():.6f}\n"
+            f"Pseudo R-squared:          {self.pseudo_r2:.6f}\n"
+            f"Deviance:                    {dev_str}\n"
+            f"Log-likelihood:              {llf_str}\n"
+            f"======================================================================\n"
+        )
+        tbl = self.tidy().to_string(index=False)
+        return (
+            header + tbl +
+            "\n======================================================================\n"
+        )
+
+    def margins(self) -> pd.DataFrame:
+        """Average marginal effects on the count scale.
+
+        For NB with ``mu_i = exp(x_i'b + a_i)``, the marginal effect of a
+        continuous regressor ``x_j`` is ``b_j * mu_i``; the average marginal
+        effect (AME) is ``b_j * mean(mu_i)``. Delta-method SE uses the vcov.
+        """
+        mu_bar = float(np.mean(self.fitted_values.values)) if len(self.fitted_values) else float("nan")
+        beta = self.coefficients
+        ame = beta.values * mu_bar
+        ame_se = self.std_errors.values * mu_bar
+        with np.errstate(divide="ignore", invalid="ignore"):
+            z = np.where(ame_se > 0, ame / ame_se, np.nan)
+        p = 2.0 * _stats.norm.sf(np.abs(z))
+        crit = _stats.norm.ppf(0.975)
+        df = pd.DataFrame({
+            "Variable": beta.index,
+            "dy/dx": ame,
+            "Std Err": ame_se,
+            "z": z,
+            "P>|z|": p,
+            "0.025": ame - crit * ame_se,
+            "0.975": ame + crit * ame_se,
+        })
+        df.index.name = None
+        return df
+
+    def vcov(self) -> pd.DataFrame:
+        return self._cov
+
+    def predict(self, newdata: pd.DataFrame | None = None) -> pd.Series:
+        """Fitted conditional means ``mu_i = exp(x_i'b + a_i)`` (in-sample).
+
+        Out-of-sample prediction with absorbed FE requires the estimated FE
+        levels; not supported. Call predict() with no arguments for in-sample
+        fitted means.
+        """
+        if newdata is None:
+            return self.fitted_values
+        raise NotImplementedError(
+            "nbreg().predict(newdata=...) is not supported: absorbed fixed "
+            "effects make out-of-sample prediction ill-defined for new FE "
+            "levels. Call predict() with no arguments for in-sample fitted means."
+        )
+
+    def _isnan(self, v: float) -> bool:
+        try:
+            return np.isnan(v)
+        except (TypeError, ValueError):
+            return True
+
+
+class TobitResult(BaseModel):
+    """Result of a Tobit (censored normal) maximum-likelihood regression.
+
+    Immutable result with the uniform interface (``.tidy()``, ``.summary()``,
+    ``.export()``, ``.vcov()``, ``.to_latex()`` / ``.to_html()``). Adds
+
+    * ``.sigma`` — the estimated scale ``sigma`` of the latent normal error.
+    * ``.log_scale`` — ``log(sigma)``; **this is the quantity Stata prints as
+      ``Log(scale)``** in the ``tobit`` header (Stata does NOT print ``sigma``
+      directly). OE reports both so users can cross-check against either tool.
+    * ``.n_left`` / ``.n_right`` — counts of left- / right-censored observations.
+    * ``.predict(type=...)`` — ``"ystar"`` (``E[y* | x]`` latent), ``"y"``
+      (``E[y | x]`` observed, censoring-aware), ``"pr_gt0"`` (``P(y > left | x)``).
+    * ``.margins()`` — average marginal effects of each regressor on ``E[y | x]``
+      (the observed-outcome scale, the quantity Stata ``margins`` reports).
+
+    The reported ``coefficients`` / ``std_errors`` / ``tidy`` table cover the
+    **regressors only** (Stata convention: ``sigma`` is printed in the header,
+    not in the coefficient table). The full ``(k+1)`` covariance including the
+    ``sigma`` row is available via ``.vcov(full=True)``.
+
+    Notes
+    -----
+    ``statsmodels`` 0.14.6 has no Tobit model; this result is produced by a
+    hand-rolled censored-normal MLE in ``open_econs.models.limited.tobit``.
+    OIM (``nonrobust``) SEs come from the analytic Hessian; robust/cluster SEs
+    use a numerical-score sandwich. See ``methodology/limited/tobit.md``.
+    """
+
+    def __init__(
+        self,
+        *,
+        formula: str,
+        rhs_formula: str,
+        nobs: int,
+        df_resid: int,
+        df_model: int,
+        cov_type: str,
+        coefficients: pd.Series,
+        std_errors: pd.Series,
+        z_stats: pd.Series,
+        p_values: pd.Series,
+        conf_int: pd.DataFrame,
+        sigma: float,
+        log_scale: float,
+        llf: float,
+        n_left: int,
+        n_right: int,
+        left: float,
+        right: float,
+        fitted_ystar: pd.Series,
+        fitted_y: pd.Series,
+        fitted_pr: pd.Series,
+        call: dict[str, Any],
+        _cov: pd.DataFrame,
+        _params: np.ndarray,
+        _X: np.ndarray,
+        _y: np.ndarray,
+        _names: list[str],
+    ) -> None:
+        self.formula = formula
+        self.rhs_formula = rhs_formula
+        self.data_shape = (nobs, coefficients.shape[0] + 1)
+        self.cov_type = cov_type
+        self.call = call
+        self.timestamp = datetime.now()
+        self.package_version = __version__
+
+        self.nobs = nobs
+        self.df_resid = df_resid
+        self.df_model = df_model
+        self.coefficients = coefficients
+        self.std_errors = std_errors
+        self.z_stats = z_stats
+        self.p_values = p_values
+        self.conf_int = conf_int
+        self.sigma = float(sigma)
+        self.log_scale = float(log_scale)
+        self.llf = float(llf)
+        self.n_left = int(n_left)
+        self.n_right = int(n_right)
+        self.left = float(left)
+        self.right = float(right)
+        self.model_type = "tobit"
+        self.fitted_ystar = fitted_ystar
+        self.fitted_y = fitted_y
+        self.fitted_pr = fitted_pr
+        self._cov = _cov
+        self._params = _params
+        self._X = _X
+        self._y = _y
+        self._names = _names
+
+        self._freeze()
+
+    def tidy(self) -> pd.DataFrame:
+        df = pd.DataFrame({
+            "Variable": self.coefficients.index,
+            "Coef": self.coefficients.values,
+            "Std Err": self.std_errors.values,
+            "z": self.z_stats.values,
+            "P>|z|": self.p_values.values,
+            "0.025": self.conf_int["lower"].values,
+            "0.975": self.conf_int["upper"].values,
+        })
+        df.index.name = None
+        return df
+
+    def summary(self) -> str:
+        llf_str = f"{self.llf:.4f}" if not self._isnan(self.llf) else "N/A"
+        left_str = f"{self.left:g}" if np.isfinite(self.left) else "-inf"
+        right_str = f"{self.right:g}" if np.isfinite(self.right) else "+inf"
+        header = (
+            f"                       Tobit Regression Results                       \n"
+            f"======================================================================\n"
+            f"Dep. Variable:               {self.formula.split('~')[0].strip()}\n"
+            f"Model:                       Tobit (censored normal MLE)\n"
+            f"No. Observations:            {self.nobs}\n"
+            f"Left censoring limit:        {left_str}\n"
+            f"Right censoring limit:       {right_str}\n"
+            f"Left-censored obs:           {self.n_left}\n"
+            f"Right-censored obs:          {self.n_right}\n"
+            f"Df Residuals:                {self.df_resid}\n"
+            f"Df Model:                    {self.df_model}\n"
+            f"Std. Errors:                 {self.cov_type}\n"
+            f"Log-Likelihood:              {llf_str}\n"
+            f"Log(scale):                  {self.log_scale:.6f}\n"
+            f"sigma:                       {self.sigma:.6f}\n"
+            f"======================================================================\n"
+        )
+        tbl = self.tidy().to_string(index=False)
+        return (
+            header + tbl +
+            "\n======================================================================\n"
+        )
+
+    def margins(self) -> pd.DataFrame:
+        """Average marginal effects on ``E[y | x]`` (observed-outcome scale).
+
+        For Tobit, the marginal effect of ``x_k`` on the expected *observed*
+        outcome is ``d E[y|x]/d x_k = beta_k * P(y > left | x)`` (the
+        latent coefficient scaled by the probability of being uncensored).
+        This is the quantity Stata ``margins`` reports for a censored ``tobit``.
+        The delta-method SE uses the coefficient vcov (regressor block).
+        """
+        beta = self.coefficients.values
+        pr = self.fitted_pr.values  # P(y > left)
+        ame = beta * pr.mean()
+        # delta-method: var = g' V g with g_k = pr_mean * e_k (beta only)
+        cov_reg = np.asarray(
+            self._cov.loc[self._names, self._names].values, dtype=float
+        )
+        ame_var = (pr.mean() ** 2) * np.diag(cov_reg)
+        ame_se = np.sqrt(np.maximum(ame_var, 0.0))
+        with np.errstate(divide="ignore", invalid="ignore"):
+            z = np.where(ame_se > 0, ame / ame_se, np.nan)
+        p = 2.0 * _stats.norm.sf(np.abs(z))
+        crit = _stats.norm.ppf(0.975)
+        df = pd.DataFrame({
+            "Variable": self.coefficients.index,
+            "dy/dx": ame,
+            "Std Err": ame_se,
+            "z": z,
+            "P>|z|": p,
+            "0.025": ame - crit * ame_se,
+            "0.975": ame + crit * ame_se,
+        })
+        df.index.name = None
+        return df
+
+    def vcov(self, full: bool = False) -> pd.DataFrame:
+        """Covariance matrix.
+
+        Parameters
+        ----------
+        full : bool, default False
+            If ``True``, return the full ``(k+1) x (k+1)`` matrix including the
+            ``sigma`` row/column. If ``False`` (default), return only the
+            regressor block (Stata ``tobit`` coefficient-table convention).
+        """
+        if full:
+            return self._cov
+        return self._cov.loc[self._names, self._names]
+
+    def predict(
+        self,
+        newdata: pd.DataFrame | None = None,
+        type: str = "y",
+    ) -> pd.Series | pd.DataFrame:
+        """Predicted quantities for Tobit.
+
+        Parameters
+        ----------
+        newdata : pd.DataFrame, optional
+            Out-of-sample covariates. If ``None``, returns in-sample fitted
+            values.
+        type : {"y", "ystar", "pr_gt0"}, default "y"
+            - ``"y"``      : ``E[y | x]`` observed, censoring-aware outcome.
+            - ``"ystar"``  : ``E[y* | x] = x'b`` latent linear predictor.
+            - ``"pr_gt0"`` : ``P(y > left | x)`` probability uncensored.
+
+        Returns
+        -------
+        pandas.Series
+        """
+        if newdata is None:
+            if type == "ystar":
+                return self.fitted_ystar
+            if type == "pr_gt0":
+                return self.fitted_pr
+            return self.fitted_y
+
+        from formulaic import Formula
+        matrices = Formula(self.rhs_formula).get_model_matrix(newdata, na_action="drop")
+        XX = matrices.rhs if hasattr(matrices, "rhs") else matrices
+        Xv = XX.values.astype(float)
+        beta = self.coefficients.values
+        sigma = self.sigma
+        xb = Xv @ beta
+        n = Xv.shape[0]
+        left_lim = self.left
+        right_lim = self.right
+
+        lam_L = np.zeros(n)
+        lam_R = np.zeros(n)
+        if np.isfinite(left_lim):
+            zL = (left_lim - xb) / sigma
+            lam_L = _tobit_inv_mills(zL)
+        if np.isfinite(right_lim):
+            zR = (right_lim - xb) / sigma
+            lam_R = _tobit_inv_mills(-zR)  # E[u|u<zR] uses upper-tail lambda
+        e_y = xb + sigma * (lam_L - lam_R)
+        pr_gt0 = np.ones(n)
+        if np.isfinite(left_lim):
+            from scipy.stats import norm as _norm
+            pr_gt0 = 1.0 - _norm.cdf((left_lim - xb) / sigma)
+
+        if type == "ystar":
+            return pd.Series(xb, index=XX.index, name="predicted_ystar")
+        if type == "pr_gt0":
+            return pd.Series(pr_gt0, index=XX.index, name="predicted_pr_gt0")
+        return pd.Series(e_y, index=XX.index, name="predicted_y")
+
+    def _isnan(self, v: float) -> bool:
+        try:
+            return np.isnan(v)
+        except (TypeError, ValueError):
+            return True
+
+
+def _tobit_inv_mills(z: np.ndarray) -> np.ndarray:
+    """Inverse Mills ratio ``phi(z) / Phi(z)`` with safe clipping."""
+    z = np.asarray(z, dtype=float)
+    from scipy.stats import norm as _norm
+    pdf = _norm.pdf(z)
+    cdf = _norm.cdf(z)
+    denom = np.clip(cdf, 1e-300, None)
+    return pdf / denom
+
+
 class OaxacaResult(BaseModel):
     """Result of an Oaxaca-Blinder (or Neumark) wage-gap decomposition.
 
