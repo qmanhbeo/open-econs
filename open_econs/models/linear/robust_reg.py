@@ -160,7 +160,7 @@ def _stata_rreg_fit(
     # difference between the new and previous weights drops to <= 5*tolerance.
     maxw = 1.0
     it = 1
-    weight = np.ones(n)
+    weight: np.ndarray = np.ones(n)
     absdev = np.abs(resid - np.median(resid))
     while maxw > 5.0 * tolerance and it <= maxit:
         oldw = weight.copy()
