@@ -269,8 +269,8 @@ def robust_reg(
         raise
 
     if hasattr(matrices, "rhs"):
-        X = np.asarray(matrices.rhs, dtype=float)
-        y = np.asarray(matrices.lhs, dtype=float).ravel()
+        X: np.ndarray = np.asarray(matrices.rhs, dtype=float)
+        y: np.ndarray = np.asarray(matrices.lhs, dtype=float).ravel()
     else:
         X = np.asarray(matrices, dtype=float)
         y = np.asarray(data[formula.split("~", 1)[0].strip()], dtype=float).ravel()

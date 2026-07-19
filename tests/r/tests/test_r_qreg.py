@@ -17,9 +17,7 @@ import pytest
 import open_econs as oe
 from ..r_runner import read_r
 
-INPUT = pd.read_csv(
-    "C:/Users/manhn/Desktop/open-econs/tests/r/fixtures/inputs/qreg_input.csv"
-)
+INPUT = pd.read_csv("tests/r/fixtures/inputs/qreg_input.csv")
 
 R_TOL = 1e-6
 

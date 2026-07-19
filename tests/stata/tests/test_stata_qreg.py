@@ -18,9 +18,7 @@ import pytest
 import open_econs as oe
 from ..stata_runner import read_stata
 
-INPUT = pd.read_csv(
-    "C:/Users/manhn/Desktop/open-econs/tests/stata/fixtures/inputs/df_qreg.csv"
-)
+INPUT = pd.read_csv("tests/stata/fixtures/inputs/df_qreg.csv")
 
 STATA_TOL = 1e-6
 BOOT_TOL = 1e-2  # bootstrap RNG not portable; documented tolerance only
