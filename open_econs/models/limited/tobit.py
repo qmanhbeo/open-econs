@@ -315,7 +315,7 @@ def _tobit_loglik(
             s += np.sum(
                 np.log(1.0 - norm.cdf((right_lim - xb[right_idx]) / sigma) + 1e-300)
             )
-    mid_idx = np.ones(n, dtype=bool)
+    mid_idx: np.ndarray = np.ones(n, dtype=bool)
     if np.isfinite(left_lim):
         mid_idx = mid_idx & (y > left_lim + 1e-12)
     if np.isfinite(right_lim):
@@ -460,7 +460,7 @@ def _tobit_loglik_obs(
     if np.isfinite(right_lim):
         idx = y >= right_lim - 1e-12
         s[idx] = np.log(1.0 - norm.cdf((right_lim - xb[idx]) / sigma) + 1e-300)
-    mid = np.ones(n, dtype=bool)
+    mid: np.ndarray = np.ones(n, dtype=bool)
     if np.isfinite(left_lim):
         mid = mid & (y > left_lim + 1e-12)
     if np.isfinite(right_lim):
