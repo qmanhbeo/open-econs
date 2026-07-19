@@ -54,6 +54,8 @@ class TestRobustRegToggleValidation:
         for parity in ("stata", "rlm"):
             for method in ("mm", "huber"):
                 for vcov in (None, "stata", "rlm"):
+                    if parity == "rlm" and not r_available():
+                        continue
                     r = oe.robust_reg(
                         "y ~ x1 + x2", data=self.df, parity=parity,
                         method=method, vcov=vcov,

@@ -1,4 +1,39 @@
+# open-econs v1.4.1 — Release Notes
+
+**Status: PUBLISHED.** Version bumped to `1.4.1` in `pyproject.toml` and
+`open_econs/_version.py`. Tagged `v1.4.1`; the GitHub Release `published`
+event triggers the trusted-publisher PyPI upload (`publish.yml`) and the
+release parity gate (`ci-parity.yml`).
+
+## [1.4.1] - 2026-07-19
+
+### Patch: fix CI/Parity gate
+
+- `robust_reg` R-backed parity tests (`parity="rlm"`) now skip cleanly when no
+  R binary is present, matching the `ci-parity.yml` committed-fixture contract
+  (no Stata/R binary launched in a default run).
+- The three affected files were:
+  - `tests/r/tests/test_r_rreg.py` — whole module skipped via
+    `pytest.mark.skipif(not r_available(), ...)` (keeps R path validated
+    locally where R exists).
+  - `tests/stata/tests/test_stata_rreg.py` — only
+    `TestStataRregRlmDiverges` (the `parity="rlm"` class) is skipped; the
+    pure-Python `parity="stata"` tests keep running on CI.
+  - `tests/non_stata_nor_r/test_robust_reg.py` — `test_valid_toggles_ok`
+    skips only the `rlm` branch when R is absent; the `stata` branch always
+    runs.
+- **No library behavior change.** No estimator source was modified. No numeric
+  tolerance was loosened.
+
+---
+
 # open-econs v1.4.0 — Release Notes
+
+**Status: PUBLISHED.** Version bumped to `1.4.0` in `pyproject.toml` and
+`open_econs/_version.py`; CHANGELOG, ROADMAP, FUTURE_WORK, and this document
+updated. Tagged `v1.4.0`; the GitHub Release `published` event triggers the
+trusted-publisher PyPI upload (`publish.yml`), and the release parity gate
+(`ci-parity.yml`) runs on the same event.
 
 **Status: PUBLISHED.** Version bumped to `1.4.0` in `pyproject.toml` and
 `open_econs/_version.py`; CHANGELOG, ROADMAP, FUTURE_WORK, and this document

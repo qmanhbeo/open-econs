@@ -19,9 +19,10 @@ import pytest
 
 import open_econs as oe
 
+from open_econs.core._rlm_r import r_available
 from ..r_runner import read_r
 
-pytestmark = pytest.mark.r
+pytestmark = [pytest.mark.r, pytest.mark.skipif(not r_available(), reason="R/MASS::rlm not installed")]
 
 R = read_r("rreg")
 DF = pd.read_csv("tests/r/fixtures/inputs/rreg_input.csv")

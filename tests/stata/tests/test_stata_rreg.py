@@ -29,6 +29,7 @@ import pytest
 
 import open_econs as oe
 
+from open_econs.core._rlm_r import r_available
 from ..stata_runner import read_stata
 
 pytestmark = pytest.mark.stata
@@ -111,6 +112,7 @@ class TestStataRregMetadata:
         assert r.parity == "stata"
 
 
+@pytest.mark.skipif(not r_available(), reason="R/MASS::rlm not installed")
 class TestStataRregRlmDiverges:
     """``parity='rlm'`` follows R, so it deliberately diverges from Stata.
 
