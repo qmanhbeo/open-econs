@@ -90,10 +90,14 @@ class TestStataOrderedRobustSE:
     ``methodology/limited/ordered.md``.
     """
 
-    @pytest.mark.skip(
-        reason="OPEN GAP: ologit HC1 robust SE diverges from Stata vce(robust) "
-               "by ~4e-4 (rule 15/16). OIM SE parity is validated in "
-               "TestStataOrderedLogit.test_oim_se. See FUTURE_WORK.md."
+    @pytest.mark.xfail(
+        reason="OPEN GAP (FUTURE_WORK.md L459b): ologit HC1 robust SE diverges "
+               "from Stata vce(robust) by ~4e-4 (numerical-score bread vs Stata "
+               "exact OIM robust bread + small-sample factor). OIM SE parity is "
+               "validated in TestStataOrderedLogit.test_oim_se. Asserting OE HC1 "
+               "SE vs Stata ser captures ~4e-4 > 1e-6, so it xfails. strict=True: "
+               "errors if it ever matches to 1e-6.",
+        strict=True,
     )
     @pytest.mark.parametrize("x", ["x1", "x2", "x3"])
     def test_robust_se_x(self, x):
