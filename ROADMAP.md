@@ -160,7 +160,7 @@ New `open_econs/models/limited/` module:
 - `nbreg()` (NB1/NB2) — *pending*
 - `ologit()` / `oprobit()` (ordered) — *shipped 2026-07-19* — wrap `statsmodels.miscmodels.ordinal_model.OrderedModel`, polished with an L-BFGS-B pass (gtol=1e-12) so point estimates, cutpoints, OIM SEs, and loglik match Stata `ologit`/`oprobit` (and R `MASS::polr` loglik/SE) to 1e-6. `OrderedResult` adds `.cutpoints`, `.predict(type="class"|"probs")`, `.margins()`. `cov_type` ∈ {nonrobust, HC0, HC1, HC2, HC3}. OPEN gaps (documented skips): Stata-vs-R coef/cutpoint divergence ~1e-5; HC1 robust SE vs Stata `vce(robust)` ~4e-4. See `methodology/limited/ordered.md` and FUTURE_WORK.md.
 - **`poisson()` / `nbreg()` MUST be FE-backed via the existing HDFE demeaning core** (Correia 2016 / Guimarães & Portugal, the `fixest::fepois` convention). Validation target is Stata `ppmlhdfe` and R `fixest::fepois` at the option level, not just coefficient equality.
-- `tobit()` — MLE (statsmodels has no Tobit); validate vs R `censReg` / `AER::tobit`
+- `tobit()` — MLE (statsmodels has no Tobit); validate vs R `AER::tobit` (censReg NOT installed)
 - `heckman()` — selection model (two-step + MLE); validate vs R `sampleSelection`
 - `feglm` binomial FE absorption — **decision required, NOT in v1.2 as scoped**; flag in `FUTURE_WORK.md`.
 - First-class `.margins()` / `.predict()`; parity vs Stata `poisson` / `nbreg` / `tobit` / `heckman` / `ologit` / `oprobit`

@@ -487,3 +487,25 @@ onrobust) SE matches Stata to
 - **Next agent:** treat as open; Stata coef/cutpoint/OIM-SE parity is the
   shipped deliverable. Do NOT "tighten" the skipped tolerances to paper over
   either gap.
+
+---
+
+## v1.2 tobit: robust/cluster SE open gap (OPEN parity gap)
+
+- **What:** oe.tobit(..., cov_type="HC0"|"HC1"|"HC2"|"HC3") and
+  cluster= robust SEs are computed by a numerical-score sandwich (per-obs
+  score via central numeric diff of the (beta, ln sigma) log-likelihood). They
+  diverge from Stata 	obit's *exact* OIM-robust bread by ~1e-4 (same class of
+  issue as poisson/ologit). The **OIM (nonrobust)** SE — the validated
+  deliverable — matches Stata/R AER::tobit to 1e-6.
+- **In scope / passing:** OIM SE, point estimates, sigma (cross-checked against
+  Stata's ar(e.y)=sigma^2 5th e(b) element and R's summary()),
+  Log(scale)=ln sigma, and log-likelihood all match Stata & R to ~1e-9.
+- **Where OE lives:** open_econs/models/limited/tobit.py; OIM via
+  inv(approx_hess(nll)) on (beta, sigma); robust via _sandwich_cov.
+  Root cause in methodology/limited/tobit.md A3.
+- **Status:** OPEN. Robust-SE assertions are intentionally NOT written to 1e-6
+  (rule 2/15). Resolve only by wrapping Stata's exact robust bread (analytic
+  score contributions in the censored regions). Do NOT loosen the OIM tolerance
+  to paper over the robust gap.
+- **Next agent:** treat as open; OIM parity is the shipped deliverable.
