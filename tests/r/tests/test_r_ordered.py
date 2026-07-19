@@ -37,26 +37,32 @@ DF = pd.read_csv("tests/r/fixtures/inputs/ordered_input.csv")
 
 
 class TestROrderedLogit:
-    @pytest.mark.skip(
-        reason="OPEN GAP (rule 15/16): Stata ologit and R MASS::polr MLEs differ "
-               "by ~1e-5 on coefficients/cutpoints (independent optimizer "
-               "convergence; not an OE formula error). OE matches Stata to 1e-6 "
-               "(see test_stata_ordered.py). R coef/cutpoint parity is inherently "
-               ">1e-6. Loglik and OIM SE match R to 1e-6 below. See FUTURE_WORK.md."
+    @pytest.mark.xfail(
+        reason="OPEN GAP (FUTURE_WORK.md L459a): Stata ologit and R MASS::polr "
+               "MLEs differ by ~1e-5 on coefficients (independent optimizer "
+               "convergence; not an OE formula error). OE is Stata-anchored "
+               "(matches to 1e-6); asserting the full coef vector OE vs R captures "
+               "the Stata<->R divergence, which exceeds 1e-6 on x1/x2, so it "
+               "xfails. strict=True: errors only if ALL coefs match to 1e-6 (silent "
+               "fix/regress). Loglik and OIM SE match R to 1e-6 below.",
+        strict=True,
     )
-    @pytest.mark.parametrize("x", ["x1", "x2", "x3"])
-    def test_coef(self, x):
+    def test_coef(self):
         r = oe.ologit("y ~ x1 + x2 + x3", data=DF)
-        npt.assert_allclose(r.coefficients[x], R[f"ologit_b_{x}"], rtol=0, atol=1e-6)
+        npt.assert_allclose([r.coefficients[x] for x in ["x1", "x2", "x3"]],
+                            [R[f"ologit_b_{x}"] for x in ["x1", "x2", "x3"]],
+                            rtol=0, atol=1e-6)
 
-    @pytest.mark.skip(
-        reason="OPEN GAP: Stata/R cutpoint divergence ~1e-5 (see test_coef). "
-               "OE cutpoints match Stata to 1e-6."
+    @pytest.mark.xfail(
+        reason="OPEN GAP (FUTURE_WORK.md L459a): Stata/R cutpoint divergence ~1e-5 "
+               "(see test_coef). OE cutpoints match Stata to 1e-6. strict=True.",
+        strict=True,
     )
-    @pytest.mark.parametrize("c", ["cut1", "cut2", "cut3"])
-    def test_cutpoint(self, c):
+    def test_cutpoint(self):
         r = oe.ologit("y ~ x1 + x2 + x3", data=DF)
-        npt.assert_allclose(r.cutpoints[c], R[f"ologit_{c}"], rtol=0, atol=1e-6)
+        npt.assert_allclose([r.cutpoints[c] for c in ["cut1", "cut2", "cut3"]],
+                            [R[f"ologit_{c}"] for c in ["cut1", "cut2", "cut3"]],
+                            rtol=0, atol=1e-6)
 
     def test_loglik(self):
         r = oe.ologit("y ~ x1 + x2 + x3", data=DF)
@@ -69,23 +75,32 @@ class TestROrderedLogit:
 
 
 class TestROrderedProbit:
-    @pytest.mark.skip(
-        reason="OPEN GAP (rule 15/16): Stata oprobit and R MASS::polr MLEs differ "
-               "by ~1e-5 on coefficients/cutpoints. OE matches Stata to 1e-6. "
-               "See FUTURE_WORK.md."
+    @pytest.mark.xfail(
+        reason="OPEN GAP (FUTURE_WORK.md L459a): Stata oprobit and R MASS::polr "
+               "MLEs differ by ~1e-5 on coefficients (independent optimizer "
+               "convergence; not an OE formula error). OE is Stata-anchored "
+               "(matches to 1e-6). Asserting the full coef vector OE vs R captures "
+               "the divergence (x1/x2 exceed 1e-6), so it xfails. strict=True: "
+               "errors only if ALL coefs match to 1e-6. Loglik and OIM SE match R "
+               "to 1e-6 below.",
+        strict=True,
     )
-    @pytest.mark.parametrize("x", ["x1", "x2", "x3"])
-    def test_coef(self, x):
+    def test_coef(self):
         r = oe.oprobit("y ~ x1 + x2 + x3", data=DF)
-        npt.assert_allclose(r.coefficients[x], R[f"oprobit_b_{x}"], rtol=0, atol=1e-6)
+        npt.assert_allclose([r.coefficients[x] for x in ["x1", "x2", "x3"]],
+                            [R[f"oprobit_b_{x}"] for x in ["x1", "x2", "x3"]],
+                            rtol=0, atol=1e-6)
 
-    @pytest.mark.skip(
-        reason="OPEN GAP: Stata/R cutpoint divergence ~1e-5 (see test_coef)."
+    @pytest.mark.xfail(
+        reason="OPEN GAP (FUTURE_WORK.md L459a): Stata/R cutpoint divergence ~1e-5 "
+               "(see test_coef). OE cutpoints match Stata to 1e-6. strict=True.",
+        strict=True,
     )
-    @pytest.mark.parametrize("c", ["cut1", "cut2", "cut3"])
-    def test_cutpoint(self, c):
+    def test_cutpoint(self):
         r = oe.oprobit("y ~ x1 + x2 + x3", data=DF)
-        npt.assert_allclose(r.cutpoints[c], R[f"oprobit_{c}"], rtol=0, atol=1e-6)
+        npt.assert_allclose([r.cutpoints[c] for c in ["cut1", "cut2", "cut3"]],
+                            [R[f"oprobit_{c}"] for c in ["cut1", "cut2", "cut3"]],
+                            rtol=0, atol=1e-6)
 
     def test_loglik(self):
         r = oe.oprobit("y ~ x1 + x2 + x3", data=DF)
