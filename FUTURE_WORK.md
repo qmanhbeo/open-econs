@@ -296,7 +296,13 @@ relaxed tolerances (standing rule 2).
   asserts an exact OE-vs-arch **backend identity** (same args → identical
   statistic) plus a same-backend CV-vintage regression guard. The Stata gap is
   tracked here until the port lands.
-- **XFAIL-ANCHOR-TS2-PLACEHOLDER**
+- **XFAIL anchors (rule 22):** the same file's `TestDFGLSStataLagSelectionGap`
+  now pins the Stata gap with `xfail(strict=True)` tests asserting OE's
+  AIC-selected lag / statistic against Stata's Ng-Perron SIC/MAIC reference
+  (lag 1, DF-GLS mu = -1.1362432, source-verified via `ur_dfgls_c.do`). They
+  flip to xpass when `method="ng-perron"` lands. Footgun: Stata's *seq-t* rule
+  coincidentally picks lag 0 (= AIC) on this series, so the assertion targets
+  SIC/MAIC, not seq-t — see `methodology/timeseries/unitroot_cv_and_dfgls.md`.
 
 ---
 

@@ -25,6 +25,7 @@ accidentally diverges from the arch backend is caught immediately.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -38,6 +39,16 @@ import open_econs as oe
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 UR_INPUT = REPO_ROOT / "tests" / "r" / "fixtures" / "inputs" / "ur_input.csv"
+
+# The TS-2 xfail below asserts OE's AIC-selected DF-GLS statistic against the
+# Stata ``dfgls`` reference at Stata's Ng-Perron SIC/MAIC-selected lag.  The
+# committed fixture ``tests/stata/fixtures/expected/ur_dfgls_c.dta`` is read via
+# the shared Stata runner (rule 7); we add the ``tests/stata`` package to the
+# path so the runner imports cleanly from this ``non_stata_nor_r`` module.
+sys.path.insert(0, str(REPO_ROOT / "tests"))
+from stata.stata_runner import read_stata  # noqa: E402
+
+S_DFGLS_C = read_stata("ur_dfgls_c")
 
 
 def _y() -> np.ndarray:
@@ -64,3 +75,48 @@ class TestDFGLSArchIdentity:
         # Same-backend regression guard only (arch's own DF-GLS simulation CV).
         oe_r = oe.dfgls(_y(), trend=trend, method="aic")
         assert "MacKinnon" in oe_r.cv_vintage
+
+
+class TestDFGLSStataLagSelectionGap:
+    """FUTURE_WORK TS-2 (line ~273): OE ``dfgls`` uses arch's AIC lag selection;
+    Stata ``dfgls`` uses Ng-Perron sequential-t / SIC / MAIC.
+
+    On this 200-obs series the divergence is concrete and source-verified
+    (Stata output captured in ``tests/stata/generate-fixtures/ur_dfgls_c.do``):
+
+    * OE (AIC)            -> selected lag = 0, DF-GLS mu = -1.2045709
+    * Stata Ng-Perron SIC -> selected lag = 1  (``r(siclag)`` = 1)
+    * Stata Ng-Perron MAIC-> selected lag = 1  (``r(maiclag)`` = 1)
+    * Stata DF-GLS mu at its SIC/MAIC lag (=1) = -1.1362432
+
+    (Stata's *seq-t* rule happens to pick 0 here and so agrees with AIC to
+    ~1e-9 -- that coincidence is NOT the parity claim; SIC/MAIC are Stata's
+    reported optima and they differ.)  Because the lag-selection *method*
+    differs by design, OE's statistic cannot equal Stata's SIC/MAIC statistic.
+    These xfail tests capture the REAL divergence (structural lag-count gap +
+    the statistic gap) so the future ``method="ng-perron"`` port lands as an
+    xpass.  Standing rule 2: no tolerance is loosened -- the arch-identity test
+    above stays exact.
+    """
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="TS-2 (FUTURE_WORK line ~273): OE dfgls uses arch AIC (lag=0);"
+        " Stata dfgls Ng-Perron SIC/MAIC selects lag=1. The AIC-selected lag"
+        " count therefore does not equal Stata's SIC/MAIC lag until the "
+        "Ng-Perron port lands.",
+    )
+    def test_selected_lag_matches_stata_ngperron(self):
+        oe_r = oe.dfgls(_y(), trend="c", method="aic")
+        assert oe_r.lags == int(S_DFGLS_C["siclag"])
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="TS-2 (FUTURE_WORK line ~273): OE AIC-lag DF-GLS mu (-1.2045709)"
+        " != Stata SIC/MAIC-lag DF-GLS mu (-1.1362432); the two lag-selection"
+        " methods pick different lags so the statistics differ by ~6.8e-2 "
+        ">> 1e-6 until the Ng-Perron port lands.",
+    )
+    def test_statistic_matches_stata_ngperron(self):
+        oe_r = oe.dfgls(_y(), trend="c", method="aic")
+        npt.assert_allclose(oe_r.stat, S_DFGLS_C["stat_siclag"], atol=1e-6)
