@@ -78,18 +78,25 @@ class TestStataPoissonIidSE:
     ppmlhdfe non-clustered robust SE") and methodology/limited/poisson.md.
     """
 
-    @pytest.mark.skip(
-        reason="OPEN GAP: ppmlhdfe non-clustered robust SE diverges from "
-               "fixest/pyfixest by ~4e-4 (rule 15/16). Cluster-robust SE "
-               "parity is validated in TestStataPoissonClusterSE. See "
-               "FUTURE_WORK.md."
+    @pytest.mark.xfail(
+        reason="OPEN GAP (FUTURE_WORK.md L433): ppmlhdfe non-clustered robust SE "
+               "diverges from fixest/pyfixest by ~4e-4 (x2). OE reproduces "
+               "ppmlhdfe's non-robust OIM SE, not its nonlinear-Poisson robust "
+               "meat; cluster-robust parity is validated in "
+               "TestStataPoissonClusterSE. strict=True: xfails on the known gap, "
+               "errors if it ever matches to 1e-6 (silent fix/regress).",
+        strict=True,
     )
     def test_se_x1(self):
         r = poisson("y ~ x1 + x2", data=DF, fixed_effects=["firm", "year"],
                     cov_type="nonrobust", vcov_backend="stata")
         npt.assert_allclose(r.std_errors["x1"], STATA["se_x1_iid"], rtol=0, atol=1e-6)
 
-    @pytest.mark.skip(reason="OPEN GAP: same as test_se_x1 (ppmlhdfe non-clustered robust SE).")
+    @pytest.mark.xfail(
+        reason="OPEN GAP (FUTURE_WORK.md L433): same as test_se_x1 (ppmlhdfe "
+               "non-clustered robust SE, ~4e-4 on x2). strict=True.",
+        strict=True,
+    )
     def test_se_x2(self):
         r = poisson("y ~ x1 + x2", data=DF, fixed_effects=["firm", "year"],
                     cov_type="nonrobust", vcov_backend="stata")
