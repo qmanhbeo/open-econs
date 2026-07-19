@@ -360,7 +360,7 @@ def _neg_ll_joint(params: np.ndarray, y: np.ndarray, X: np.ndarray,
     alpha = np.exp(params[k])
     eta = X @ beta + off
     mu = np.exp(eta)
-    return -_nb_loglik(y, mu, alpha, dispersion, wts)
+    return -_nb_loglik(y, mu, float(alpha), dispersion, wts)
 
 
 def _fit_nb_pooled(*, y: np.ndarray, X: np.ndarray, dispersion: str,

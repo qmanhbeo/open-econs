@@ -398,7 +398,7 @@ def _sandwich_cov(
         b = pvec[:k]
         sig = np.exp(pvec[k])
         xb = Xv @ b
-        return _tobit_loglik_obs(y, xb, sig, left_lim, right_lim)
+        return _tobit_loglik_obs(y, xb, float(sig), left_lim, right_lim)
 
     scores = approx_fprime(p, loglik_obs, centered=True, epsilon=1e-8)
     scores = np.asarray(scores, dtype=float)
