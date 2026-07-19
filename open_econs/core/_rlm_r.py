@@ -1,15 +1,23 @@
-"""Thin backend wrapping ``MASS::rlm`` (R) for robust M-/MM-estimation.
+"""DEV-ONLY / OFFLINE backend wrapping ``MASS::rlm`` (R) for robust M-/MM-estimation.
+
+.. warning::
+   This module is **NOT imported by the open-econs library at runtime**.  As of
+   v1.4.2 the ``parity="rlm"`` branch of ``open_econs.models.linear.robust_reg``
+   is a pure-Python port of ``MASS::rlm`` (no R subprocess).  This file remains
+   only as an offline cross-check utility for the test-suite (e.g.
+   ``tests/non_stata_nor_r/test_robust_reg.py`` and ``tests/stata/...`` import
+   ``r_available`` / ``rlm_fit`` for live-R validation) and for regenerating the
+   R fixtures under ``tests/r/generate-fixtures``.  Do not reintroduce a library
+   import of ``rlm_fit`` — the product must not require R at runtime (repo
+   convention; rule 14).
 
 rpy2 is not a hard dependency of open-econs.  When R is available on the
 machine (``Rscript`` on ``PATH`` or ``R_EXE``), we call ``MASS::rlm`` exactly
 once per fit via a small subprocess and parse its JSON output.
 
-This backend underpins ``oe.robust_reg(..., parity="rlm")`` — the validated
-R parity branch.  Coefficients, the ``cov.unscaled * s^2`` covariance, scale,
-weights, and residuals match ``MASS::rlm(method="MM"/"M", psi=psi.bisquare,
-init="ls", scale.est="MAD")`` to 1e-6.  The ``parity="stata"`` branch in
-``open_econs.models.linear.robust_reg`` is a pure-Python bisquare M-estimator
-and does NOT use this backend.
+Historically this backend underpinned ``oe.robust_reg(..., parity="rlm")``.
+It matches ``MASS::rlm(method="MM"/"M", psi=psi.bisquare, init="ls",
+scale.est="MAD")`` to 1e-6.  That parity is now reproduced in pure Python.
 """
 
 from __future__ import annotations

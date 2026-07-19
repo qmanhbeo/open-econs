@@ -14,6 +14,11 @@ name: Parity (Stata / R)
 #   * The `rddensity`-based RDD density tests need the optional `[rd]` python
 #     extra (a pip package, not a binary); it is installed below so those tests
 #     also run on free runners.
+#   * `robust_reg(parity="rlm")` is now PURE-PYTHON: its R (`MASS::rlm`) parity
+#     tests read the committed fixture `tests/r/fixtures/expected/rreg.json` and
+#     the estimator itself launches no R process. R is used only OFFLINE (the
+#     dev-only `open_econs/core/_rlm_r.py`) to regenerate that fixture. No part
+#     of robust_reg needs an R install at test time.
 #   * KNOWN GAP (not "done"): refreshing the committed fixtures from a live
 #     Stata/R install — so the parity baseline tracks upstream Stata/R version
 #     changes — requires self-hosted runners with Stata and R installed

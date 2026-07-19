@@ -3,12 +3,10 @@
 These tests exercise the estimator directly: toggle validation, the
 pure-Python Stata ``rreg`` default branch, robustness-weight properties
 (outliers down-weighted toward zero), predict, and agreement with R
-``MASS::rlm`` when R is installed.  They do NOT depend on the committed
-Stata/R fixtures, so they run in any environment.
-
-Coefficient / SE parity against R ``MASS::rlm`` (the validated ``parity="rlm"``
-branch) is asserted at ``atol=1e-6`` when R is available; otherwise the test
-is skipped so the suite stays green on R-less CI.
+``MASS::rlm``.  They do NOT depend on a live R installation: the
+``parity="rlm"`` branch is a pure-Python port validated against the committed
+``tests/r/fixtures/expected/rreg.json`` fixture (read via ``read_r``), so they
+run in any environment.
 """
 
 from __future__ import annotations
@@ -19,7 +17,7 @@ import pandas as pd
 import pytest
 
 import open_econs as oe
-from open_econs.core._rlm_r import r_available
+from tests.r.r_runner import read_r, R_INPUTS_DIR
 
 
 def _make_data(seed: int = 1, n_out: int = 8, n: int = 200) -> pd.DataFrame:
@@ -54,8 +52,6 @@ class TestRobustRegToggleValidation:
         for parity in ("stata", "rlm"):
             for method in ("mm", "huber"):
                 for vcov in (None, "stata", "rlm"):
-                    if parity == "rlm" and not r_available():
-                        continue
                     r = oe.robust_reg(
                         "y ~ x1 + x2", data=self.df, parity=parity,
                         method=method, vcov=vcov,
@@ -98,41 +94,59 @@ class TestRobustRegWeightProperties:
 
 
 class TestRobustRegCoefVsRLM:
-    """Coefficients must match R MASS::rlm to 1e-6 when R is available."""
+    """Coefficients/SE must match the committed R MASS::rlm fixture to 1e-6.
 
-    @pytest.mark.skipif(not r_available(), reason="R/MASS::rlm not installed")
+    The ``parity="rlm"`` branch is a pure-Python port; ground truth is the
+    committed ``rreg.json`` (read without launching R).  A live-R cross-check
+    is still available as an optional ``skipif(r_available())`` test below.
+    """
+
     def test_mm_coef_matches_rlm(self):
-        df = _make_data()
+        R = read_r("rreg")
+        df = pd.read_csv(R_INPUTS_DIR / "rreg_input.csv")
         r = oe.robust_reg("y ~ x1 + x2", data=df, method="mm", parity="rlm")
-        from open_econs.core._rlm_r import rlm_fit
-        import tempfile
-        from pathlib import Path
-        with tempfile.TemporaryDirectory() as tmp:
-            p = Path(tmp) / "inp.csv"
-            df.to_csv(p, index=False)
-            fit = rlm_fit("y ~ x1 + x2", str(p), method="MM", acc=1e-6)
-        npt.assert_allclose(r.coefficients.values, np.asarray(fit["b"]), atol=1e-6)
+        npt.assert_allclose(
+            r.coefficients["(Intercept)"], R["b0"], atol=1e-6
+        )
+        npt.assert_allclose(r.coefficients["x1"], R["b1"], atol=1e-6)
+        npt.assert_allclose(r.coefficients["x2"], R["b2"], atol=1e-6)
 
-    @pytest.mark.skipif(not r_available(), reason="R/MASS::rlm not installed")
     def test_rlm_vcov_matches_rlm(self):
-        df = _make_data()
+        R = read_r("rreg")
+        df = pd.read_csv(R_INPUTS_DIR / "rreg_input.csv")
         r = oe.robust_reg("y ~ x1 + x2", data=df, method="mm", parity="rlm")
-        from open_econs.core._rlm_r import rlm_fit
-        import tempfile
-        from pathlib import Path
-        with tempfile.TemporaryDirectory() as tmp:
-            p = Path(tmp) / "inp.csv"
-            df.to_csv(p, index=False)
-            fit = rlm_fit("y ~ x1 + x2", str(p), method="MM")
-        se_r = np.sqrt(np.diag(np.asarray(fit["V"])))
-        npt.assert_allclose(r.std_errors.values, se_r, atol=1e-6)
+        npt.assert_allclose(r.std_errors["(Intercept)"], R["se0"], atol=1e-6)
+        npt.assert_allclose(r.std_errors["x1"], R["se1"], atol=1e-6)
+        npt.assert_allclose(r.std_errors["x2"], R["se2"], atol=1e-6)
 
-    @pytest.mark.skipif(not r_available(), reason="R/MASS::rlm not installed")
+    def test_scale_matches_rlm(self):
+        R = read_r("rreg")
+        df = pd.read_csv(R_INPUTS_DIR / "rreg_input.csv")
+        r = oe.robust_reg("y ~ x1 + x2", data=df, method="mm", parity="rlm")
+        npt.assert_allclose(r.scale, R["scale"], atol=1e-5)
+
     def test_huber_method_runs(self):
         df = _make_data()
         r = oe.robust_reg("y ~ x1 + x2", data=df, method="huber", parity="rlm")
         assert r.method == "huber"
         assert np.isfinite(r.coefficients.values).all()
+
+    @pytest.mark.skipif(
+        not __import__("open_econs.core._rlm_r", fromlist=["r_available"]).r_available(),
+        reason="optional live-R cross-check (R/MASS::rlm not installed)",
+    )
+    def test_mm_coef_matches_live_rlm(self):
+        from open_econs.core._rlm_r import rlm_fit
+        import tempfile
+        from pathlib import Path
+
+        df = pd.read_csv(R_INPUTS_DIR / "rreg_input.csv")
+        r = oe.robust_reg("y ~ x1 + x2", data=df, method="mm", parity="rlm")
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "inp.csv"
+            df.to_csv(p, index=False)
+            fit = rlm_fit("y ~ x1 + x2", str(p), method="MM", acc=1e-6)
+        npt.assert_allclose(r.coefficients.values, np.asarray(fit["b"]), atol=1e-6)
 
 
 class TestRobustRegStataDefault:

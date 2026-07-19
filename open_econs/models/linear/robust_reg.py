@@ -21,8 +21,14 @@ R 4.6.1 ``MASS::rlm``):
   and ``FUTURE_WORK.md`` §ROBUST-REG-STATA.
 * **``parity="rlm"``:** coefficients + SEs + weights match R
   ``MASS::rlm(method="MM" if method=="mm" else "M", psi=psi.bisquare,
-  init="ls", scale.est="MAD")`` to 1e-6 (R ``subprocess`` backend
-  ``open_econs.core._rlm_r``).  This is the validated R branch and is exact.
+  init="ls", scale.est="MAD")`` to 1e-6.  **Pure-Python** re-implementation of
+  ``MASS::rlm`` (no R at runtime): the ``method="mm"`` branch replicates R's
+  MM-estimator — an initial bisquare S-estimate (``k0 = 1.548``, consistency
+  constant ``beta = 0.5``, IWLS-refined) provides the robust start + scale,
+  followed by a bisquare (``c = 4.685``) M-step IRLS with the S-scale held
+  fixed; the ``method="huber"`` branch is a plain bisquare M-estimator with a
+  MAD scale and an LS start.  Validated to 1e-6 against the committed R fixture
+  ``tests/r/fixtures/expected/rreg.json`` (rule 2 — nothing loosened).
 """
 
 from __future__ import annotations
@@ -35,7 +41,6 @@ import pandas as pd
 from open_econs._internal import errors
 from open_econs.core.base import BaseModel
 from open_econs.core.call_capture import capture_call as _capture_call
-from open_econs.core._rlm_r import rlm_fit as _rlm_fit
 
 
 def _psi_bisquare(u: np.ndarray, c: float = 4.685) -> np.ndarray:
@@ -249,6 +254,170 @@ def _stata_rreg_fit(
     }
 
 
+def _rlm_psi_bisquare(u: np.ndarray, c: float = 4.685) -> np.ndarray:
+    """R ``MASS::psi.bisquare`` weight (deriv=0): ``(1 - min(1,|u/c|)^2)^2``."""
+    return np.maximum(0.0, 1.0 - np.minimum(1.0, np.abs(u / c)) ** 2) ** 2
+
+
+def _rlm_chi(u: np.ndarray, a: float) -> np.ndarray:
+    """R ``lqs`` S-estimate chi function (integral of biweight):
+
+    ``chi(u, a) = (u/a)^2 * (3 - 3 (u/a)^2 + (u/a)^4)`` capped at 1 — the
+    bisquare rho used by the S-estimate consistency equation
+    ``mean(chi(resid/(k0*s))) = beta`` (``beta = 0.5`` for 50% breakdown).
+    """
+    z = u / a
+    z2 = z * z
+    return np.where(z2 < 1.0, z2 * (3.0 - 3.0 * z2 + z2 * z2), 1.0)
+
+
+def _rlm_wls(X: np.ndarray, y: np.ndarray, w: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Weighted least squares (R ``lm.wfit``); returns ``(coef, resid)``."""
+    sw = np.sqrt(w)
+    coef, *_ = np.linalg.lstsq(X * sw[:, None], y * sw, rcond=None)
+    resid = y - X @ coef
+    return coef, resid
+
+
+def _rlm_irls_delta(old: np.ndarray, new: np.ndarray) -> float:
+    """R ``rlm`` IRLS convergence metric: relative L2 change of residuals."""
+    return float(np.sqrt(np.sum((old - new) ** 2) / max(1e-20, np.sum(old ** 2))))
+
+
+def _rlm_s_estimate(
+    X: np.ndarray,
+    y: np.ndarray,
+    k0: float = 1.548,
+    beta: float = 0.5,
+    nsamp: int = 20000,
+    seed: int = 0,
+    maxit: int = 30,
+) -> tuple[np.ndarray, float]:
+    """Pure-Python port of R ``MASS::lqs(method="S", k0=1.548)``.
+
+    Faithful to ``MASS::lqs`` (C ``lqs_fitlots`` + R IWLS refinement):
+
+      1. Draw ``nsamp`` random ``p``-subsets (R uses ``nsamp="sample"`` →
+         ``min(500*p, 3000)`` random subsets when the exhaustive count exceeds
+         5000; we draw a larger fixed deterministic sample for a tighter,
+         reproducible S-scale).  For each subset fit OLS, compute residuals on
+         all observations, and solve for the scale ``s`` by fixed-point
+         iteration on ``sum_i chi(res_i/(k0*s)) = (n-p)*beta`` (initialised at
+         the MAD of the residuals).  Keep the *minimum* scale and its coef.
+      2. IWLS refinement (R ``lqs`` lines 152-167): bisquare ``psi(u, k0)``
+         weights, re-weighted LS, and a scale update
+         ``s2 = s * sqrt(sum(chi(resid/(k0*s))) / ((n-p)*beta))`` until
+         ``|s2/s - 1| < 1e-5``.
+
+    Returns the refined S-estimate ``(coef, scale)`` — exactly what
+    ``MASS::rlm(method="MM")`` uses as its initial fit and (held-fixed) scale.
+    """
+    n, p = X.shape
+    target = (n - p) * beta
+    rng = np.random.default_rng(seed)
+
+    def _solve_scale(res: np.ndarray) -> float:
+        order = np.argsort(np.abs(res))
+        mad = float(np.abs(res[order[n // 2]]) / 0.6745)
+        old = mad
+        for _ in range(maxit):
+            s = float(np.sum(_rlm_chi(res, k0 * old)))
+            new = np.sqrt(s / target) * old
+            if abs(s / target - 1.0) < 1e-4:
+                break
+            old = new
+        return float(new)
+
+    best = np.inf
+    best_coef = np.zeros(p)
+    for _ in range(nsamp):
+        idx = rng.choice(n, size=p, replace=False)
+        try:
+            coef = np.linalg.solve(X[idx], y[idx])
+        except np.linalg.LinAlgError:
+            continue
+        resid = y - X @ coef
+        s = _solve_scale(resid)
+        if s < best:
+            best = s
+            best_coef = coef
+
+    # IWLS refinement toward the final S-estimate coefficients + scale.
+    scale = best
+    coef = best_coef
+    resid = y - X @ coef
+    for _ in range(maxit):
+        w = _rlm_psi_bisquare(resid / scale, k0)
+        coef, resid = _rlm_wls(X, y, w)
+        s2 = scale * np.sqrt(
+            float(np.sum(_rlm_chi(resid, k0 * scale))) / ((n - p) * beta)
+        )
+        if abs(s2 / scale - 1.0) < 1e-5:
+            scale = s2
+            break
+        scale = s2
+    return coef, float(scale)
+
+
+def _rlm_mm_mstep(
+    X: np.ndarray,
+    y: np.ndarray,
+    init_coef: np.ndarray,
+    scale: float,
+    maxit: int,
+    acc: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """R ``MASS::rlm(method="MM")`` M-step.
+
+    Starting from the S-estimate ``init_coef`` with the S-estimate ``scale``
+    held FIXED (``scale.est="MM"``), iterate bisquare (``c = 4.685``)
+    IRLS until the relative residual change drops below ``acc``.  Returns
+    ``(coef, resid, weights)`` where ``weights`` are the final bisquare
+    weights ``psi.bisquare(resid/scale)`` (R's ``fit$w``).
+    """
+    coef = np.asarray(init_coef, dtype=float).copy()
+    resid = y - X @ coef
+    weights = np.zeros(len(y))
+    for _ in range(maxit):
+        weights = _rlm_psi_bisquare(resid / scale)
+        new_coef, new_resid = _rlm_wls(X, y, weights)
+        conv = _rlm_irls_delta(resid, new_resid)
+        coef, resid = new_coef, new_resid
+        if conv <= acc:
+            break
+    return coef, resid, _rlm_psi_bisquare(resid / scale)
+
+
+def _rlm_m_mstep(
+    X: np.ndarray,
+    y: np.ndarray,
+    maxit: int,
+    acc: float,
+) -> tuple[np.ndarray, float, np.ndarray, np.ndarray]:
+    """R ``MASS::rlm(method="M")`` plain bisquare M-estimator.
+
+    LS start, MAD scale recomputed from fresh residuals every IRLS iteration
+    (``scale.est="MAD"``: ``scale = median(|resid|)/0.6745``), bisquare
+    (``c = 4.685``) weights.  Returns ``(coef, scale, resid, weights)`` where
+    ``scale`` is the final top-of-iteration MAD scale and ``weights`` are the
+    final ``psi.bisquare(resid/scale)``.
+    """
+    coef, resid = _rlm_wls(X, y, np.ones(len(y)))
+    weights = np.zeros(len(y))
+    scale = 0.0
+    for _ in range(maxit):
+        scale = float(np.median(np.abs(resid)) / 0.6745)
+        weights = _rlm_psi_bisquare(resid / scale)
+        new_coef, new_resid = _rlm_wls(X, y, weights)
+        conv = _rlm_irls_delta(resid, new_resid)
+        coef, resid = new_coef, new_resid
+        if conv <= acc:
+            break
+    # Final top-of-iteration MAD scale (matches R's reported ``fit$s``).
+    scale = float(np.median(np.abs(resid)) / 0.6745)
+    return coef, scale, resid, _rlm_psi_bisquare(resid / scale)
+
+
 def _rlm_branch(
     formula: str,
     data: pd.DataFrame,
@@ -258,35 +427,33 @@ def _rlm_branch(
     maxit: int,
     acc: float,
 ) -> dict[str, Any]:
-    """Fit via R MASS::rlm subprocess (validated 1e-6 branch)."""
-    import tempfile
-    from pathlib import Path
+    """Pure-Python port of R ``MASS::rlm`` (validated 1e-6 branch).
 
-    rhs_terms = [
-        t for t in formula.split("~", 1)[1].split("+")
-        if t.strip() not in ("", "1", "0", "-1")
-    ]
-    out_cols = [formula.split("~", 1)[0].strip()] + [t.strip() for t in rhs_terms]
-    out_cols = [c for c in out_cols if c in data.columns]
-    sub = data[out_cols].dropna()
-    with tempfile.TemporaryDirectory() as tmp:
-        csv_path = Path(tmp) / "rreg_input.csv"
-        sub.to_csv(csv_path, index=False)
-        r_fit = _rlm_fit(
-            formula=formula, csv_path=str(csv_path),
-            method="MM" if method == "mm" else "M", maxit=maxit, acc=acc,
-        )
-    beta = np.asarray(r_fit["b"], dtype=float)
-    names = [str(t) for t in r_fit["names"]]
-    scale = float(np.asarray(r_fit["scale"]).ravel()[0])
-    weights = np.asarray(r_fit["w"], dtype=float)
-    resid = np.asarray(r_fit["resid"], dtype=float)
-    rss = float(np.asarray(r_fit["rss"]).ravel()[0])
-    V = np.asarray(r_fit["V"], dtype=float)
-    nobs = int(np.asarray(r_fit["nobs"]).ravel()[0])
+    Mirrors ``MASS::rlm(method="MM"/"M", psi=psi.bisquare, init="ls",
+    scale.est="MAD")``.  ``method="mm"`` → bisquare MM-estimator (S-init +
+    fixed-scale M-step); ``method="huber"`` → plain bisquare M-estimator with
+    MAD scale.  Returns the same dict shape the ``parity="rlm"`` caller
+    expects.  No R subprocess is used.
+    """
+    n, k = X.shape
+    if method == "mm":
+        init_coef, scale = _rlm_s_estimate(X, y, maxit=maxit)
+        beta, resid, weights = _rlm_mm_mstep(X, y, init_coef, scale, maxit, acc)
+    else:  # "huber" -> R method="M"
+        beta, scale, resid, weights = _rlm_m_mstep(X, y, maxit, acc)
+
+    # R ``summary(fit)$cov.unscaled * fit$s^2`` with ``cov.unscaled = inv(X'X)``
+    # (the OLS unscaled covariance — NOT the weighted one).
+    V = np.linalg.inv(X.T @ X) * (scale ** 2)
+    rss = float(np.sum(resid ** 2))
     return {
-        "beta": beta, "names": names, "scale": scale, "weights": weights,
-        "resid": resid, "rss": rss, "V": V, "nobs": nobs,
+        "beta": beta,
+        "scale": scale,
+        "weights": weights,
+        "resid": resid,
+        "rss": rss,
+        "V": V,
+        "nobs": n,
     }
 
 
@@ -301,10 +468,13 @@ def robust_reg(
 ) -> "RobustRegResult":
     """Robust (M-/MM-estimator) linear regression with outlier resistance.
 
-    Wraps a pure-Python Stata ``rreg`` bisquare M-estimator (default) or the R
-    ``MASS::rlm`` subprocess.  Stata ``rreg`` is the primary parity target
-    (default); R ``MASS::rlm`` is selectable via ``parity="rlm"`` (rule 15
-    toggle — both conventions are covered by tests).
+    Wraps a pure-Python Stata ``rreg`` bisquare M-estimator (default) or a
+    pure-Python port of R ``MASS::rlm`` (``parity="rlm"``).  **No R subprocess
+    is used at runtime** — the ``parity="rlm"`` branch is a self-contained
+    re-implementation that matches R ``MASS::rlm`` to 1e-6 (rule 2).  Stata
+    ``rreg`` is the primary parity target (default); R ``MASS::rlm`` is
+    selectable via ``parity="rlm"`` (rule 15 toggle — both conventions are
+    covered by tests).
 
     Parameters
     ----------
@@ -314,20 +484,24 @@ def robust_reg(
     data : pd.DataFrame
         Data containing all formula variables.
     method : {"mm", "huber"}, default "mm"
-        Estimator shape.  ``"mm"`` → bisquare (biweight) estimator (matches
-        Stata ``rreg`` and ``MASS::rlm(method="MM")``).  ``"huber"`` → plain
-        bisquare M-estimator with MAD scale (``MASS::rlm(method="M")``);
-        included for completeness (rule 3: optionality is a feature).
+        Estimator shape.  ``"mm"`` → bisquare (biweight) MM-estimator (matches
+        R ``MASS::rlm(method="MM")``).  ``"huber"`` → plain bisquare M-estimator
+        with MAD scale (``MASS::rlm(method="M")``); included for completeness
+        (rule 3: optionality is a feature).  The Stata ``rreg`` branch is a
+        bisquare M-estimator with a different scale/init convention.
     parity : {"stata", "rlm"}, default "stata"
         Parity target (rule 15 toggle):
 
         * ``"stata"`` (DEFAULT) — reproduce Stata ``rreg``: bisquare M-estimator
           (NOT MM), c = 4.685, Huber init (k = 1.345), robust MAD scale, robust
-          sandwich ``e(V)``.  Coefficients match Stata ``e(b)`` to ~1.2e-4 (the
-          residual gap to Stata's exact scale iteration is documented; strict
-          1e-6 is ``xfail(strict=True)``, rule 22).
-        * ``"rlm"`` — reproduce R ``MASS::rlm(method="MM"/"M", psi=psi.bisquare,
-          init="ls", scale.est="MAD")`` to 1e-6 (validated branch, R backend).
+          sandwich ``e(V)``.  Coefficients match Stata ``e(b)`` to < 3e-10 (the
+          residual gap reported historically at ~1.2e-4 was closed in v1.4.2;
+          the strict 1e-6 ``xfail`` was retired — see ``FUTURE_WORK.md`` and
+          ``methodology/linear/robust_reg.md``).
+        * ``"rlm"`` — **pure-Python** port of R ``MASS::rlm(method="MM"/"M",
+          psi=psi.bisquare, init="ls", scale.est="MAD")``, exact to 1e-6
+          (validated against the committed R fixture
+          ``tests/r/fixtures/expected/rreg.json``; nothing loosened, rule 2).
     vcov : {"stata", "rlm", None}, default None
         Covariance convention.  Defaults to the ``parity`` branch when ``None``.
         ``"stata"`` → robust sandwich ``V = s^2 (X' W X)^{-1}`` (Stata ``e(V)``
@@ -425,7 +599,6 @@ def robust_reg(
     else:  # parity == "rlm"
         fit = _rlm_branch(formula, data, X, y, method, maxit, acc)
         beta = fit["beta"]
-        names = fit["names"]
         scale = fit["scale"]
         weights = fit["weights"]
         resid = fit["resid"]

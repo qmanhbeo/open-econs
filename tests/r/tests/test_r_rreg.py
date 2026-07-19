@@ -7,6 +7,13 @@ loosened, rule 2).  See ``tests/r/generate-fixtures/rreg.R``.
 The ``parity="stata"`` branch is a separate convention (Stata ``rreg``) and is
 covered in ``tests/stata/tests/test_stata_rreg.py``.
 
+These tests now validate the purely-Python ``MASS::rlm`` port (committed in
+``open_econs/models/linear/robust_reg.py``) against the committed fixture
+``tests/r/fixtures/expected/rreg.json``.  No R binary is launched at runtime;
+``read_r`` reads the committed ``.json`` as ground truth (R is only invoked
+when ``OE_REGENERATE_FIXTURES=1``).  This keeps the suite green on R-less CI
+while still enforcing the 1e-6 parity oracle.
+
 All assertions at ``atol=1e-6`` — nothing loosened.
 """
 
@@ -19,10 +26,9 @@ import pytest
 
 import open_econs as oe
 
-from open_econs.core._rlm_r import r_available
 from ..r_runner import read_r
 
-pytestmark = [pytest.mark.r, pytest.mark.skipif(not r_available(), reason="R/MASS::rlm not installed")]
+pytestmark = [pytest.mark.r]
 
 R = read_r("rreg")
 DF = pd.read_csv("tests/r/fixtures/inputs/rreg_input.csv")

@@ -75,8 +75,10 @@ The `parity` toggle (rule 15) selects the reference software:
   `rreg.ado` v3.5.0 (OLS → Cook's-D drop → Huber init → bisquare IRLS →
   bias-correction regress). Coefficients and SEs match Stata `rreg` `e(b)`/`e(V)`
   to < 3e-10 (machine precision, within the 1e-6 rule). No R dependency.
-* `parity="rlm"` — R `MASS::rlm` subprocess; coefficients + SEs + weights match
-  R to 1e-6 (validated branch).
+* `parity="rlm"` — **pure-Python** port of R `MASS::rlm` (no R launched at
+  runtime); coefficients + SEs + weights match R to 1e-6 (validated branch).
+  See [Pure-Python `parity="rlm"` port](#pure-python-parityrlm-port-r-massrlm)
+  below for the algorithm.
 
 ## Mathematical Formulation
 
@@ -145,6 +147,148 @@ value carried into the bias-correction step is the last top-of-iteration scale
 (= 0.9648544 for the rreg fixture).  This fully reproduces Stata's scale
 iteration to machine precision.
 
+### Pure-Python `parity="rlm"` port (R `MASS::rlm`)
+
+> **R parity with zero R at runtime.** `robust_reg(parity="rlm")` is a
+> self-contained Python re-implementation of R
+> `MASS::rlm(method="MM"/"M", psi=psi.bisquare, init="ls", scale.est="MAD")`.
+> It launches **no R process**, has **no R dependency**, and matches the
+> committed R ground-truth fixture `tests/r/fixtures/expected/rreg.json` on
+> coefficients, standard errors, and per-observation weights to **1e-6**
+> (rule 2 — nothing loosened). R is now used *only offline* to regenerate that
+> committed fixture (dev-only utility `open_econs/core/_rlm_r.py`, no longer
+> imported by the library).
+
+This branch is a distinct parity convention from the default Stata `rreg`
+branch (rule 15). It is implemented in
+`open_econs/models/linear/robust_reg.py` by `_rlm_branch`,
+`_rlm_s_estimate`, `_rlm_mm_mstep`, and `_rlm_m_mstep`, driven by R's own
+bisquare ψ definition.
+
+#### Bisquare ψ (R `psi.bisquare`, `deriv=0`)
+
+R's `MASS::rlm` uses the *weight form* of the biweight ψ (the working IRLS
+weight), which clips `|u/c|` at 1:
+
+\[
+w(u) \;=\; \psi_{\text{bisq}}(u)
+\;=\; \left(1 - \min\!\left(1, \left|\tfrac{u}{c}\right|\right)^2\right)^2,
+\qquad c = 4.685,
+\]
+
+so an observation with `|u| \ge c` receives weight exactly 0.  (Implemented as
+`_rlm_psi_bisquare`; note this is R's `psi.bisquare(u, deriv=0)`, i.e. the
+weight `ψ(u)/u`, not the influence `ψ(u)` used in the estimating-equation
+notation of the Stata section above.)
+
+#### MAD scale
+
+The robust scale is the median absolute deviation, consistent at the Gaussian
+model:
+
+\[
+s \;=\; \frac{\operatorname{median}\big(|r_i - \operatorname{median}(r)|\big)}{0.6745}
+\qquad\text{(and, in the M branch, } s = \operatorname{median}(|r_i|)/0.6745\text{).}
+\]
+
+#### `method="mm"` — bisquare MM-estimator
+
+R's `method="MM"` is a two-stage estimator: a high-breakdown **S-estimate**
+supplies a robust starting point *and* a fixed scale, then a high-efficiency
+bisquare **M-step** refines the coefficients with that scale held constant
+(`scale.est="MM"`).
+
+1. **Initial S-estimate** (`_rlm_s_estimate`, a port of
+   `MASS::lqs(method="S", k0=1.548)`):
+   * Uses the biweight ρ (integrated ψ), tuning `k0 = 1.548` and consistency
+     constant `beta = 0.5` (50% breakdown):
+     \[
+     \chi(u; a) = \begin{cases}
+       (u/a)^2\big(3 - 3(u/a)^2 + (u/a)^4\big) & |u/a| < 1 \\
+       1 & |u/a| \ge 1.
+     \end{cases}
+     \]
+   * Draws random `p`-subsets (deterministically seeded, `nsamp = 20000` by
+     default for a tight, reproducible S-scale). For each subset it fits an
+     exact OLS, computes residuals on **all** observations, and solves the
+     scale fixed-point equation
+     \[
+     \sum_{i} \chi\!\left(\frac{r_i}{k_0\,s}\right) = (n-p)\,\beta
+     \]
+     by fixed-point iteration (initialised at the residual MAD). The subset
+     giving the **minimum** scale is kept.
+   * **IWLS refinement** (`MASS::lqs` lines 152–167): bisquare weights
+     `ψ.bisquare(r/s, k0)`, reweighted LS, and the scale update
+     \[
+     s' \;=\; s \,\sqrt{\frac{\sum_i \chi\!\big(r_i/(k_0 s)\big)}{(n-p)\,\beta}}
+     \]
+     iterated to `|s'/s - 1| < 1e-5`, giving the final S-coefficients and
+     S-scale.
+2. **M-step** (`_rlm_mm_mstep`): starting from the S-coefficients, with the
+   S-**scale held fixed**, run bisquare (`c = 4.685`) IRLS
+   \[
+   \hat\beta^{(t+1)} = \arg\min_\beta \sum_i w_i^{(t)} (y_i - x_i'\beta)^2,
+   \qquad w_i^{(t)} = \psi_{\text{bisq}}\!\big(r_i^{(t)}/s\big),
+   \]
+   until the relative L2 change in residuals
+   `sqrt(Σ(r_old − r_new)² / Σ r_old²)` drops below `acc` (default `1e-6`).
+   The reported `weights` are the final `ψ.bisquare(r/s)` (R's `fit$w`).
+
+#### `method="huber"` — plain bisquare M-estimator (R `method="M"`)
+
+`method="huber"` maps to R `method="M"` (`_rlm_m_mstep`): an **LS start**, then
+bisquare (`c = 4.685`) IRLS where the **MAD scale is recomputed from fresh
+residuals at the top of every iteration** (`scale.est="MAD"`,
+`s = median(|r|)/0.6745`). Convergence uses the same relative-L2 residual
+metric. The reported `scale` is the final top-of-iteration MAD scale (R's
+`fit$s`).
+
+#### Covariance
+
+Both `parity="rlm"` sub-methods report R's `MASS::rlm` covariance,
+`summary(fit)$cov.unscaled * fit$s^2`, where `cov.unscaled = (X'X)^{-1}` is the
+**OLS** unscaled covariance (not a weighted sandwich):
+
+\[
+V \;=\; (X'X)^{-1}\, s^2 .
+\]
+
+#### Usage
+
+```python
+import open_econs as oe
+
+# bisquare MM-estimator == MASS::rlm(y~x1+x2, method="MM",
+#   psi=psi.bisquare, init="ls", scale.est="MAD")  -> 1e-6, no R needed
+r = oe.robust_reg("y ~ x1 + x2", data=df, parity="rlm")
+
+# plain bisquare M-estimator == MASS::rlm(..., method="M", psi=psi.bisquare,
+#   scale.est="MAD")  -> 1e-6, no R needed
+r_m = oe.robust_reg("y ~ x1 + x2", data=df, method="huber", parity="rlm")
+```
+
+Both calls run in pure Python and reproduce
+`tests/r/fixtures/expected/rreg.json` (the 1e-6 R oracle) — the `method="mm"`
+call matches the `b*`/`se*`/`w`/`scale` keys, the `method="huber"` call matches
+the `b*_m`/`se*_m` keys.
+
+### Convention divergence: Stata `rreg` vs R `rlm` (rule 15)
+
+The default `parity="stata"` branch and the `parity="rlm"` branch are
+**distinct, by-design conventions** and are *not* expected to agree:
+
+* **Stata `rreg`** is a bisquare **M**-estimator finished with a **final
+  bias-correction regression** whose OLS RSS drives `e(V)` (see the Stata
+  sections above). Its scale is Stata's own MAD-type iterate.
+* **R `MASS::rlm(method="MM")`** is an S-init + fixed-scale M-estimator whose
+  covariance is `cov.unscaled · s²`.
+
+Their coefficients differ by roughly **1e-3** — a genuine convention gap, not a
+bug (documented in the Overview table and rule 15). This divergence is locked
+in by the `test_branches_differ` test, which asserts the two parity branches
+produce measurably different estimates; neither branch may be silently
+"reconciled" to the other.
+
 ### Key Quantities of Interest
 
 * Coefficients \(\hat\beta\) (bisquare M/MM estimates)
@@ -202,8 +346,8 @@ coefficients differ at ~1e-3. The product follows **Stata `rreg` by default**
   **< 3e-10**. The strict 1e-6 assertions PASS in
   `tests/stata/tests/test_stata_rreg.py` (gap ROBUST-REG-STATA resolved
   2026-07-19).
-* `parity="rlm"` — R `MASS::rlm` subprocess, exact to **1e-6** on coefficients,
-  SEs, and weights (validated branch).
+* `parity="rlm"` — pure-Python port of R `MASS::rlm` (no R at runtime), exact
+  to **1e-6** on coefficients, SEs, and weights (validated branch).
 
 ### Two parity-critical subtleties (ROBUST-REG-STATA, resolved 2026-07-19)
 
@@ -242,7 +386,7 @@ encoded in `_stata_rreg_fit`:
 | Coef agreement | < 3e-10 vs Stata | exact vs R (1e-6) | ground truth | exact (vs OE rlm) |
 | `vcov="stata"` SE | < 3e-10 vs Stata `e(V)` | — | `e(V)` | diverges |
 | `vcov="rlm"` SE | — | exact vs R (1e-6) | diverges | `cov.unscaled*s^2` |
-| Backend | pure-Python IRLS | R `MASS::rlm` subprocess | native | native |
+| Backend | pure-Python IRLS | pure-Python `MASS::rlm` port (no R) | native | native |
 
 ## Implementation Details
 
@@ -278,10 +422,18 @@ Methods: `.tidy()`, `.summary()`, `.predict(newdata=None)`, `.vcov_matrix()`.
 
 ### Backend
 
-`open_econs/core/_rlm_r.py` calls `MASS::rlm` once per fit via `Rscript`,
-parsing a JSON payload (coefficients, covariance, scale, weights, residuals).
-Used only by `parity="rlm"`. The `parity="stata"` path is fully pure-Python
-(no R dependency).
+**Both** parity branches are now fully pure-Python — **no R or Stata binary is
+launched at runtime**:
+
+* `parity="stata"` — `_stata_rreg_fit` (re-implementation of `rreg.ado`
+  v3.5.0).
+* `parity="rlm"` — `_rlm_branch` / `_rlm_s_estimate` / `_rlm_mm_mstep` /
+  `_rlm_m_mstep` (re-implementation of `MASS::rlm`); matches R to 1e-6.
+
+`open_econs/core/_rlm_r.py` (which shells out to `MASS::rlm` via `Rscript` and
+parses a JSON payload) is retained **only as a dev-only/offline utility** to
+regenerate the committed R fixture `tests/r/fixtures/expected/rreg.json`. It is
+**no longer imported by the library** and is never used to fit a model.
 
 ## Stata / R Equivalents
 
@@ -341,8 +493,10 @@ low_weight = r.weights[r.weights < 0.1].index.tolist()
    parity-critical subtleties (carry-out weight; `lambda`'s zero-weight `N`) are
    documented above and in `open_econs/models/linear/robust_reg.py`. Use
    `parity="rlm"` for validated R `MASS::rlm` 1e-6 parity.
-3. **R dependency for `parity="rlm"`**: the exact R parity requires R + `MASS`.
-   `parity="stata"` is pure-Python.
+3. **No R dependency**: BOTH parity branches are pure-Python. `parity="rlm"`
+   is a self-contained port of `MASS::rlm` (no R launched at runtime), matching
+   the committed R fixture to 1e-6. R is used only offline (dev-only
+   `open_econs/core/_rlm_r.py`) to regenerate that fixture.
 4. **No clustering / HAC**: only the bisquare robust sandwich is provided.
 
 ## References
