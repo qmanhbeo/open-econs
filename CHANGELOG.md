@@ -1,6 +1,49 @@
 # Changelog
 
-## [1.2.0] - 2026-07-19
+## [1.3.0] - 2026-07-19
+
+Third release — the **OLS diagnostics battery** (GA). Promotes the existing
+Jarque-Bera / Breusch-Pagan / Durbin-Watson / Ramsey RESET / VIF machinery into
+a consistent first-class `OLSResult` API and adds the missing `estat`-family
+diagnostics, validated against the reference math (or the working
+`statsmodels` backends) within the 1e-6 parity tolerance.
+
+### Added — diagnostics
+
+- `bg_test(lags=1)` — Breusch-Godfrey LM test for residual autocorrelation
+  (from scratch: auxiliary regression on the full design matrix + `lags` lagged
+  residuals, LM = n·R² ~ χ²(lags); F version also returned). Implemented from
+  scratch because `statsmodels.acorr_breusch_godfrey` dropped its design-matrix
+  argument in this environment and no longer matches Stata.
+- `white_test(interaction=True)` — White's general heteroskedasticity test
+  (`estat imtest, white` convention): `resid²` on regressors, squares, and
+  pairwise cross-products; LM = n·R² ~ χ²(df), df = p + p(p+1)/2.
+- `ljung_box(lags=1, box_pierce=False)` — Ljung-Box Q portmanteau test on
+  residuals (wraps `statsmodels.acorr_ljungbox`).
+- `cooks_distance()`, `leverage()` — per-observation Cook's D and hat-matrix
+  diagonal (Stata `predict, cooksd` / `leverage`; R `cooks.distance` /
+  `hatvalues`).
+- `dfbetas()` (standardized, R `dfbetas` / Stata `predict, dfbeta`
+  standardization) and `dfbeta()` (raw, Stata `dfbeta` command).
+- `influence()` — one-shot bundle: `cooks_distance`, `leverage`, `dfbetas`,
+  externally `resid_studentized`, and `dffits`.
+- `diagnostics_table()` — `pd.DataFrame` summary of the full battery (JB, BP,
+  White, Breusch-Godfrey, RESET, Durbin-Watson, Ljung-Box, condition number).
+- `diagnostics()` retained as the legacy dict form (JB / BP / DW / RESET) for
+  backward compatibility.
+
+### Docs
+
+- `methodology/linear/diagnostics.md` — SEO reference covering the math, usage,
+  and root-cause footguns (statsmodels `acorr_breusch_godfrey` API break;
+  Stata `estat imtest, white`; DFBETAS standardization; DFBETAS vs statsmodels
+  convention gap).
+
+### Known gaps
+
+- DFBETAS leave-one-out SE convention diverges from
+  `statsmodels.OLSInfluence.dfbetas` at ~8.6e-4 relative (not the rule-2 1e-6
+  tolerance). Covered by a strict `xfail` test; see FUTURE_WORK.md.
 
 Second release of the **count & limited dependent variable** line. New
 `open_econs/models/limited/` module (FE-backed `poisson`, `nbreg`, ordered

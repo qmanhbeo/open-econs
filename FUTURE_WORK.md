@@ -568,3 +568,28 @@ onrobust) SE matches Stata to
 - **Next agent:** treat as open; the textbook/R NB2 + Stata `dispersion(mean)`
   parity is the shipped deliverable. A future `dispersion="const_stata"` option
   could cover Stata's constant MLE if a user needs it (rule 15 toggle).
+
+
+---
+
+## v1.3 Diagnostics — open items
+
+- **DFBETAS vs statsmodels convention divergence (OPEN, strict xfail):**
+  OLSResult.dfbetas() standardizes by the leave-one-out SE s_{(-i)} (Stata
+  predict, dfbeta / R stats::dfbetas convention). statsmodels
+  OLSInfluence.dfbetas uses a different leave-one-out variance formula.
+  Agreement is ~8.6e-4 relative (max abs ~4.8e-4), which fails the rule-2 1e-6
+  tolerance, so the cross-check is a xfail(strict=True) in
+  	ests/non_stata_nor_r/test_diagnostics.py::TestDiagnostics::test_dfbeta_vs_statsmodels
+  (do NOT loosen it). Resolution options: (a) add a dfbetas_backend
+  toggle selecting the statsmodels bread (rule 15); (b) confirm against Stata
+  predict, dfbeta / R dfbetas in the dedicated Stata/R parity suites
+  (other agents) — those are the authoritative targets, not statsmodels.
+  Root cause recorded in methodology/linear/diagnostics.md.
+- **diagnostics() vs diagnostics_table() (recommendation, not open):** keep
+  both for v1.3.0 (the dict form is asserted by an existing test). In a future
+  minor, flip diagnostics() to return the DataFrame and update the one dict
+  test.
+- **v1.3 diagnostics: all other parity targets met (BG from-scratch n*R2,
+  White, Ljung-Box, Cook's D, leverage) — no other open items** beyond the
+  DFBETAS/statsmodels gap above.

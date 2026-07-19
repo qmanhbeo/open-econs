@@ -10,6 +10,17 @@ from statsmodels.stats.stattools import durbin_watson as _durbin_watson
 
 from open_econs._version import __version__
 from open_econs.core.base import BaseModel
+from open_econs.core.diagnostics import (
+    breusch_godfrey as _breusch_godfrey,
+)
+from open_econs.core.diagnostics import (
+    cooks_distance as _cooks_distance,
+)
+from open_econs.core.diagnostics import dfbeta as _dfbeta_raw
+from open_econs.core.diagnostics import dfbetas as _dfbetas
+from open_econs.core.diagnostics import leverage as _leverage
+from open_econs.core.diagnostics import ljung_box as _ljung_box
+from open_econs.core.diagnostics import white_heteroskedasticity as _white
 
 if TYPE_CHECKING:
     from open_econs.models.causal.placebo import PlaceboSpaceResult, PlaceboTimeResult
@@ -145,7 +156,7 @@ f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
             f"======================================================================\n"
         )
         tbl = self.tidy().to_string(index=False)
-        diag = self.diagnostics()
+        diag = self._diagnostics_dict()
         diag_lines = []
         try:
             jb_s, jb_p = diag.get("jarque_bera", (float("nan"), float("nan")))
@@ -186,7 +197,12 @@ f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
             return "N/A"
         return f"{v:{spec}}"
 
-    def diagnostics(self) -> dict[str, tuple[float, float]]:
+    def _diagnostics_dict(self) -> dict[str, tuple[float, float]]:
+        """Internal dict form consumed by ``summary()``.
+
+        Kept as a private helper so ``summary()`` keeps working while the
+        public ``diagnostics()`` returns a DataFrame (roadmap v1.3).
+        """
         res = self.residuals.values.ravel()
         fitted = self.fitted_values.values.ravel()
         results: dict[str, tuple[float, float]] = {}
@@ -202,6 +218,153 @@ f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
         reset_stat, reset_p = _ramsey_reset(fitted, res, power=3)
         results["ramsey_reset"] = (float(reset_stat), float(reset_p))
         return results
+
+    def diagnostics(self) -> dict[str, tuple[float, float]]:
+        """Post-estimation diagnostics summary (legacy dict form).
+
+        Returns a dict mapping test name to ``(stat, pvalue)``. Covers
+        Jarque-Bera, Breusch-Pagan, Durbin-Watson, and Ramsey RESET. For the
+        full DataFrame summary (incl. White, Breusch-Godfrey, Ljung-Box,
+        condition number) use :meth:`diagnostics_table`.
+        """
+        return self._diagnostics_dict()
+
+    def diagnostics_table(self) -> pd.DataFrame:
+        """Summary table of post-estimation diagnostics.
+
+        Returns a ``pd.DataFrame`` with one row per diagnostic and columns
+        ``stat`` / ``pvalue`` / ``df`` where applicable. Covers Jarque-Bera,
+        Breusch-Pagan, White, Breusch-Godfrey, Ramsey RESET, Durbin-Watson,
+        Ljung-Box, and the condition number.
+        """
+        res = self.residuals.values.ravel()
+        fitted = self.fitted_values.values.ravel()
+        from scipy.stats import jarque_bera as _jb
+
+        rows: list[dict[str, Any]] = []
+        jb_stat, jb_p = _jb(res)
+        rows.append({"test": "jarque_bera", "stat": float(jb_stat), "pvalue": float(jb_p), "df": float("nan")})
+        if self._X is not None and len(self._X) == len(res):
+            X_vals = self._X.values.astype(float)
+            bp_stat, bp_p, _, _ = _het_breuschpagan(res, X_vals)
+            rows.append({"test": "breusch_pagan", "stat": float(bp_stat), "pvalue": float(bp_p), "df": float("nan")})
+            white = _white(res, X_vals, interaction=True)
+            rows.append({"test": "white", "stat": white["white_stat"], "pvalue": white["white_pvalue"], "df": white["df"]})
+            bg = _breusch_godfrey(res, X_vals, lags=1)
+            rows.append({"test": "bgodfrey", "stat": bg["lm_stat"], "pvalue": bg["lm_pvalue"], "df": bg["df"]})
+        else:
+            rows.append({"test": "breusch_pagan", "stat": float("nan"), "pvalue": float("nan"), "df": float("nan")})
+            rows.append({"test": "white", "stat": float("nan"), "pvalue": float("nan"), "df": float("nan")})
+            rows.append({"test": "bgodfrey", "stat": float("nan"), "pvalue": float("nan"), "df": float("nan")})
+        reset_stat, reset_p = _ramsey_reset(fitted, res, power=3)
+        rows.append({"test": "ramsey_reset", "stat": float(reset_stat), "pvalue": float(reset_p), "df": float("nan")})
+        dw = _durbin_watson(res)
+        rows.append({"test": "durbin_watson", "stat": float(dw), "pvalue": float("nan"), "df": float("nan")})
+        lb = _ljung_box(res, lags=1, box_pierce=False)
+        rows.append({"test": "ljung_box", "stat": lb["lb_stat"], "pvalue": lb["lb_pvalue"], "df": float("nan")})
+        rows.append({"test": "condition_number", "stat": float(self.condition_number), "pvalue": float("nan"), "df": float("nan")})
+        return pd.DataFrame(rows, columns=["test", "stat", "pvalue", "df"])
+
+    def bg_test(self, lags: int = 1) -> dict[str, float]:
+        """Breusch-Godfrey LM test for autocorrelation in residuals.
+
+        Matches Stata ``estat bgodfrey`` (auxiliary regression includes the
+        full design matrix with constant + ``lags`` lagged residuals; LM ~
+        chi2(lags)). Returns ``lm_stat``, ``lm_pvalue``, ``f_stat``,
+        ``f_pvalue``, ``df``.
+
+        FOOTGUN: ``self._X`` must contain the constant column — Stata includes
+        it in the auxiliary regressors. Raises ``ValueError`` if ``_X`` is
+        unavailable.
+        """
+        if self._X is None:
+            raise ValueError("bg_test requires the design matrix (self._X); unavailable for this result.")
+        return _breusch_godfrey(self.residuals.values, self._X.values, lags=lags)
+
+    def white_test(self, interaction: bool = True) -> dict[str, float]:
+        """White's general heteroskedasticity test.
+
+        Matches Stata ``estat imtest, white``. Returns ``white_stat``,
+        ``white_pvalue``, ``df``. Raises ``ValueError`` if ``_X`` is
+        unavailable.
+        """
+        if self._X is None:
+            raise ValueError("white_test requires the design matrix (self._X); unavailable for this result.")
+        return _white(self.residuals.values, self._X.values, interaction=interaction)
+
+    def ljung_box(self, lags: int = 1, box_pierce: bool = False) -> dict[str, float]:
+        """Ljung-Box Q test on residuals. Returns ``lb_stat``, ``lb_pvalue``."""
+        return _ljung_box(self.residuals.values, lags=lags, box_pierce=box_pierce)
+
+    def cooks_distance(self) -> pd.Series:
+        """Cook's distance per observation. Matches Stata ``predict, cooksd``."""
+        if self._X is None:
+            raise ValueError("cooks_distance requires the design matrix (self._X).")
+        vals = _cooks_distance(self.residuals.values, self._X.values)
+        return pd.Series(vals, index=self.residuals.index, name="cooks_distance")
+
+    def leverage(self) -> pd.Series:
+        """Leverage = diagonal of the hat matrix. Matches Stata ``predict, leverage``."""
+        if self._X is None:
+            raise ValueError("leverage requires the design matrix (self._X).")
+        vals = _leverage(self._X.values)
+        return pd.Series(vals, index=self.residuals.index, name="leverage")
+
+    def dfbetas(self) -> pd.DataFrame:
+        """Standardized DFBETAS (b_j - b_{j(-i)}) / SE_j(-i), one row per obs.
+
+        Columns = parameter names. Matches R ``dfbetas`` / Stata
+        ``predict, dfbeta`` standardization. For Stata's RAW ``dfbeta``
+        (which drops the constant by default) use ``dfbeta()``.
+        """
+        if self._X is None:
+            raise ValueError("dfbetas requires the design matrix (self._X).")
+        vals = _dfbetas(self._X.values, self.coefficients.values, self.residuals.values)
+        return pd.DataFrame(vals, index=self.residuals.index, columns=self.coefficients.index)
+
+    def dfbeta(self) -> pd.DataFrame:
+        """Raw DFBETA = b_j - b_{j(-i)}, one row per obs, columns = param names.
+
+        Matches Stata's ``dfbeta`` command (raw difference). NOTE Stata's
+        ``dfbeta`` drops the constant column by default; this method returns
+        all parameters including the constant so callers can slice as needed.
+        """
+        if self._X is None:
+            raise ValueError("dfbeta requires the design matrix (self._X).")
+        vals = _dfbeta_raw(self._X.values, self.coefficients.values, self.residuals.values)
+        return pd.DataFrame(vals, index=self.residuals.index, columns=self.coefficients.index)
+
+    def influence(self) -> dict[str, Any]:
+        """One-shot influence summary.
+
+        Returns ``cooks_distance`` (Series), ``leverage`` (Series),
+        ``dfbetas`` (DataFrame), ``resid_studentized`` (externally
+        studentized residuals, Series), and ``dffits`` (Series).
+        """
+        if self._X is None:
+            raise ValueError("influence requires the design matrix (self._X).")
+        cooks = self.cooks_distance()
+        lev = self.leverage()
+        dbeta = self.dfbetas()
+        Xv = self._X.values.astype(float)
+        res = self.residuals.values.ravel()
+        n, k = Xv.shape
+        hat = np.diag(Xv @ np.linalg.inv(Xv.T @ Xv) @ Xv.T)
+        s2 = np.sum(res ** 2) / (n - k)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            rstud = (res / np.sqrt(1.0 - hat)) / np.sqrt(s2)
+            stud_t = rstud / np.sqrt(max(n - k - 1, 1) / (n - k))
+        resid_stud = pd.Series(rstud, index=self.residuals.index, name="resid_studentized")
+        with np.errstate(divide="ignore", invalid="ignore"):
+            dffits = stud_t * np.sqrt(hat / (1.0 - hat))
+        dffits_s = pd.Series(dffits, index=self.residuals.index, name="dffits")
+        return {
+            "cooks_distance": cooks,
+            "leverage": lev,
+            "dfbetas": dbeta,
+            "resid_studentized": resid_stud,
+            "dffits": dffits_s,
+        }
 
     def vcov(self) -> pd.DataFrame:
         # An explicitly stored covariance (multi-way cluster, Newey-West HAC,

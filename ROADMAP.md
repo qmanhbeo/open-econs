@@ -166,13 +166,17 @@ New `open_econs/models/limited/` module:
 - **`heckman()` is NOT in v1.2** (only poisson/nbreg/ologit/oprobit/tobit shipped); deferred to a future release.
 - Ships at **GA** in the maturity table — shipped in v1.2.0.
 
-##### v1.3 — Diagnostics: build missing + test *(committed)*
+##### v1.3 — Diagnostics: build missing + test *(shipped 2026-07-19, GA in v1.3.0)*
 Promote the existing JB / Breusch-Pagan / Durbin-Watson / Ramsey RESET / VIF into
 a consistent first-class result API, and implement the missing `estat` battery:
-- `bg_test()` (Breusch-Godfrey), `white_test()`, `ljung_box()`
-- `cooks_distance()`, `leverage()`, `dfbetas()`, `influence()`
-- `result.diagnostics()` summary `DataFrame`
+- `bg_test()` (Breusch-Godfrey) — **shipped** (from scratch; statsmodels' `acorr_breusch_godfrey` is API-broken in this env)
+- `white_test()` — **shipped** (`estat imtest, white`; df = p + p(p+1)/2)
+- `ljung_box()` — **shipped** (wraps intact `statsmodels.acorr_ljungbox`)
+- `cooks_distance()`, `leverage()`, `dfbetas()` (standardized), `dfbeta()` (raw), `influence()` — **shipped**
+- `result.diagnostics_table()` summary `DataFrame` — **shipped**; `result.diagnostics()` retained as the legacy dict form
 - Parity vs Stata `estat hettest` (BP/White), `estat bgodfrey`, `estat ovtest` (RESET), `estat vif`, `predict, cooksd` / `dfbeta`, `sktest` / `swilk`, `estat archlm`
+- Non-Stata/non-R consistency tests: **shipped** (`tests/non_stata_nor_r/test_diagnostics.py`, 1 strict `xfail` documenting a DFBETAS convention gap vs statsmodels). Stata/R parity tests remain owned by separate agents.
+- **Open item (documented):** DFBETAS leave-one-out SE convention diverges from `statsmodels.OLSInfluence.dfbetas` at ~8.6e-4 relative (not rule-2 1e-6). Kept as `xfail(strict=True)`; see `methodology/linear/diagnostics.md` and FUTURE_WORK.md.
 
 #### Secondary — Stata-Parity Breadth
 
