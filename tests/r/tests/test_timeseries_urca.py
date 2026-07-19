@@ -186,3 +186,43 @@ class TestZivotAndrewsUr:
     def test_ct_statistic(self):
         oe_r = oe.zivot_andrews(_y(), trend="ct", lags=0)
         npt.assert_allclose(oe_r.stat, R_ZA_CT["stat"], rtol=RTOL_TIGHT)
+
+
+class TestADFCriticalValueVintageGap:
+    """FUTURE_WORK TS-1 (line ~252): OE's printed ADF critical values do NOT
+    match R ``urca``'s in small samples.
+
+    OE surfaces arch's MacKinnon (2010) table (``cv_vintage`` label
+    "MacKinnon (2010)"); R ``ur.df`` prints its banded Fuller (1976) quantiles.
+    Both are *labelled* as the source of truth -- the statistic (asserted equal
+    above) is the genuine cross-tool anchor -- but the tabulated small-N
+    quantiles diverge well above the 1e-6 parity ceiling.  These xfail tests
+    pin the REAL divergence at the 5% quantile so a future port of the
+    Fuller/ERS vintage tables (the TS-1 "implementation path") is caught as an
+    xpass.  Standing rule 2: never loosen tolerance -- the gap is captured, not
+    hidden.
+    """
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="TS-1 (FUTURE_WORK line ~252): OE ADF CV = arch MacKinnon (2010);"
+        " R urca CV = banded Fuller (1976). 5% quantile differs by ~3.8e-3 "
+        ">> 1e-6 until the Fuller-vintage table is ported.",
+    )
+    def test_c_cv5_matches_urca(self):
+        oe_r = oe.adf(_y(), lags=0, trend="c")
+        npt.assert_allclose(
+            oe_r.critical_values["5%"], R_ADF_C["cv5"], atol=1e-6
+        )
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="TS-1 (FUTURE_WORK line ~252): OE ADF CV = arch MacKinnon (2010);"
+        " R urca CV = banded Fuller (1976). ct 5% quantile differs by ~2.8e-3 "
+        ">> 1e-6 until the Fuller-vintage table is ported.",
+    )
+    def test_ct_cv5_matches_urca(self):
+        oe_r = oe.adf(_y(), lags=0, trend="ct")
+        npt.assert_allclose(
+            oe_r.critical_values["5%"], R_ADF_CT["cv5"], atol=1e-6
+        )

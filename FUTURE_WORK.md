@@ -269,6 +269,13 @@ relaxed tolerances (standing rule 2).
   cross-tool point of genuine agreement and is asserted against Stata in
   `tests/stata/tests/test_timeseries_adf_pp.py`; the statistic is asserted
   against R (`urca`) in `tests/r/tests/test_timeseries_urca.py`.
+- **XFAIL anchors (rule 22):** the CV divergence itself is now pinned with
+  `xfail(strict=True)` tests asserting OE's 5% ADF critical value against the
+  Stata Fuller CV (`test_timeseries_adf_pp.py::TestADFStata::`
+  `test_cv5_matches_stata_fuller`) and the R `urca` CV
+  (`test_timeseries_urca.py::TestADFCriticalValueVintageGap`). They flip to
+  xpass when the Fuller/ERS vintage tables are ported. See
+  `methodology/timeseries/unitroot_cv_and_dfgls.md`.
 
 ### TS-2: DFGLS Lag-Selection Port (Ng-Perron vs arch AIC)
 
@@ -289,6 +296,7 @@ relaxed tolerances (standing rule 2).
   asserts an exact OE-vs-arch **backend identity** (same args → identical
   statistic) plus a same-backend CV-vintage regression guard. The Stata gap is
   tracked here until the port lands.
+- **XFAIL-ANCHOR-TS2-PLACEHOLDER**
 
 ---
 

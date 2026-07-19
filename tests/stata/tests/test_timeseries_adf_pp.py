@@ -82,6 +82,23 @@ class TestADFStata:
         oe_r = oe.adf(_y(), lags=0, trend="c")
         assert "MacKinnon" in oe_r.cv_vintage
 
+    @pytest.mark.xfail(
+        strict=True,
+        reason="TS-1 (FUTURE_WORK line ~252): OE ADF CV = arch MacKinnon (2010);"
+        " Stata dfuller CV = interpolated Fuller (1976). 5% quantile differs by"
+        " ~7.2e-3 >> 1e-6 until the Fuller-vintage table is ported. The "
+        "statistic and MacKinnon p-value (asserted above) remain the genuine "
+        "cross-tool anchors.",
+    )
+    def test_cv5_matches_stata_fuller(self):
+        # TS-1 gap: the tabulated 5% CV diverges from Stata's Fuller table even
+        # though the statistic/p-value agree to <=8e-9 (standing rule 2: the
+        # divergence is captured, not papered over with a loose tolerance).
+        oe_r = oe.adf(_y(), lags=0, trend="c")
+        npt.assert_allclose(
+            oe_r.critical_values["5%"], S_ADF_C["cv_5"], atol=1e-6
+        )
+
 
 class TestPPStata:
     """PP vs Stata ``pperron`` -- statistic + MacKinnon p-value.
