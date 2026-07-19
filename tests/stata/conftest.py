@@ -50,3 +50,8 @@ def df_balance_weighted() -> pd.DataFrame:
 @pytest.fixture(scope="session")
 def df_gmm() -> pd.DataFrame:
     return _load_csv("df_gmm")
+
+
+@pytest.fixture(scope="session")
+def df_rreg() -> pd.DataFrame:
+    return _load_csv("rreg_input")

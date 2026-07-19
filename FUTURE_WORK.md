@@ -438,8 +438,10 @@ relaxed tolerances (standing rule 2).
 *Last updated: 2026-07-18. Reorganized: closed/resolved root causes moved to
 `methodology/<area>/<model>.md` (rule 16) and delivered features dropped (see
 git + CHANGELOG); this file now tracks OPEN + accepted-deferred work only.
-Latest release: v1.1.0 — the time-series line (unit-root/ARIMA/GARCH,
-VAR/VECM/Johansen, ARDL/UECM+PSS bounds; 1e-6 parity, Stata+R). ARDL write-up in
+Latest release: v1.4.0 — quantile regression (`quantile_reg`: qreg/sqreg/bsqreg
++ se_method stata/ker toggle) and outlier-robust regression (`robust_reg`:
+mm/huber + parity stata/rlm toggle). Stata `rreg` coef/SE residual gap
+(`ROBUST-REG-STATA`, strict xfail) tracked below. ARDL write-up in
 `methodology/timeseries/ardl.md`; follow-up `set type double` audit queued above.*
 
 ---
@@ -593,3 +595,35 @@ onrobust) SE matches Stata to
 - **v1.3 diagnostics: all other parity targets met (BG from-scratch n*R2,
   White, Ljung-Box, Cook's D, leverage) — no other open items** beyond the
   DFBETAS/statsmodels gap above.
+
+---
+
+## ROBUST-REG-STATA - Stata rreg parity gap (OPEN, strict xfail)
+
+REWORKED 2026-07-19. oe.robust_reg now targets Stata `rreg` as the PRIMARY
+parity default (parity="stata"); R MASS::rlm is a toggle (parity="rlm", exact
+1e-6). The prior agent's default (R rlm method="MM") was REJECTED by the PM:
+Stata `rreg` is a bisquare M-estimator (NOT MM), so the MM default diverged
+from Stata at ~1e-3.
+
+Current status of parity="stata" (pure-Python, no R needed):
+- Coefficients match Stata e(b) to ~1.2e-4 (observed max abs diff 1.17e-4).
+- SEs (robust sandwich V = s^2 (X' W X)^{-1}) match Stata e(V) to ~8e-4
+  (observed max abs diff 8.44e-4).
+- Algorithm: OLS start -> Huber M-estimate init (k=1.345) -> bisquare M-estimator
+  (c=4.685) with a re-estimated MAD-type scale each IRLS step.
+
+Why not 1e-6: Stata `rreg` uses an internal scale iteration (the exact robust
+scale it converges to) that is NOT fully reverse-engineered. The pure-Python
+estimator's MAD-type re-estimation lands coefs ~1.2e-4 from Stata. This residual
+gap is documented honestly (NOT hidden under a loose tolerance): the strict 1e-6
+coef AND se assertions are xfail(strict=True) in
+tests/stata/tests/test_stata_rreg.py, while the documented looser bounds
+(COEF_ATOL=2e-4, SE_ATOL=1e-3) pass. Root cause in
+methodology/linear/robust_reg.md.
+
+To CLOSE (optional future): implement Stata's exact rreg scale iteration
+(Huber init k=1.345 + bisquare c=4.685 + Stata's specific robust S-scale, which
+converges to ~0.967 on the fixture rather than the plain MAD 0.995 or e(rmse)
+1.012). Until then the 1e-6 strict xfails remain OPEN by design (rule 22).
+

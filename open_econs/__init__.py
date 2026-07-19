@@ -6,6 +6,7 @@ from typing import Any
 from ._version import __version__
 from ._internal.errors import VcovTypeNotSupportedError
 from .models.linear.ols import ols
+from .models.linear.quantile import quantile_reg, QuantileResult
 from .models.decomposition.oaxaca import oaxaca
 from .models.discrete.logit import logit
 from .models.discrete.probit import probit
@@ -15,6 +16,7 @@ from .models.limited.ordered import ologit, oprobit
 from .models.limited.tobit import tobit
 from .models.limited.nbreg import nbreg
 from .core.results import CountResult, OrderedResult, TobitResult, NegBinResult
+from .models.linear.robust_reg import robust_reg, RobustRegResult
 from .models.linear.fe import fe
 from .models.linear.iv import iv
 from .models.linear.abond import abond
@@ -76,7 +78,7 @@ def did_sun_abraham(*args: Any, **kwargs: Any) -> object:
 
 
 __all__ = [
-    "ols", "reg", "logit", "probit", "mlogit", "poisson", "CountResult", "ologit", "oprobit", "OrderedResult", "tobit", "TobitResult", "nbreg", "NegBinResult", "fe", "iv", "oaxaca",
+    "ols", "reg", "quantile_reg", "QuantileResult", "logit", "probit", "mlogit", "poisson", "CountResult", "ologit", "oprobit", "OrderedResult", "tobit", "TobitResult", "nbreg", "NegBinResult", "fe", "iv", "oaxaca",
     "did", "event_study", "balance", "abond", "did_cs", "density_test", "cem",
     "psm", "rdd", "rosenbaum_bounds", "gmm", "GMMResult",
     "nls", "NLSResult",
@@ -84,7 +86,7 @@ __all__ = [
     "did_sa", "SaDiDResult",
     "staggered_did", "did_sun_abraham",
     "placebo_space", "placebo_time",
-    "VcovTypeNotSupportedError",
+    "robust_reg", "RobustRegResult", "VcovTypeNotSupportedError",
     "Context", "PanelContext", "TimeSeriesContext", "__version__",
     "adf", "pp", "kpss", "dfgls", "zivot_andrews",
     "garch", "arima", "arma",
