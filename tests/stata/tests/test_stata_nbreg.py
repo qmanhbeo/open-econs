@@ -74,18 +74,23 @@ class TestStataNBRegStdErrors:
     deliverable (TestStataNBRegCoefficients / TestStataNBRegOverdispersion);
     the SE divergence is asserted as ``skip`` (never loosened)."""
 
-    @pytest.mark.skip(
-        reason="OPEN GAP: Stata nbreg non-clustered SEs use a robustified OIM "
-               "information matrix that diverges from R glm.nb / oe OIM SEs "
-               "(Stata se_x2=0.059624 vs oe/R 0.057102, ~4%). Coef/alpha/ll "
-               "parity is validated; see FUTURE_WORK.md + methodology/limited/"
-               "nbreg.md. R-parity SEs are covered in test_r_nbreg.py."
+    @pytest.mark.xfail(
+        reason="OPEN GAP (FUTURE_WORK.md L515b): Stata nbreg non-clustered SEs use "
+               "a robustified OIM information matrix that diverges from R glm.nb / "
+               "oe OIM SEs (Stata se_x2=0.059624 vs oe/R 0.057102, ~4%). Coef/alpha/"
+               "ll parity is validated. strict=True: xfails on the known ~4% gap, "
+               "errors if it ever matches to 1e-6. See methodology/limited/nbreg.md.",
+        strict=True,
     )
     def test_se_x1(self):
         r = nbreg("y ~ x1 + x2", data=DF, dispersion="const", cov_type="nonrobust")
         npt.assert_allclose(r.std_errors["x1"], STATA["se_x1"], rtol=0, atol=1e-6)
 
-    @pytest.mark.skip(reason="OPEN GAP: same as test_se_x1 (Stata NB SE convention).")
+    @pytest.mark.xfail(
+        reason="OPEN GAP (FUTURE_WORK.md L515b): same as test_se_x1 (Stata NB "
+               "non-clustered SE convention, ~4% on x2). strict=True.",
+        strict=True,
+    )
     def test_se_x2(self):
         r = nbreg("y ~ x1 + x2", data=DF, dispersion="const", cov_type="nonrobust")
         npt.assert_allclose(r.std_errors["x2"], STATA["se_x2"], rtol=0, atol=1e-6)
@@ -99,12 +104,15 @@ class TestStataNBRegConstantDispersionGap:
     textbook/Stata-``mean`` NB2 (== R glm.nb == fixest fenegbin) is the validated
     deliverable.  See FUTURE_WORK.md and methodology/limited/nbreg.md."""
 
-    @pytest.mark.skip(
-        reason="OPEN GAP: Stata nbreg, dispersion(constant) is a Stata-specific "
-               "NB2 MLE (x1=0.414535, delta=1.263565, ll=-842.203) not reproduced "
-               "by the textbook NB2 gamma-mixture (oe x1=0.492896, alpha=1.0563, "
-               "ll=-836.538). The dispersion(mean)/NB2 gamma-mixture path is "
-               "validated in TestStataNBRegCoefficients. See FUTURE_WORK.md."
+    @pytest.mark.xfail(
+        reason="OPEN GAP (FUTURE_WORK.md L515a): Stata nbreg, dispersion(constant) "
+               "is a Stata-specific NB2 MLE (x1=0.414535, delta=1.263565, "
+               "ll=-842.203) not reproduced by the textbook NB2 gamma-mixture (oe "
+               "x1=0.492896, alpha=1.0563, ll=-836.538). The dispersion(mean)/NB2 "
+               "gamma-mixture path is validated in TestStataNBRegCoefficients. "
+               "strict=True: xfails on the ~7.8e-2 coef gap, errors if it ever "
+               "matches to 1e-6. See methodology/limited/nbreg.md.",
+        strict=True,
     )
     def test_b_x1(self):
         r = nbreg("y ~ x1 + x2", data=DF, dispersion="const")
