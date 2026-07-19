@@ -460,8 +460,9 @@ VAR/VECM/Johansen, ARDL/UECM+PSS bounds; 1e-6 parity, Stata+R). ARDL write-up in
   and log-pseudolikelihood match to 1e-6 across Stata/R/pyfixest.
 - **Where OE lives:** `open_econs/models/limited/poisson.py`; root cause written
   up in `methodology/limited/poisson.md` §2.
-- **Status:** OPEN. The non-clustered-SE gap is asserted as `skip` (not
-  loosened) in `tests/stata/tests/test_stata_poisson.py::TestStataPoissonIidSE`.
+- **Status:** OPEN. The non-clustered-SE gap is asserted as
+  `xfail(strict=True)` (rule 22, not loosened) in
+  `tests/stata/tests/test_stata_poisson.py::TestStataPoissonIidSE`.
   Resolve only by either (a) wrapping ppmlhdfe's exact robust meat, or (b)
   exposing a documented `robust` convention toggle and accepting the fixest
   number. Do NOT silently tighten the tolerance to paper over it (rule 2).
@@ -495,7 +496,8 @@ onrobust) SE matches Stata to
   footgun).
 - **Where OE lives:** open_econs/models/limited/ordered.py; OrderedResult
   in open_econs/core/results.py; root cause in methodology/limited/ordered.md.
-- **Status:** OPEN (both). Both are documented skips (never loosened, rule 2).
+- **Status:** OPEN (both). Both are documented as strict `xfail(strict=True)`
+  tests (rule 22, never loosened).
   Resolve (b) only by wrapping Stata's exact robust bread; (a) is inherent to
   the reference engines and is accepted as Stata-anchored.
 - **Next agent:** treat as open; Stata coef/cutpoint/OIM-SE parity is the
@@ -518,10 +520,11 @@ onrobust) SE matches Stata to
 - **Where OE lives:** open_econs/models/limited/tobit.py; OIM via
   inv(approx_hess(nll)) on (beta, sigma); robust via _sandwich_cov.
   Root cause in methodology/limited/tobit.md A3.
-- **Status:** OPEN. Robust-SE assertions are intentionally NOT written to 1e-6
-  (rule 2/15). Resolve only by wrapping Stata's exact robust bread (analytic
-  score contributions in the censored regions). Do NOT loosen the OIM tolerance
-  to paper over the robust gap.
+- **Status:** OPEN. Robust-SE assertions are documented as strict
+  `xfail(strict=True)` tests (rule 22) rather than written to 1e-6. Resolve only
+  by wrapping Stata's exact robust bread (analytic score contributions in the
+  censored regions). Do NOT loosen the OIM tolerance to paper over the robust
+  gap.
 - **Next agent:** treat as open; OIM parity is the shipped deliverable.
 
 ---
@@ -555,9 +558,9 @@ onrobust) SE matches Stata to
   `tests/r/tests/test_r_nbreg.py`, `tests/stata/tests/test_stata_nbreg.py`,
   `tests/non_stata_nor_r/test_nbreg_backend.py`. Root cause in
   `methodology/limited/nbreg.md` §2.
-- **Status:** OPEN (both). (a) is asserted as `skip` in
+- **Status:** OPEN (both). (a) is asserted as `xfail(strict=True)` in
   `test_stata_nbreg.py::TestStataNBRegConstantDispersionGap`; (b) is asserted as
-  `skip` in `TestStataNBRegStdErrors`. R-parity SEs are covered in
+  `xfail(strict=True)` in `TestStataNBRegStdErrors`. R-parity SEs are covered in
   `test_r_nbreg.py`. Resolve (a) only by implementing Stata's `constant`-dispersion
   NB2 likelihood separately (consider exposing a `stata_constant` dispersion
   toggle); resolve (b) only by wrapping Stata's robustified OIM bread. Do NOT
