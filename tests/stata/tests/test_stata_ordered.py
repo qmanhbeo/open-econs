@@ -16,7 +16,7 @@ Stata fixture keys (ologit / oprobit share the pattern via the ``ologit_`` /
     cut1, cut2, cut3        cumulative threshold (cutpoint) parameters
     se_x1, se_x2, se_x3     OIM standard errors
     ll                      log-likelihood
-    ser_x1..ser_x3          robust (HC1) SEs of ologit (OPEN GAP, see below)
+    ser_x1..ser_x3          robust (HC1) SEs of ologit (match to 1e-6)
 
 All non-robust assertions at ``atol=1e-6`` — nothing loosened (rule 2).
 """
@@ -80,25 +80,16 @@ class TestStataOrderedProbit:
 
 
 class TestStataOrderedRobustSE:
-    """OPEN PARITY GAP (rule 6/15/16 — do NOT loosen): OE's HC1 robust SE for
-    ordered models diverges from Stata ``ologit, vce(robust)`` by ~4e-4. Same
-    root cause as the poisson non-clustered robust gap: the numerical
-    score/hessian bread differs from Stata's exact OIM bread at machine
-    precision, and Stata's robust factor uses its own small-sample
-    convention. The OIM (nonrobust) SE — the validated deliverable — matches to
-    1e-6 (TestStataOrderedLogit.test_oim_se). Recorded in FUTURE_WORK.md and
-    ``methodology/limited/ordered.md``.
+    """Stata ``ologit, vce(robust)`` parity (CLOSED): OE's HC1 robust SE matches
+    Stata ``ologit, vce(robust)`` to ``1e-6``. Root cause (FUTURE_WORK.md /
+    ``methodology/limited/ordered.md`` open gap 4) was the numerical-score bread:
+    OE now uses Stata's exact OIM bread ``inv(-H)`` with the EXACT analytical
+    observation scores (over the full ``(β, cut1..)`` vector in Stata's
+    cumulative-cutpoint parameterization) and Stata's ``n/(n-1)`` small-sample
+    factor. The OIM (nonrobust) SE — the original validated deliverable — is
+    unchanged and still matches to ``1e-6`` (TestStataOrderedLogit.test_oim_se).
     """
 
-    @pytest.mark.xfail(
-        reason="OPEN GAP (FUTURE_WORK.md L459b): ologit HC1 robust SE diverges "
-               "from Stata vce(robust) by ~4e-4 (numerical-score bread vs Stata "
-               "exact OIM robust bread + small-sample factor). OIM SE parity is "
-               "validated in TestStataOrderedLogit.test_oim_se. Asserting OE HC1 "
-               "SE vs Stata ser captures ~4e-4 > 1e-6, so it xfails. strict=True: "
-               "errors if it ever matches to 1e-6.",
-        strict=True,
-    )
     @pytest.mark.parametrize("x", ["x1", "x2", "x3"])
     def test_robust_se_x(self, x):
         r = oe.ologit("y ~ x1 + x2 + x3", data=DF, cov_type="HC1")

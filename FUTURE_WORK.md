@@ -494,26 +494,30 @@ v1.4.2). ARDL write-up in
   recorded (rule 15). R log-likelihood and OIM SE match OE to 1e-6 and ARE
   asserted.
 - **What (b):** oe.ologit(..., cov_type="HC1") (and HC0/HC2/HC3) robust SEs
-  diverge from Stata ologit, vce(robust) by ~4e-4 � same root cause as the
+  diverge from Stata ologit, vce(robust) by ~4e-4 ? same root cause as the
   poisson non-clustered robust gap: numerical-score bread vs Stata's exact OIM
-  bread + Stata's small-sample factor. OIM (
-onrobust) SE matches Stata to
-  1e-6 (the validated deliverable). Robust SE assertions are skip-ped in
+  bread + Stata's small-sample factor. OIM (nonrobust) SE matches Stata to
+  1e-6 (the validated deliverable). Robust SE assertions were skip-ped in
   	ests/stata/tests/test_stata_ordered.py::TestStataOrderedRobustSE.
 - **Cutpoint sign:** task brief assumed polr/OrderedModel negates Stata's
-  cutpoints � **FALSE** (source-verified). All three store cumulative,
-  increasing thresholds with P(Y<=j)=F(c_j - x'�) and the SAME sign. OE stores
+  cutpoints ? **FALSE** (source-verified). All three store cumulative,
+  increasing thresholds with P(Y<=j)=F(c_j - x'?) and the SAME sign. OE stores
   Stata convention; no negation. See methodology/limited/ordered.md (rule 18
   footgun).
 - **Where OE lives:** open_econs/models/limited/ordered.py; OrderedResult
   in open_econs/core/results.py; root cause in methodology/limited/ordered.md.
-- **Status:** OPEN (both). Both are documented as strict `xfail(strict=True)`
-  tests (rule 22, never loosened).
-  Resolve (b) only by wrapping Stata's exact robust bread; (a) is inherent to
-  the reference engines and is accepted as Stata-anchored.
-- **Next agent:** treat as open; Stata coef/cutpoint/OIM-SE parity is the
-  shipped deliverable. Do NOT "tighten" the skipped tolerances to paper over
-  either gap.
+- **Status:** (b) RESOLVED 2026-07-20. The robust bread now uses Stata's exact
+  OIM bread `inv(-H)` with the EXACT analytical observation scores over the
+  full `(?, cut1..)` vector in Stata's cumulative-cutpoint parameterization
+  (Jacobian-transformed from statsmodels' incremental-exponential threshold
+  params), and Stata's `n/(n-1)` small-sample factor for HC1. `oe.ologit("y ~
+  x1+x2+x3", cov_type="HC1")` now matches Stata `ologit, vce(robust)` to
+  <=1e-6 (x1 5.8e-9, x2 2.8e-9, x3 1.3e-8). The `xfail(strict=True)` is
+  removed and `TestStataOrderedRobustSE` is a real passing test. OIM (nonrobust)
+  SE is unchanged and still matches to 1e-6. (a) remains OPEN (Stata-anchored
+  engine-difference, accepted).
+- **Next agent:** (b) is closed; do not regress it. Stata coef/cutpoint/OIM-SE
+  parity remains the shipped deliverable.
 
 ---
 

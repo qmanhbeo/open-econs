@@ -121,12 +121,13 @@ def _fit_ordered(
     cut_names = [f"cut{j + 1}" for j in range(len(thr))]
     all_names = coef_names + cut_names
 
-    # Covariance: OIM from -hessian, or HC sandwich from numerical scores.
+    # Covariance: OIM from -hessian, or HC sandwich from EXACT analytical
+    # observation scores (Stata's exact OIM-robust bread, see methodology).
     bread = np.linalg.inv(-model.hessian(params))
     if cov_type == "nonrobust":
         cov = bread
     else:
-        cov = _sandwich_cov(model, params, bread, cov_type)
+        cov = _sandwich_cov(model, params, bread, cov_type, cats)
 
     coef_arr = params[: len(coef_names)]
     se_arr = np.sqrt(np.diag(cov))
@@ -192,27 +193,84 @@ def _fit_ordered(
     )
 
 
-def _sandwich_cov(model: Any, params: np.ndarray, bread: np.ndarray, cov_type: str) -> np.ndarray:
-    """HC0/HC1/HC2/HC3 robust covariance from numerical observation scores."""
-    from statsmodels.tools.numdiff import approx_fprime
-    scores = approx_fprime(params, model.loglikeobs, centered=True, epsilon=1e-8)
-    scores = np.asarray(scores, dtype=float)
-    n, k = scores.shape
-    xtx_inv = np.linalg.inv(scores.T @ scores)
+def _sandwich_cov(
+    model: Any, params: np.ndarray, bread: np.ndarray, cov_type: str, cats: list
+) -> np.ndarray:
+    """HC0/HC1/HC2/HC3 robust covariance from EXACT analytical observation scores.
+
+    Stata ``ologit/oProbit, vce(robust)`` uses the OIM bread ``inv(-H)`` together
+    with the outer-product-of-gradients meat ``Σ g_i g_i'`` evaluated at the exact
+    (analytical) score vector over the full parameter vector ``(β, cut1..)`` in
+    Stata's cumulative-cutpoint parameterization, with the small-sample factor
+    ``n/(n-1)``. The numerical-score bread previously used here diverged from
+    Stata by ~4e-4 (FUTURE_WORK.md / methodology/limited/ordered.md, open gap 4).
+    """
+    n = int(model.nobs)
+    k_exog = model.exog.shape[1]
+    p_exog = k_exog
+    J = len(cats)                       # number of ordered categories
+    n_thr = J - 1                       # number of free cutpoints
+    k_nat = p_exog + n_thr              # total params (β + cumulative cutpoints)
+
+    # --- exact analytical observation scores in Stata's natural parameterization
+    #     params_nat = (β_1..β_p, cut1..cut_{J-1}) with cutpoints cumulative.
+    pdf = model.pdf
+    # natural cumulative cutpoints
+    nat = np.asarray(model.transform_threshold_params(params), dtype=float)
+    thr = nat[1:-1]                     # cut1..cut_{J-1}
+    xb = model.exog @ params[:p_exog]
+    codes = np.asarray(model.endog, dtype=int)   # 0..J-1
+    P = np.asarray(model.predict(params, which="prob"), dtype=float)  # n x J
+
+    a = thr[None, :] - xb[:, None]      # a[i, m] = cut_{m+1} - x_i'β
+    f = pdf(a)                          # latent PDF at the bounds
+    S_beta = np.zeros((n, p_exog))
+    S_thr = np.zeros((n, n_thr))
+    for i in range(n):
+        j = int(codes[i]) + 1           # actual category, 1-indexed
+        Pj = P[i, j - 1]
+        fa_low = f[i, j - 2] if j - 2 >= 0 else 0.0       # f(cut_{j-1} - xβ)
+        fa_up = f[i, j - 1] if j - 1 < n_thr else 0.0     # f(cut_j - xβ)
+        S_beta[i] = model.exog[i] * (fa_low - fa_up) / Pj
+        for m in range(1, J):
+            val = 0.0
+            if m == j:
+                val += f[i, m - 1]
+            if m == j - 1:
+                val -= f[i, m - 1]
+            S_thr[i, m - 1] = val / Pj
+    S_nat = np.hstack([S_beta, S_thr])  # n x k_nat
+
+    # Jacobian nat <- sm (statsmodels incremental-exponential threshold params):
+    #   sm = (β, tau_1, delta_2..delta_{J-1});  nat cut_m = tau_1 + Σ_{r=2..m} exp(delta_r)
+    Jmat = np.zeros((k_nat, k_nat))
+    Jmat[:p_exog, :p_exog] = np.eye(p_exog)
+    deltas = params[p_exog + 1:]        # delta_2..delta_{J-1}
+    for mm in range(1, J):              # nat cutpoint index m (1..J-1)
+        Jmat[p_exog + (mm - 1), p_exog] = 1.0
+        for r in range(2, J):
+            if mm >= r:
+                Jmat[p_exog + (mm - 1), p_exog + (r - 1)] = np.exp(deltas[r - 2])
+    # bread in the natural (Stata) parameterization
+    bread_nat = Jmat @ bread @ Jmat.T
+
+    # --- weights
     if cov_type == "HC0":
         w = np.ones(n)
     elif cov_type == "HC1":
-        w = np.full(n, n / (n - k))
+        # Stata vce(robust) small-sample normalization: n/(n-1)
+        w = np.full(n, n / (n - 1))
     elif cov_type in ("HC2", "HC3"):
-        h = np.einsum("ni,ij,jn->n", scores, xtx_inv, scores.T)
+        h = np.einsum("ni,ij,jn->n", S_nat, bread_nat, S_nat.T)
         if cov_type == "HC2":
             w = 1.0 / (1.0 - h)
         else:
             w = 1.0 / (1.0 - h) ** 2
     else:  # pragma: no cover - guarded by validate_cov_type
         raise ValueError(f"Unsupported cov_type for sandwich: {cov_type}")
-    meat = (scores * w[:, None]).T @ scores
-    return bread @ meat @ bread
+
+    meat = (S_nat * w[:, None]).T @ S_nat
+    return bread_nat @ meat @ bread_nat
 
 
 def _stats_norm_sf(x: np.ndarray) -> np.ndarray:

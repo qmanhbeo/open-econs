@@ -92,8 +92,15 @@ deliverable; the raw-statsmodels 3e-5 gap is never exposed to the user.
 - **Coefficients `β`** on the latent-index scale — match Stata to 1e-6.
 - **Cutpoints `cut1…cut_{J-1}`** in Stata convention (cumulative, increasing).
 - **OIM standard errors** (`cov_type="nonrobust"`) — match Stata/R to 1e-6.
-- **Robust SEs** (`HC0`/`HC1`/`HC2`/`HC3`) — implemented as a numerical-score
-  sandwich. The HC1 matches Stata `vce(robust)` only to ~4e-4 (OPEN GAP, §4).
+- **Robust SEs** (`HC0`/`HC1`/`HC2`/`HC3`) — implemented as a sandwich with
+  Stata's exact OIM bread `inv(-H)` and the **exact analytical observation
+  scores** over the full `(β, cut1…)` vector in Stata's cumulative-cutpoint
+  parameterization (Jacobian-transformed from statsmodels' incremental-exponential
+  threshold params). HC1 matches Stata `vce(robust)` to ≤1e-6 (CLOSED, was open
+  gap §4). Footgun (rule 18): OE's `HC1` uses Stata's `n/(n-1)` small-sample
+  normalization to match `vce(robust)` — this is Stata's convention, not the
+  generic `n/(n-k)` HC1 scaling. The OIM (nonrobust) SE — the original validated
+  deliverable — is unchanged and still matches to 1e-6.
 - **Log-likelihood** — matches Stata/R to 1e-6 (typically 1e-10+).
 - **`.predict(type="probs")`** — per-category probabilities (sum to 1).
 - **`.predict(type="class")`** — argmax category.
@@ -110,12 +117,18 @@ deliverable; the raw-statsmodels 3e-5 gap is never exposed to the user.
    assertions are `skip`-ped in `tests/r/tests/test_r_ordered.py` with the exact
    magnitude noted. R log-likelihood and OIM SE *do* match OE to 1e-6 and are
    asserted.
-2. **Robust (HC1) SE vs Stata `vce(robust)` ~4e-4.** Same root cause as the
-   poisson non-clustered robust gap: the numerical-score bread differs from
-   Stata's exact OIM bread at machine precision, and Stata applies its own
-   small-sample factor. The OIM (nonrobust) SE — the validated deliverable —
-   matches to 1e-6. Recorded in `FUTURE_WORK.md`; asserted as `skip` in
-   `tests/stata/tests/test_stata_ordered.py::TestStataOrderedRobustSE`.
+2. **Robust (HC1) SE vs Stata `vce(robust)` ~4e-4 — RESOLVED (2026-07-20).**
+   Root cause was the numerical-score bread: OE now uses Stata's exact OIM bread
+   `inv(-H)` with the **exact analytical observation scores** (full `(β,
+   cut1…)` vector in Stata's cumulative-cutpoint parameterization, via the
+   Jacobian `d(nat)/d(sm)`), and Stata's `n/(n-1)` small-sample factor for HC1.
+   `oe.ologit("y ~ x1+x2+x3", cov_type="HC1")` now matches Stata `ologit,
+   vce(robust)` to ≤1e-6 (x1 5.8e-9, x2 2.8e-9, x3 1.3e-8). The `xfail(strict=True)`
+   is removed and `tests/stata/tests/test_stata_ordered.py::TestStataOrderedRobustSE`
+   is a real passing test. The OIM (nonrobust) SE — the original validated
+   deliverable — is unchanged and still matches to 1e-6. Footgun (rule 18):
+   OE's `HC1` small-sample factor is `n/(n-1)` (Stata's `vce(robust)`
+   convention), not the generic `n/(n-k)` HC1 scaling.
 
 ---
 
