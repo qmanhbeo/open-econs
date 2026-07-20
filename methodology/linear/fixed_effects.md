@@ -30,7 +30,7 @@ references:
   - mundlak1978
 ---
 
-# Fixed Effects Panel Regression in Python
+# Fixed Effects Panel Regression in Python — Stata `xtreg, fe` / R `plm::plm` Parity
 
 > **Estimator summary**: open-econs implements one-way and two-way fixed-effects (within) estimators via group-mean subtraction for the one-way case and iterative alternating projections (Correia 2017) for the two-way case. The intercept is always absorbed by the fixed effects; standard errors are adjusted for the absorbed degrees of freedom set, matching Stata's `xtreg, fe` and `reghdfe` conventions.
 

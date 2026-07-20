@@ -30,7 +30,7 @@ references:
   - roodman2009
 ---
 
-# Arellano-Bond Dynamic Panel GMM (Difference GMM) in Python
+# Arellano-Bond Dynamic Panel GMM (Difference GMM) in Python — Stata `xtabond2` / R `plm::pgmm` Parity
 
 > **Estimator summary**: open-econs implements the Arellano-Bond (1991) difference GMM estimator and the Blundell-Bond (1998) system GMM estimator for dynamic panel models, supporting collapsed instruments, one-step/two-step estimation, Windmeijer (2005) corrected standard errors, Hansen J overidentification tests, and Arellano-Bond AR(1)/AR(2) serial-correlation tests. All four system-GMM flavors (one/two-step × robust/non-robust) match Stata `xtabond2` 3.7.2 AR tests to < 1e-7.
 
@@ -424,7 +424,7 @@ Rows with any NaN in the formula variables are dropped by formulaic's `na_action
 
 | Feature | open-econs | Stata `xtabond2` |
 |---------|------------|-------------------|
-| GMM type | Difference GMM only | Difference + system GMM |
+| GMM type | Difference + system GMM (system requires `collapse=True`) | Difference + system GMM |
 | Default `collapse` | `True` | `False` (full instrument set) |
 | Default `robust` | `False` | `True` (Windmeijer two-step) |
 | `step` parameter | `"one-step"` / `"two-step"` | `onestep` option (default two-step) |
@@ -436,7 +436,7 @@ Rows with any NaN in the formula variables are dropped by formulaic's `na_action
 | `h()` bandwidth | Not supported | `h()` option for HAC weighting |
 | `nested` option | Not supported | `nested` for iterated GMM starting values |
 | `orthogonal` transform | Not implemented | `orthog` option (forward orthogonal deviations) |
-| System GMM | Not implemented | `gmmstyle` / level equations |
+| System GMM | Implemented (collapsed; `system_gmm=True`) | `gmmstyle` / level equations |
 | `artests` option | Not available (AR always reported) | `artests` / `noartests` |
 | `sagan` option | Not available (Hansen always reported) | `sagan` / `nosa` |
 | Constant instruments | Included as regressors | `iv()` with `_cons` |

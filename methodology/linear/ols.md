@@ -30,7 +30,7 @@ references:
   - liangzeger1986
 ---
 
-# OLS Regression with Robust and Clustered Standard Errors in Python
+# OLS Regression with Robust and Clustered Standard Errors in Python — Stata `reg` / R `lm` Parity
 
 > **Estimator summary**: open-econs implements Ordinary Least Squares via statsmodels with custom support for multi-way clustered errors (Cameron, Gelbach & Miller 2011) and Newey-West HAC standard errors, defaulting to HC2 robust covariance.
 

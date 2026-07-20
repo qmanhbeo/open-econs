@@ -28,7 +28,7 @@ references:
   - Powell (1991), "Estimation of monotonic regression models under quantile restrictions", in Nonparametric and Semiparametric Methods in Econometrics.
 ---
 
-# Quantile Regression — `oe.quantile_reg()`
+# Quantile Regression — `oe.quantile_reg()` — Stata `qreg` / R `quantreg::rq` Parity
 
 ## API
 

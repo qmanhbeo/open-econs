@@ -28,7 +28,7 @@ references:
   - rousseeuwleroy1987
 ---
 
-# Robust Regression (M- and MM-Estimators) in Python
+# Robust Regression (M- and MM-Estimators) in Python — Stata `rreg` / R `MASS::rlm` Parity
 
 > **Estimator summary**: open-econs `robust_reg()` fits a linear model resistant
 > to outliers and heteroskedasticity using redescending M-estimators of

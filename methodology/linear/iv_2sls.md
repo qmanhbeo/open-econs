@@ -28,7 +28,7 @@ references:
   - stockyogo2005
 ---
 
-# IV/2SLS Instrumental Variables Regression in Python
+# IV/2SLS Instrumental Variables Regression in Python — Stata `ivregress 2sls` / R `AER::ivreg` Parity
 
 > **Estimator summary**: open-econs implements two-stage least squares (IV-2SLS) via linearmodels, supporting a three-part formula syntax (`y ~ exog | endog ~ instruments`), robust and unadjusted variance estimation, first-stage F diagnostics, Cragg-Donald weak-instrument statistics, and Hansen J overidentification tests.
 

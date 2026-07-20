@@ -1,5 +1,46 @@
 # Synthetic Control (`synth` / `placebo_space` / `placebo_time`)
 
+## Usage
+
+`oe.synth()` fits the Abadie-Diamond-Hainmueller synthetic control point
+estimator: it returns the donor weights `W`, predictor weights `V`, the
+pre-/post-treatment MSPE, and the treated/synthetic/gap path. The core estimator
+is checked against R `Synth` (primary reference) and Stata `synth` (secondary).
+
+```python
+import open_econs as oe
+
+# `data` must be a balanced long-format panel with an outcome, an entity id,
+# and a time id column. `pre_period` is the last pre-treatment period
+# (inclusive); `post_period` is the first post-treatment period (inclusive).
+result = oe.synth(
+    data=df,
+    outcome="gdp",
+    treated_unit="A",
+    donor_pool=["B", "C", "D", "E"],
+    pre_period=2000,
+    post_period=2001,
+)
+
+# Donor weights W (sum to 1) and predictor weights V:
+print(result.weights)
+print(result.predictor_weights)
+
+# Treated / synthetic / gap path over the analysis window:
+print(result.gap_path)
+
+# Fit quality diagnostics:
+print(result.pre_mspe, result.post_mspe)
+```
+
+Optional arguments (see `open_econs/models/causal/synth.py`):
+- `entity` / `time` (default `"entity"` / `"time"`): column names for the unit
+  and time identifiers.
+- `predictors`: explicit covariate columns aggregated by their pre-treatment mean
+  (when omitted, the outcome's own pre-treatment path is used as predictors).
+- `predictor_weights`: fixed `V` (mirrors R `Synth`'s `custom.v`), which skips the
+  outer `V` optimization.
+
 ## Performance / parallelism (2026-07-17)
 
 ### Where the time goes

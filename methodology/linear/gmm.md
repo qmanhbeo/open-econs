@@ -23,7 +23,7 @@ references:
   - NeweyWest1987
 ---
 
-# Linear GMM — Two-Step Efficient GMM with Robust VCE
+# Linear GMM — Two-Step Efficient GMM with Robust VCE — Stata `gmm` / R `gmm::gmm` Parity
 
 > **Estimator summary**: Linear-in-parameters GMM (textbook, not panel-difference) with one-/two-step estimation, robust sandwich VCE, and the Hansen J test.
 
