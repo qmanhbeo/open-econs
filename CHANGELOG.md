@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.4.3] - 2026-07-20
+
+Point release — limited-dependent-variable (LDV) trust-hardening, now on `main` and shipping in 1.4.3.
+
+### Added / changed — LDV parity hardening
+- **Poisson (PPML)** — non-clustered robust SE matches Stata `ppmlhdfe` Correia-Guimarães-Zylkin (CGZ) adjustment via `vcov_backend="stata"`; cluster-robust already ≤1e-6.
+- **Tobit (censored)** — OIM, robust, and cluster SEs match Stata `tobit` (analytic censored-region scores).
+- **Ordered logit / probit** — OIM and robust (HC1, Stata `n/(n-1)`) SEs match Stata `ologit` / `oprobit`.
+- **Negative binomial (`nbreg`)** — cluster SEs match Stata, plus new `dispersion="const_stata"` toggle reproducing Stata's `constant`-dispersion MLE.
+- **DFBETAS convention toggle** — `Results.dfbetas(backend="stata_r" | "statsmodels")`.
+
+### Packaging
+- Added `examples/` runnable applied-micro demos.
+- README parity-coverage table + applied-micro quickstart.
+- methodology MD SEO/usage sweep.
+
+Root causes documented under `methodology/`.
+
 ## [1.4.2] - 2026-07-19
 
 Patch: `robust_reg(parity='stata')` now reproduces Stata `rreg` coefficients (`e(b)`) and robust SEs (`e(V)`) to <3e-10 (machine precision), closing the ROBUST-REG-STATA open parity gap. Root cause: Stata's `rreg` reports coefficients from a final bias-correction regression (not the last biweight step) and uses effective N (non-zero-weight obs) in the correction's `lambda`. No API change. R `parity='rlm'` branch unchanged (already 1e-6).
