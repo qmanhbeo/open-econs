@@ -86,11 +86,11 @@ M_lag_shifted[:, :-1] = M_lag[:, 1:]  # shift left
 M = M - M_lag_shifted
 M[0, 0] = 0.0
 
-print(f"\nM (first-difference operator):")
+print("\nM (first-difference operator):")
 print(M)
 
 H = M.T @ M
-print(f"\nH = M'M:")
+print("\nH = M'M:")
 print(H)
 print(f"H diagonal: {np.diag(H)}")
 
@@ -204,7 +204,7 @@ print("=" * 72)
 print(f"b = {b1}")
 print(f"se = {np.sqrt(np.diag(V1))}")
 print(f"sig2 = {sig2_1}")
-print(f"V:")
+print("V:")
 for row in V1:
     print(f"  [{row[0]:12.8f}, {row[1]:12.8f}, {row[2]:12.8f}]")
 
@@ -276,7 +276,7 @@ print("=" * 72)
 print(f"b = {b2}")
 print(f"se = {np.sqrt(np.diag(V2))}")
 print(f"sig2 = {sig2_2}")
-print(f"V:")
+print("V:")
 for row in V2:
     print(f"  [{row[0]:12.8f}, {row[1]:12.8f}, {row[2]:12.8f}]")
 
@@ -311,32 +311,32 @@ print(f"sig2 = {sig2_3}")
 print("\n" + "=" * 72)
 print("Z'HZ STRUCTURE COMPARISON")
 print("=" * 72)
-print(f"\nZ'HZ (Stata-style, full 5-row Zi):")
-print(f"  GMM×GMM block:")
+print("\nZ'HZ (Stata-style, full 5-row Zi):")
+print("  GMM×GMM block:")
 print(f"    {ZtHZ_1[:n_gmm, :n_gmm]}")
-print(f"  IV×IV block:")
+print("  IV×IV block:")
 print(f"    {ZtHZ_1[n_gmm:, n_gmm:]}")
-print(f"  GMM×IV block:")
+print("  GMM×IV block:")
 print(f"    {ZtHZ_1[:n_gmm, n_gmm:]}")
 
-print(f"\nZ'HZ (oe-style, H_sub diag=2):")
-print(f"  GMM×GMM block:")
+print("\nZ'HZ (oe-style, H_sub diag=2):")
+print("  GMM×GMM block:")
 print(f"    {ZtHZ_2[:n_gmm, :n_gmm]}")
-print(f"  IV×IV block:")
+print("  IV×IV block:")
 print(f"    {ZtHZ_2[n_gmm:, n_gmm:]}")
 
-print(f"\nZ'HZ (oe current, diag=3):")
-print(f"  GMM×GMM block:")
+print("\nZ'HZ (oe current, diag=3):")
+print("  GMM×GMM block:")
 print(f"    {ZtHZ_3[:n_gmm, :n_gmm]}")
-print(f"  IV×IV block:")
+print("  IV×IV block:")
 print(f"    {ZtHZ_3[n_gmm:, n_gmm:]}")
 
-print(f"\nDifference (Stata-style - oe diag=2):")
+print("\nDifference (Stata-style - oe diag=2):")
 print(f"  GMM×GMM: {np.max(np.abs(ZtHZ_1[:n_gmm, :n_gmm] - ZtHZ_2[:n_gmm, :n_gmm])):.6e}")
 print(f"  IV×IV:   {np.max(np.abs(ZtHZ_1[n_gmm:, n_gmm:] - ZtHZ_2[n_gmm:, n_gmm:])):.6e}")
 print(f"  GMM×IV:  {np.max(np.abs(ZtHZ_1[:n_gmm, n_gmm:] - ZtHZ_2[:n_gmm, n_gmm:])):.6e}")
 
-print(f"\nDifference (Stata-style - oe diag=3):")
+print("\nDifference (Stata-style - oe diag=3):")
 print(f"  GMM×GMM: {np.max(np.abs(ZtHZ_1[:n_gmm, :n_gmm] - ZtHZ_3[:n_gmm, :n_gmm])):.6e}")
 print(f"  IV×IV:   {np.max(np.abs(ZtHZ_1[n_gmm:, n_gmm:] - ZtHZ_3[n_gmm:, n_gmm:])):.6e}")
 print(f"  GMM×IV:  {np.max(np.abs(ZtHZ_1[:n_gmm, n_gmm:] - ZtHZ_3[:n_gmm, n_gmm:])):.6e}")

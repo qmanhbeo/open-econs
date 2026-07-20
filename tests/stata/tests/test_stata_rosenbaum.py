@@ -17,7 +17,6 @@ Python: ``rosenbaum_bounds()`` in ``open_econs.models.causal.sensitivity``.
 
 from __future__ import annotations
 
-import numpy as np
 import numpy.testing as npt
 import pytest
 

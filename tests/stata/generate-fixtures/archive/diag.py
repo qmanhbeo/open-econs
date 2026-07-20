@@ -1,4 +1,5 @@
-import numpy as np, pandas as pd
+import numpy as np
+import pandas as pd
 CSV = r"C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv"
 df = pd.read_csv(CSV)
 entities = sorted(df["entity"].unique())

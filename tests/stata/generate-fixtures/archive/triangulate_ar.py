@@ -311,7 +311,7 @@ for label, (step, robust) in flavors.items():
 
 # ── Check candidate 2 (j==1 X_i asymmetry) ──
 print(f"\n{'='*72}")
-print(f"  CANDIDATE 2: j==1 DL.y construction asymmetry")
+print("  CANDIDATE 2: j==1 DL.y construction asymmetry")
 print(f"{'='*72}")
 for label, (step, robust) in [("1s_nr", ("one-step", False)), ("2s_nr", ("two-step", False))]:
     onestepnonrobust = (step == "one-step") and (not robust)
@@ -359,7 +359,7 @@ for label, (step, robust) in [("1s_nr", ("one-step", False)), ("2s_nr", ("two-st
 
 # ── Full OE abond() call ──
 print(f"\n{'='*72}")
-print(f"  VERIFICATION: OE abond(system=True)")
+print("  VERIFICATION: OE abond(system=True)")
 print(f"{'='*72}")
 import open_econs as oe
 for label, (step, robust) in flavors.items():

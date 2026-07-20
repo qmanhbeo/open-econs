@@ -1,4 +1,5 @@
-import pandas as pd, numpy as np
+import pandas as pd
+import numpy as np
 
 csv = pd.read_csv(r"C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv")
 entities = sorted(csv["entity"].unique())
@@ -39,9 +40,9 @@ print(f"A1_inv (Z'HZ) shape: {A1_inv.shape}")
 G = ZtX.T @ A1 @ ZtX
 c = ZtX.T @ A1 @ ZtY
 b = np.linalg.lstsq(G, c, rcond=None)[0].flatten()
-print(f"\nOne-step b from Stata's e(Z) + e(A1):")
+print("\nOne-step b from Stata's e(Z) + e(A1):")
 print(f"  b_Ly={b[0]:.6f} b_x={b[1]:.6f} b_z={b[2]:.6f} b_cons={b[3]:.6f}")
-print(f"TARGET:  b_Ly=0.110421 b_x=1.156291 b_z=-0.603776 b_cons=0.061418")
+print("TARGET:  b_Ly=0.110421 b_x=1.156291 b_z=-0.603776 b_cons=0.061418")
 
 # Now try: can we compute A1 from Z and H directly?
 # Stata's e(H) was exported but only 10 columns (truncated?)

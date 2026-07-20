@@ -1,5 +1,6 @@
 """Debug: trace classical VCV computation step by step."""
-import sys, io
+import sys
+import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 import numpy as np
 import pandas as pd

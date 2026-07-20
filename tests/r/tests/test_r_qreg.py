@@ -12,7 +12,6 @@ from __future__ import annotations
 import numpy as np
 import numpy.testing as npt
 import pandas as pd
-import pytest
 
 import open_econs as oe
 from ..r_runner import read_r

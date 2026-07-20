@@ -16,7 +16,6 @@ Formula trace: ``cem-mata.do`` ``shsh()``, ``FD()``, ``scott()``,
 
 from __future__ import annotations
 
-from pathlib import Path
 
 import numpy as np
 import numpy.testing as npt
@@ -24,7 +23,7 @@ import pandas as pd
 import pytest
 
 from open_econs.models.causal.cem import cem
-from ..stata_runner import DO_DIR, EXPECTED_DIR, INPUTS_DIR, STATA_EXE, run_do
+from ..stata_runner import EXPECTED_DIR, INPUTS_DIR, run_do
 
 pytestmark = pytest.mark.stata
 

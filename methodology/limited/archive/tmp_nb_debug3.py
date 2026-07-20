@@ -1,4 +1,5 @@
-import pandas as pd, numpy as np
+import pandas as pd
+import numpy as np
 from scipy.special import gammaln
 
 df = pd.read_csv('tests/r/fixtures/inputs/nbreg_input.csv')

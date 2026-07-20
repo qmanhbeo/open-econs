@@ -17,7 +17,6 @@ import numpy.testing as npt
 import pandas as pd
 import pytest
 
-import open_econs as oe
 from open_econs.models.limited.nbreg import nbreg
 
 

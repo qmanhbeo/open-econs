@@ -1,4 +1,5 @@
-import pandas as pd, numpy as np
+import pandas as pd
+import numpy as np
 
 csv = pd.read_csv(r"C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv")
 entities = sorted(csv["entity"].unique())
@@ -28,7 +29,7 @@ print(f"Entity 1 rows in CSV: {np.where(e1_mask)[0].tolist()}")
 print(f"Entity 1 times: {times_vals[e1_mask].tolist()}")
 print(f"Entity 1 X:\n{np.round(X[e1_mask], 4)}")
 print(f"Entity 1 Y: {np.round(Y[e1_mask].flatten(), 4)}")
-print(f"Entity 1 Z col norms per row:")
+print("Entity 1 Z col norms per row:")
 for i, row_idx in enumerate(np.where(e1_mask)[0]):
     print(f"  row {row_idx} t={times_vals[row_idx]:.0f}: Z norms per col = {np.round(np.abs(Z[row_idx]), 4)}")
 
@@ -38,7 +39,7 @@ print(f"\nEntity 0 X:\n{np.round(X[e0_mask], 4)}")
 print(f"Entity 0 Y: {np.round(Y[e0_mask].flatten(), 4)}")
 
 # Check the LEVEL block (rows 150-299)
-print(f"\n=== LEVEL BLOCK (rows 150-154) ===")
+print("\n=== LEVEL BLOCK (rows 150-154) ===")
 print(f"Entity col (should be NaN): {ents[150:155]}")
 print(f"Times: {times_vals[150:155]}")
 print(f"X:\n{np.round(X[150:155], 4)}")
@@ -47,7 +48,7 @@ print(f"Z:\n{np.round(Z[150:155], 4)}")
 
 # Cross-check: entity 0 y values
 e0 = csv[csv["entity"]==0].sort_values("time")
-print(f"\nEntity 0 raw data:")
+print("\nEntity 0 raw data:")
 print(f"  y: {np.round(e0['y'].values, 4)}")
 print(f"  x: {np.round(e0['x'].values, 4)}")
 print(f"  z: {np.round(e0['z'].values, 4)}")
@@ -56,7 +57,7 @@ print(f"  z: {np.round(e0['z'].values, 4)}")
 y0 = e0['y'].values
 x0 = e0['x'].values
 z0 = e0['z'].values
-print(f"\nEntity 0 diff eq expected (t=1):")
+print("\nEntity 0 diff eq expected (t=1):")
 print(f"  Dy = y[1]-y[0] = {y0[1]-y0[0]:.4f}")
 print(f"  L.y = y[0] = {y0[0]:.4f}")
 print(f"  Dx = x[1]-x[0] = {x0[1]-x0[0]:.4f}")
@@ -67,7 +68,7 @@ print(f"  Dz = z[1]-z[0] = {z0[1]-z0[0]:.4f}")
 print(f"\nEntity 0 row 1 (t=1): X = {np.round(X[1], 4)}, Y = {Y[1,0]:.4f}")
 
 # Also check entity 1 level block
-print(f"\n=== Entity 1 LEVEL (rows 155-159) ===")
+print("\n=== Entity 1 LEVEL (rows 155-159) ===")
 print(f"X:\n{np.round(X[155:160], 4)}")
 print(f"Y: {np.round(Y[155:160].flatten(), 4)}")
 print(f"Z:\n{np.round(Z[155:160], 4)}")

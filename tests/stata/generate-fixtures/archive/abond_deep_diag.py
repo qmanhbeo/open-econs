@@ -1,10 +1,11 @@
 """Deep diagnostic: Z matrix structure, per-entity g_i, sandwich dimensions."""
 
-import sys, io
+import sys
+import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 import numpy as np
 import pandas as pd
-from open_econs.models.linear.abond import abond as _abond, _estimate_gmm
+from open_econs.models.linear.abond import abond as _abond
 from formulaic import Formula
 
 df = pd.read_csv("tests/stata/fixtures/df_panel.csv")
@@ -181,11 +182,11 @@ b = G_inv @ (ZtX.T @ W @ ZtY)
 e = Y - X @ b
 
 print(f"\n  G (cross-product): shape={G.shape}")
-print(f"    G = Z'X W X'Z")
+print("    G = Z'X W X'Z")
 print(f"    G_inv: shape={G_inv.shape}")
 
 # Per-entity g_i
-print(f"\n  Per-entity moment vectors g_i:")
+print("\n  Per-entity moment vectors g_i:")
 S_g = np.zeros((p, p))
 for i, ent in enumerate(entities_list):
     mask = eq_ent == ent
@@ -216,8 +217,8 @@ print(f"\n  oe output std_errors = {r.std_errors.values}")
 print(f"  Ratio oe/se_sandwich = {r.std_errors.values / np.sqrt(np.maximum(np.diag(V_sandwich), 0))}")
 
 # Stata reference
-print(f"\n  Stata 1-step non-collapsed SE = [0.24521319, 0.17680462, 0.10368879]")
-print(f"  Stata VCV diag = [0.06012951, 0.03125987, 0.01075136]")
+print("\n  Stata 1-step non-collapsed SE = [0.24521319, 0.17680462, 0.10368879]")
+print("  Stata VCV diag = [0.06012951, 0.03125987, 0.01075136]")
 
 # Check: is S_g being summed over N_obs instead of N_entities?
 print(f"\n  S_g trace = {np.trace(S_g):.10f}")

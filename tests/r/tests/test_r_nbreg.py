@@ -14,7 +14,6 @@ All assertions at ``atol=1e-6`` — nothing loosened (rule 2).
 
 from __future__ import annotations
 
-import numpy as np
 import numpy.testing as npt
 import pandas as pd
 import pytest

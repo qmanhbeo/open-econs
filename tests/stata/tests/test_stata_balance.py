@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import numpy as np
 import numpy.testing as npt
-import pandas as pd
 import pytest
 from scipy import stats as _stats
 

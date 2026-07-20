@@ -1,4 +1,5 @@
-import pandas as pd, numpy as np
+import pandas as pd
+import numpy as np
 
 csv = pd.read_csv(r"C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv")
 entities = sorted(csv["entity"].unique())
@@ -50,9 +51,9 @@ A1_inv = np.linalg.pinv(A1)
 G = ZtX.T @ A1 @ ZtX
 c = ZtX.T @ A1 @ ZtY
 b1 = np.linalg.lstsq(G, c, rcond=None)[0].flatten()
-print(f"\n=== ONE-STEP VERIFICATION ===")
+print("\n=== ONE-STEP VERIFICATION ===")
 print(f"Computed b: {np.round(b1, 6)}")
-print(f"Stata 1s:   [0.110421, 1.156291, -0.603776, 0.061418]")
+print("Stata 1s:   [0.110421, 1.156291, -0.603776, 0.061418]")
 
 # Two-step
 e1 = Y.flatten() - X @ b1
@@ -72,8 +73,8 @@ try:
     G2 = ZtX.T @ A2 @ ZtX
     c2 = ZtX.T @ A2 @ ZtY
     b2 = np.linalg.lstsq(G2, c2, rcond=None)[0].flatten()
-    print(f"\n=== TWO-STEP (naive S) ===")
+    print("\n=== TWO-STEP (naive S) ===")
     print(f"Computed b2: {np.round(b2, 6)}")
-    print(f"Stata 2s:    [0.009464, 1.134976, -0.442064, 0.090758]")
+    print("Stata 2s:    [0.009464, 1.134976, -0.442064, 0.090758]")
 except:
     print("Singular S")

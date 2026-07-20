@@ -1,11 +1,12 @@
 """Debug: verify Z'HZ computation and H matrix structure."""
-import sys, io
+import sys
+import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 import numpy as np
 import pandas as pd
 from collections import Counter
 from formulaic import Formula
-from open_econs.models.linear.abond import _build_h, _tridiag_h_inv_block
+from open_econs.models.linear.abond import _build_h
 
 df = pd.read_csv("tests/stata/fixtures/df_panel.csv")
 
@@ -97,7 +98,7 @@ print()
 H_diag, H_off = _build_h(entity_counts, n_eq, eq_entity)
 print(f"H_diag (first 12) = {H_diag[:12]}")
 print(f"H_off  (first 12) = {H_off[:12]}")
-print(f"H_off at entity boundaries:")
+print("H_off at entity boundaries:")
 for k in range(n_eq - 1):
     if H_off[k] == 0.0:
         print(f"  H_off[{k}] = 0 (boundary between {eq_entity[k]} and {eq_entity[k+1]})")
@@ -189,7 +190,7 @@ print("=== STANDARD ERRORS ===")
 print(f"  se_old = {se_old}")
 print(f"  se_new = {se_new}")
 print(f"  ratio  = {se_new / se_old}")
-print(f"  Stata  = [0.24668636, 0.17726977, 0.10425827]")
+print("  Stata  = [0.24668636, 0.17726977, 0.10425827]")
 print(f"  oe/Stata (old) = {se_old / np.array([0.24668636, 0.17726977, 0.10425827])}")
 print(f"  oe/Stata (new) = {se_new / np.array([0.24668636, 0.17726977, 0.10425827])}")
 print()

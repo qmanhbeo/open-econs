@@ -2,7 +2,6 @@
 from tests.stata.stata_runner import read_stata
 import open_econs as oe
 import pandas as pd
-import numpy as np
 
 S = read_stata("sysgmm")
 df = pd.read_csv("tests/stata/fixtures/inputs/df_panel.csv")

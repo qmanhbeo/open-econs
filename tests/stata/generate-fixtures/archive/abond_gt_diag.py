@@ -54,7 +54,7 @@ for e_val in entities:
     ZtX += Ze.T @ Xe
     ZtY += Ze.T @ Ye
 
-print(f"\n=== From Stata's REAL X/Y/Z/H (per-entity 5x5 H) ===")
+print("\n=== From Stata's REAL X/Y/Z/H (per-entity 5x5 H) ===")
 print(f"Z'X =\n{ZtX}")
 print(f"Z'Y = {ZtY}")
 print(f"Z'HZ (with saved e(H)) =\n{ZtHZ}")
@@ -112,7 +112,7 @@ e = Y - X @ b
 sig2 = float(e @ e) / (2.0 * df)
 V = sig2 * G_inv
 print(f"\nb (from Stata matrices) = {b}")
-print(f"Stata e(b)             = [-0.11984163, 1.1258209, -0.28974145]")
+print("Stata e(b)             = [-0.11984163, 1.1258209, -0.28974145]")
 print(f"sig2 = {sig2:.8f}   Stata e(sig2)=0.19753252   (df={df}, n_eq={n_eq}, p={p})")
 print(f"\nV (from Stata matrices) =\n{V}")
 print(f"\nStata e(V) diag = {np.sqrt([0.06085416,0.03142457,0.01086979])}")
@@ -123,7 +123,7 @@ dfp = pd.read_csv(r"C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_pa
 res = oe.abond("y ~ x + z", data=dfp, entity="entity", time="time",
                step="one-step", lags=1, exogenous=["x", "z"], collapse=True,
                robust=False)
-print(f"\n=== oe.abond current pipeline ===")
+print("\n=== oe.abond current pipeline ===")
 print(f"coefficients = {res.coefficients.values}")
 print(f"std_errors    = {res.std_errors.values}")
 print(f"n_obs = {res.n_obs}, n_instruments = {res.n_instruments}")

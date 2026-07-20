@@ -1,4 +1,4 @@
-import pandas as pd, numpy as np
+import pandas as pd
 raw = pd.read_csv('tests/stata/fixtures/inputs/df_panel.csv')
 z = pd.read_csv('tests/stata/generate-fixtures/sys_Z.csv')
 

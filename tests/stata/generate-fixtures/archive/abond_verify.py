@@ -1,8 +1,8 @@
 """Verify: for each distance {2,3,4}, how many (entity, t) pairs have valid data."""
 
-import sys, io
+import sys
+import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-import numpy as np
 import pandas as pd
 
 df = pd.read_csv("tests/stata/fixtures/df_panel.csv")
@@ -10,7 +10,7 @@ N_ENT = df["entity"].nunique()
 T_PER = df.groupby("entity").size().iloc[0]
 
 print(f"Panel: {N_ENT} entities x {T_PER} periods = {len(df)} obs")
-print(f"min_j (first usable differenced equation) = lags+1 = 2")
+print("min_j (first usable differenced equation) = lags+1 = 2")
 print(f"Usable equations per entity: t = 2, 3, 4  (T - min_j = {T_PER - 2})")
 print()
 

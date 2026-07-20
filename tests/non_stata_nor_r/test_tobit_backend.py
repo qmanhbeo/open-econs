@@ -17,7 +17,6 @@ import numpy.testing as npt
 import pandas as pd
 import pytest
 
-import open_econs as oe
 from open_econs.models.limited.tobit import tobit
 
 
@@ -74,7 +73,6 @@ class TestTobitCensoringLimits:
 
     def test_left_none_right_none_is_ols(self, df_tobit):
         # With no censoring, Tobit MLE = OLS on the latent (here observed) outcome.
-        import open_econs as oe_mod
         r_tobit = tobit("y ~ x1 + x2 + x3", data=df_tobit, left=None)
         from open_econs.models.linear.ols import ols
         r_ols = ols("y ~ x1 + x2 + x3", data=df_tobit)

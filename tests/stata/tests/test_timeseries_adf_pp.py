@@ -29,7 +29,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
 import numpy.testing as npt
 import pandas as pd
 import pytest

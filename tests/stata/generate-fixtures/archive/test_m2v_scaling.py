@@ -4,7 +4,7 @@ import pandas as pd
 from scipy.linalg import block_diag
 from tests.stata.stata_runner import read_stata
 from open_econs.models._gmm_core import estimate_gmm as _estimate_gmm
-from open_econs.models.linear.abond import _build_H_ar, _ar_test
+from open_econs.models.linear.abond import _ar_test
 
 S = read_stata("toy_sysgmm")
 df = pd.read_csv("tests/stata/generate-fixtures/toy_sysgmm.csv")

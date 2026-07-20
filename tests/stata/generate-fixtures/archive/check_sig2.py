@@ -1,5 +1,6 @@
 """Verify sig2 formula: test various Stata sig2 conventions."""
-import sys, os
+import sys
+import os
 ROOT = r"C:\Users\manhn\Desktop\open-econs"
 sys.path.insert(0, os.path.join(ROOT, "tests", "stata", "generate-fixtures"))
 sys.path.insert(0, os.path.join(ROOT, "tests", "stata"))

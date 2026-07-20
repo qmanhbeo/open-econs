@@ -242,7 +242,6 @@ print("Z'Z matrix (oe style, all 90 equations)")
 print("=" * 72)
 
 # Rebuild full Z for all entities
-from collections import Counter
 entities = pd.unique(df2["entity"].values)
 y_by_e = {}
 x_by_e = {}
