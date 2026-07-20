@@ -141,10 +141,15 @@ class TestOrderedSandwich:
         fit = m.fit(disp=False, method="nm")
         p = np.asarray(fit.params)
         bread = np.linalg.inv(-m.hessian(p))
-        cov0 = _sandwich_cov(m, p, bread, "HC0")
-        cov1 = _sandwich_cov(m, p, bread, "HC1")
+        cats = [0, 1, 2, 3]
+        cov0 = _sandwich_cov(m, p, bread, "HC0", cats)
+        cov1 = _sandwich_cov(m, p, bread, "HC1", cats)
         n = m.nobs
         k = p.shape[0]
-        # HC1 = (n/(n-k)) * HC0 on the diagonal
+        # HC1 = (n/(n-1)) * HC0 on the diagonal.  NOTE: Stata's ologit/oprobit
+        # vce(robust) uses the n/(n-1) small-sample factor, NOT the textbook
+        # HC1 n/(n-k) factor (verified against Stata; see
+        # methodology/limited/ordered.md).  OE matches Stata, so the invariant is
+        # n/(n-1), not n/(n-k).
         ratio = np.sqrt(np.diag(cov1) / np.diag(cov0))
-        npt.assert_allclose(ratio, np.sqrt(n / (n - k)), rtol=0, atol=1e-12)
+        npt.assert_allclose(ratio, np.sqrt(n / (n - 1)), rtol=0, atol=1e-12)
