@@ -65,6 +65,26 @@ Every result returns named `pd.Series` / `pd.DataFrame` outputs and exports to
 JSON, CSV, LaTeX, or HTML with one call — `.export()`, `.to_latex()`,
 `.to_html()`. Results are immutable after estimation.
 
+## Applied-micro example (limited dependent variables)
+
+open-econs reproduces the **robust and cluster standard errors** that applied
+microeconometricians rely on daily — validated to ≤1e-6 against Stata:
+
+```python
+import open_econs as oe
+
+# Poisson PPML — non-clustered robust SE matches Stata ppmlhdfe's
+# Correia-Guimaraes-Zylkin adjustment; cluster-robust matches to <=1e-6.
+r = oe.poisson("y ~ x1 + x2", data=df, vcov_backend="stata")
+r = oe.poisson("y ~ x1 + x2", data=df, vcov_backend="stata", cluster="id")
+
+# Tobit with robust SEs (matches Stata tobit, vce(robust))
+r = oe.tobit("y ~ x1 + x2", data=df, cov_type="HC1")
+
+# Ordered logit with heteroskedasticity-robust SEs (matches Stata ologit, vce(robust))
+r = oe.ologit("y_ordered ~ x1 + x2", data=df, cov_type="HC1")
+```
+
 ## Stata / R → open-econs (top mappings)
 
 | Stata / R | open-econs |
@@ -82,6 +102,30 @@ JSON, CSV, LaTeX, or HTML with one call — `.export()`, `.to_latex()`,
 
 Full mapping: [docs/stata-r-mapping.md](docs/stata-r-mapping.md). Migration
 guides: [Stata](docs/migrating_from_stata.md) / [R](docs/migrating_from_r.md).
+
+## Parity coverage (validated to ≤1e-6)
+
+Every estimator below is checked against its Stata and/or R reference in CI;
+a numerical mismatch fails the build. The limited-DV family's **robust and
+cluster standard errors** were hardened this release to match Stata exactly.
+
+| Family | Stata anchor | R anchor | Robust / cluster SE |
+|--------|--------------|----------|---------------------|
+| OLS / WLS | `reg`, `newey` | `lm` | ✓ robust, cluster, HC0–HC3, HAC |
+| Fixed effects (2-way) | `xtreg, fe` | `plm` | ✓ |
+| IV / 2SLS | `ivregress 2sls` | `AER::ivreg` | ✓ robust, cluster, HC0–HC3 (HAC = R-reference) |
+| Arellano-Bond (Diff + System GMM) | `xtabond2` | — | ✓ AR(1)/AR(2), Windmeijer 2-step |
+| Poisson (PPML) | `ppmlhdfe` | `fixest::fepois` | ✓ cluster **and** non-clustered robust (CGZ) |
+| Tobit (censored) | `tobit` | `AER::tobit` | ✓ OIM, robust, cluster |
+| Ordered logit / probit | `ologit` / `oprobit` | `MASS::polr` | ✓ OIM **and** robust (HC1) |
+| Negative binomial | `nbreg` | `glm.nb` / `fenegbin` | ✓ cluster; Stata `constant` dispersion toggle |
+| Logit / probit / mlogit | `logit` / `probit` / `mlogit` | `glm` / `nnet` | ✓ |
+| DiD (CS2021, Gardner, Sun-Abr, ES) | `csdid` / `did2s` / `eventstudyinteract` | `did` / `fixest` | ✓ |
+| RDD | `rdrobust` | `rdrobust` | ✓ |
+| PSM / CEM | `teffects psmatch` / `cem` | `MatchIt` / `cem` | ✓ |
+| Synthetic control | `synth_runner` | `synth` | ✓ + permutation inference |
+| ARDL/UECM, VAR, GARCH, ARIMA, unit-root | `ardl` / `var` / `arch` | `ARDL` / `vars` / `rugarch` | ✓ (TS CV vintage labelled) |
+| Robust regression (M/MM) | `rreg` | `MASS::rlm` | ✓ bisquare M-estimator |
 
 ## Performance
 
