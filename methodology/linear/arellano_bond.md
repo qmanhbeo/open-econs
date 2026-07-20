@@ -32,7 +32,7 @@ references:
 
 # Arellano-Bond Dynamic Panel GMM (Difference GMM) in Python
 
-> **Estimator summary**: open-econs implements the Arellano-Bond (1991) difference GMM estimator for dynamic panel models, supporting collapsed/non-collapsed instruments, one-step/two-step estimation, Windmeijer (2005) corrected standard errors, Hansen J overidentification tests, and Arellano-Bond AR(1)/AR(2) serial-correlation tests.
+> **Estimator summary**: open-econs implements the Arellano-Bond (1991) difference GMM estimator and the Blundell-Bond (1998) system GMM estimator for dynamic panel models, supporting collapsed instruments, one-step/two-step estimation, Windmeijer (2005) corrected standard errors, Hansen J overidentification tests, and Arellano-Bond AR(1)/AR(2) serial-correlation tests. All four system-GMM flavors (one/two-step × robust/non-robust) match Stata `xtabond2` 3.7.2 AR tests to < 1e-7.
 
 ## Overview
 
@@ -46,7 +46,7 @@ The presence of the individual fixed effect $\mu_i$ creates the classic **Nickel
 
 open-econs implements first-difference GMM (the original Arellano-Bond 1991 estimator), removing $\mu_i$ by first-differencing and using deeper lags of the dependent variable and predetermined regressors as GMM instruments. The estimator wraps a shared GMM core (`_gmm_core.estimate_gmm`) with the Arellano-Bond-specific first-difference weighting matrix $H = M'M$ and a `sig2_scale = 0.5` normalization.
 
-**System GMM** (Arellano-Bover 1995 / Blundell-Bond 1998), which adds level equations with lagged differences as instruments, is **not** implemented.
+**System GMM** (Arellano-Bover 1995 / Blundell-Bond 1998) **is implemented** via `oe.abond(..., system=True, collapse=True)`. It stacks the difference and level equations, using deeper lags of `y` as GMM instruments in the difference equation and lagged *differences* of `y` as GMM instruments in the level equation. The coupled one-step weighting matrix is $H = \begin{bmatrix} M'M & M' \\ M & I \end{bmatrix}$ per entity. Non-collapsed system GMM is not yet supported (raises `NotImplementedError`).
 
 ## Mathematical Formulation
 
@@ -256,7 +256,7 @@ For just-identified models ($L = p$), the J statistic is not defined and returne
 
 #### Arellano-Bond AR(1) and AR(2) Tests
 
-The AR tests check for serial correlation in the first-differenced residuals, implemented in `_ar_test` (`abond.py:117-180`) mirroring xtabond2's Mata `_ARTests` (lines 1098-1167).
+The AR tests check for serial correlation in the first-differenced residuals, implemented in `_ar_test` (`abond.py:117-204`) mirroring xtabond2's Mata `_ARTests` (lines 1098-1167).
 
 **AR(1)**: First-order serial correlation in $\Delta\epsilon_{it}$ is expected by construction (the difference $(\epsilon_{it} - \epsilon_{i,t-1})$ mechanically correlates with $(\epsilon_{i,t-1} - \epsilon_{i,t-2})$). A significant AR(1) test is normal and expected.
 
@@ -277,6 +277,57 @@ $$
 where $w_{li}$ is the lag-$l$ residual vector and the correction term involves $X_i' w_{li}$ and the pre-small-sample variance. The test is asymptotically standard normal.
 
 Both AR(1) and AR(2) are always reported. The implementation reconstructs the full $T$-length residual per entity (with position 0 hard-zeroed), matching Stata's `_ARTests` conventions.
+
+#### System GMM one-step non-robust (`1s_nr`): the `sig2` convention that broke parity
+
+This flavor is the subtle one. For one-step non-robust system GMM, Stata's
+`_ARTests` (Mata lines 1110-1165) uses **two different `sig2` values** that do
+**not** share the same small-sample multiplier:
+
+* The H-weighted `wHw` and `psiw` terms use the **post**-small `sig2` passed into
+  `_ARTests` (Mata line 1111-1112: `H = _H(...) * sig2`, `psit = _H(...) * sig2`).
+* The `*pV` (i.e. `V1`) term uses the **pre**-small `sig2` embedded in `V1` at
+  Mata line 419 (`V1 = V1 * sig2`), because the small correction at lines 562-566
+  multiplies the *local copy* `V` but leaves `*pV` pointing at the original
+  `V1` (line 538).
+
+The embedded raw `sig2` is computed at Mata line 417:
+
+```
+sig2 = quadcross(e1 :* ErrorEq, e1 :* ErrorEq) / (2 - (orthogonal | h==1)) / wttot
+```
+
+where `ErrorEq` (line 201) **zeros out the level-equation residuals**, so only the
+difference-equation residuals enter `sig2`. Critically, for system GMM with `h > 1`,
+`wttot` (Mata line 342) is `sum(touse[|.\NT|])` — the count of **valid difference
+observations** `N_d = N \cdot (T-2)`, **not** the full system row count `N \cdot 2T`.
+(The `touse` vector already zeroes invalid rows, so the sum is `N_d`, not `N \cdot T`.)
+
+Therefore:
+
+* `sig2_raw` (embedded in `*pV` / `V1`) = `Σ diff_res² / 2 / N_d`.
+* `sig2_post` (used for `H`) = `sig2_raw · N_d / (N_d - k)`.
+
+The OE core (`_gmm_core`) instead computes `sig2_raw = Σ e1² / wttot_full` over
+**all** system rows (both diff and level) with no `/2` and no `ErrorEq` zeroing.
+To reconcile, `abond()` scales `pV_ar` by the **raw/raw** ratio
+
+```
+ratio = (Σ diff_res² / 2 / N_d) / (Σ e1² / wttot_full)
+```
+
+and passes `sig2_post` (the post-small value) as the `sig2` argument to
+`_ar_test`. The small-mult factor `N_d/(N_d-k)` cancels between numerator and
+denominator because both the OE raw `sig2` and Stata's raw `sig2` use the same
+`N_d` divisor — only the reported `e(sig2)` (and `H`) carry the post-small
+multiplier. This reproduces Stata's `e(ar1)`/`e(ar2)` to < 1e-7.
+
+**Footgun**: do **not** "simplify" the ratio to `sig2_stata / sig2_core`
+(post-small over post-small). Although that looks symmetric, `sig2_stata`
+post-small uses `N_d/(N_d-k)` while `sig2_core` post-small uses
+`wttot_full/(wttot_full-k)`; these multipliers do **not** cancel (different
+denominators), and the resulting `pV_ar` over-corrects the AR denominator by
+~3%, breaking parity at the 1e-3 level. The raw/raw ratio is required.
 
 ### Formula Interface
 
@@ -402,6 +453,7 @@ Rows with any NaN in the formula variables are dropped by formulaic's `na_action
 | `oe.abond("y ~ x", data=df, step="one-step")` | `xtabond2 y L.y x, gmm(L.y) iv(x) robust onestep` | One-step with robust SEs |
 | `oe.abond("y ~ x", data=df, exogenous=["x"], robust=True)` | `xtabond2 y L.y x, gmm(L.y) iv(x) robust` | Treats x as strictly exogenous |
 | `oe.abond("y ~ x", data=df, lags=2)` | `xtabond2 y L.y L2.y x, gmm(L.y) iv(x)` | Two lags of dependent variable |
+| `oe.abond("y ~ x + z", data=df, system=True, collapse=True, ...)` | `xtabond2 y L.y x z, gmm(L.y, lag(2 4) collapse) iv(x z, eq(diff)) gmm(L.y, lag(1 1) collapse) iv(x z, eq(level)) ...` | Blundell-Bond system GMM (diff + level eq) |
 
 **Parameter mapping**: Stata's `gmm()` specifies variables and their lag structure as instruments; open-econs automatically instruments the lagged dependent variable(s) and all non-exogenous regressors with deeper lags. Stata's `iv()` specifies strictly exogenous instruments; open-econs uses the `exogenous` parameter. Stata defaults to non-collapsed robust two-step; open-econs defaults to collapsed non-robust two-step. Specify `collapse=False, robust=True` to match xtabond2 defaults.
 
@@ -509,7 +561,7 @@ print(f"sig2 = {result.sig2:.6f}")
 
 ## Limitations
 
-1. **Difference GMM only**: System GMM (Arellano-Bover 1995 / Blundell-Bond 1998) is not implemented. For persistent series where lagged levels are weak instruments, Stata's `xtabond2` with system GMM may perform better.
+1. **Difference GMM + System GMM (collapsed)**: System GMM is implemented via `system=True, collapse=True` (Blundell-Bond 1998). Non-collapsed system GMM is not yet supported (raises `NotImplementedError`). For persistent series where lagged levels are weak instruments, system GMM (versus difference GMM) is available.
 
 2. **No multiple GMM variable groups**: All endogenous regressors share the same lag depth structure. xtabond2 allows separate `gmm()` groups with independent lag specifications.
 

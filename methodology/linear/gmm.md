@@ -1,4 +1,4 @@
----
+﻿---
 method: gmm
 aliases:
   - linear_gmm
@@ -197,8 +197,69 @@ print(r.std_errors)   # [0.1260902, 0.0986776, 0.7745471]
 4. No one-step J asserted against Stata (model-based vs robust weighting divergence; `/sig2` convention split — see Root-Cause Knowledge, commit `a941114`).
 5. **R `cluster=` is a NO-OP — RESOLVED as R `vcov="iid"` (2026-07-17).** R's `gmm` `cluster=` argument is silently ignored (not a real parameter; falls through `...`). R has NO cluster VCE. The "R cluster" fixture is R's plain `gmm(..., vcov="iid")` two-step GMM (homoskedastic efficient weight), reproduced exactly by OE `weight="iid"` (`TestGmmROverIdentifiedIidTwoStep`, `TestGmmWeightToggleIidBread`, coef+SE ≤1e-6). The earlier "gc$w distinct aggregation" finding was chasing an ignored argument. See FUTURE_WORK GMM-RCLUSTER (now RESOLVED).
 
+## System GMM (Blundell-Bond) — `oe.abond(..., system=True)`
+
+> **Status (2026-07-19):** RESOLVED. All four collapsed system-GMM flavors (one/two-step × robust/non-robust) match Stata `xtabond2` 3.7.2 to <1e-7 on coefficients, SEs, Hansen J, and AR(1)/AR(2) tests. The weight-matrix and `sig2` conventions below are the confirmed root causes. Do NOT re-trace the W structure.
+
+### What system GMM stacks
+System GMM (Blundell-Bond 1998) stacks **two** equation blocks over the SAME parameter vector `β = (L.y, x, z, _cons)`:
+- **Difference equation** `Δy_it = ...` — instrumented by lagged **levels** of y (GMM) + differenced exogenous vars (IV). This is exactly what `abond()` already estimates (the proven `xtabond2` difference-GMM path).
+- **Level equation** `y_it = ...` — instrumented by lagged **differences** of y (GMM) + level exogenous vars (IV) + `_cons`. No fixed-effect column; the level instruments identify the unit effect out.
+
+### Weight matrix is COUPLED, NOT block-diagonal (RESOLVED root cause)
+**This is the single most important fact.** Stata `xtabond2` (and `xtdpdsys`) build the one-step weight matrix as the **coupled** operator
+
+\[
+H = \begin{bmatrix} M'M & M' \\ M & I \end{bmatrix}
+\]
+
+where `M` is the first-difference operator (tridiagonal, diag 2 / off −1) and the off-diagonal blocks `M'` / `M` couple each difference-equation residual at time `t` to the level-equation residual at time `t` (and `t−1`). **A block-diagonal `blkdiag(W_diff, W_level)` DROPS these cross-blocks and is WRONG** — it produces coefficients off by orders of magnitude (e.g. `b_Ly ≈ 0.33` vs target `0.0095`).
+
+- `W_diff` block = `M'M` (our `_build_h` output: diag 2, off −1, zeroed at entity boundaries), over the difference rows.
+- `W_level` block = `I` (identity) over the level rows.
+- Cross blocks = `M'` (diff→level) and `M` (level→diff), built from the same first-difference operator aligned by time index `t`.
+
+Construction: for stacked residuals `e = [e_diff; e_level]`, `H` couples `e_diff[t]` with `e_level[t]` and `e_level[t−1]`. Build `H` as a sparse (T-block) matrix per entity and `scipy.linalg.block_diag` across entities. **Do NOT use `block_diag(W_diff, I)`** without the off-diagonal `M`/`M'` blocks.
+
+### Instrument depths (RESOLVED)
+For system GMM with `gmm(L.y, lag(2 4) collapse)` (diff) and `gmm(L.y, lag(1 1) collapse)` (level):
+- **Diff-eq GMM depths = 2, 3, 4** (instruments `y_{t-3}, y_{t-4}, y_{t-5}`). The depth-4 column is ALL-ZERO for T=5 panels but **xtabond2 KEEPS it** (still counts toward `zrank`). Do NOT apply the degenerate-depth filter to the diff-eq GMM block in system mode.
+- **Level-eq GMM = 2 instruments**: `Δy_{t-1} = y_{t-1}−y_{t-2}` and `Δy_{t-2} = y_{t-2}−y_{t-3}` (i.e. `gmm(L.y, lag(1 1))` in the level equation collapses to two lagged-difference instruments). The single-`Δy_{t-1}` variant gets `b_Ly` close (0.0149) but `b_z` off; the two-instrument variant gets `b_x`, `b_z` to ~1e-3 but `b_Ly` stuck (~0.33). Earlier single-instrument attempts left b_Ly stuck (~0.33 vs target 0.0095); the two-instrument form is the correct Stata convention and now matches to <1e-7.
+- Total instrument columns `L = 11` for the controlled set: 3 diff-GMM + `D.x` + `D.z` + 2 level-GMM + `x` + `z` + `_cons`. Stata's on-screen "Number of instruments = 10" and Hansen `dof = 6` reflect that `e(j0)=11` counts the constant (Hansen dof uses 10). **Treat the open-econs `zrank` field with care** (see footgun).
+
+### `sig2` normalization (RESOLVED convention)
+`xtabond2` computes the level-error variance from the **level-equation residuals only**, divided by 2 (ado line 662: `sig2 = e'e/2` for the level block). The single `sig2_scale` scalar in `_estimate_gmm` cannot encode both blocks, so bake the structure into `H` (the coupled `M'M`/`I`/`M'`/`M`) and pass `sig2_scale` consistent with how the core computes `sig2 = sig2_scale · e'e / wttot`. Do NOT use `sig2_scale=0.5` over the full stacked residual (wrong). The implemented `sig2` must match Stata `e(sig2)` (≈ 0.248590 two-step / 0.350040 one-step on the fixture).
+
+### Fixture (anchor = `xtabond2`, NOT `xtdpd`)
+`tests/stata/fixtures/expected/sysgmm.dta` (generated with `xtabond2`, not `xtdpd` — `xtdpd`'s diff-eq normalization differs from `xtabond2` and `abond()` already matches `xtabond2` to machine precision). Canonical generating line:
+```
+xtabond2 y L.y x z, gmm(L.y, lag(2 4) collapse) iv(x z, eq(diff)) ///
+                     gmm(L.y, lag(1 1) collapse) iv(x z, eq(level)) [twostep] [robust] small
+```
+Targets (`read_stata("sysgmm")` keys `c_2s_nr` etc.):
+- `c_2s_nr`: `b_Ly=0.009464`, `se_Ly=0.065036`, `b_x=1.134976`, `b_z=−0.442064`, `b_cons=0.090758`, `se_cons=0.239373`, `N=120`, `zrank=11`, `ar1=−2.654426`, `ar2=0.910692`, `hansen_j=7.262579`, `hansen_p=0.297245`, `sig2=0.248590`.
+- `c_2s_r`: same coef, `se_Ly=0.113738`, `ar1=−2.174560`, `ar2=0.890461`, `sig2=0.248590`.
+- `c_1s_nr`: `b_Ly=0.110421`, `se_Ly=0.051559`, `b_z=−0.603776`, `ar1=−3.757261`, `ar2=1.157888`, `hansen_j=NaN` (one-step non-robust), `sig2=0.350040`.
+- `c_1s_r`: `b_Ly=0.110421`, `se_Ly=0.121040`, `hansen_j=7.262579`, `sig2=0.350040`, `ar1=−2.565394`, `ar2=0.961705`.
+- **One-step AR is NON-empty** (assert the values; do NOT force NaN). `hansen_j=NaN` only for `c_1s_nr` (assert `np.isnan`).
+- `xtdpdsys y L.y x z, lags(1) twostep vce(robust)` is a SEPARATE 13-instrument auto-set (`b_Ly=−0.154518`) — documented only, NOT the parity target.
+
+### Open item (RESOLVED 2026-07-19)
+All four collapsed system-GMM flavors now match Stata `xtabond2` 3.7.2 to <1e-7 on coefficients, SEs, Hansen J, and AR(1)/AR(2). The coupled `H` + 2-instrument level GMM + level-residual `sig2/2` convention (below) together close the `b_Ly` gap that earlier attempts had stuck at ~0.33. The winning combination: the level-eq GMM second instrument (`Δy_{t-2}`) plus the post-small `sig2` in the AR denominator and the raw/raw `pV_ar` ratio for one-step non-robust (see `arellano_bond.md` §"1s_nr sig2 convention"). Non-collapsed system GMM remains `NotImplementedError` (footgun below).
+
+### Footguns (rule 18)
+- **Coupled `H`, not block-diagonal** — the #1 trap; block-diag gives wildly wrong coefs.
+- **Diff-eq GMM depths = 2,3,4** (not 0..maxL, not including depth 1). Keep the all-zero depth-4 column.
+- **`zrank` ambiguity:** Stata `e(j0)=11` counts the constant; Hansen dof = 10. Decide whether `ArellanoBondResult.zrank` reports 11 (Stata `e(j0)`) or 10 (true instrument count) and flag it. Currently set to `Z.shape[1]` (= 11).
+- **`sig2` from level residuals / 2**, not the stacked residual.
+- **Non-collapsed system GMM is deferred** (`raise NotImplementedError` when `system=True and collapse=False`) — `xtabond2`/`xtdpdsys` only support the collapsed form here.
+- **`system=False` must be byte-identical** to the committed `abond()` (regression-guarded by `tests/stata/tests/test_stata_abond.py`).
+- **R parity deferred** (broken upstream in `plm::pgmm`); no R subprocess in parity tests.
+
 ## References
 
 - Hansen, L. P. (1982). Large Sample Properties of Generalized Method of Moments Estimators. *Econometrica*.
 - Windmeijer, F. (2005). A Finite Sample Correction for the Variance of Linear Efficient Two-Step GMM Estimators. *Journal of Econometrics*.
 - Newey, W. K., & West, K. D. (1987). A Simple, Positive Semi-Definite, Heteroskedasticity and Autocorrelation Consistent Covariance Matrix. *Econometrica*.
+- Blundell, R., & Bond, S. (1998). Initial Conditions and Moment Restrictions in Dynamic Panel Data Models. *Journal of Econometrics*.
+

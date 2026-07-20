@@ -332,14 +332,16 @@ relaxed tolerances (standing rule 2).
 
 - **Decision (2026-07-17):** R `plm::pgmm` parity for `oe.abond()` is
   **intentionally DEFERRED / accepted-incomplete**.  Stata `xtabond2` parity is
-  fully covered (40 tests, green) and is the primary anchor for abond's users.
-  R parity adds little given low abond usage and is currently impossible to
-  verify (plm `pgmm` is broken upstream).  This is a documented acceptance, NOT
-  an open "todo" — do not treat it as pending work unless plm is fixed.
+  fully covered (52 tests: 40 difference-GMM + 12 system-GMM, all green) and is
+  the primary anchor for abond's users.  R parity adds little given low abond
+  usage and is currently impossible to verify (plm `pgmm` is broken upstream).
+  This is a documented acceptance, NOT an open "todo" — do not treat it as
+  pending work unless plm is fixed.
 
 - **What (rule 15 gap):** `oe.abond()` has full Stata `xtabond2` parity
-  (`tests/stata/tests/test_stata_abond.py`, 8 flavors × 5 cross-checks = 40
-  tests, all green) but **no R parity**.  The canonical R anchor for
+  (`tests/stata/tests/test_stata_abond.py`: 8 difference-GMM flavors × 5
+  cross-checks = 40 tests, plus 4 system-GMM flavors × 3 cross-checks = 12
+  tests; all green) but **no R parity**.  The canonical R anchor for
   Arellano-Bond difference GMM is `plm::pgmm`.
 - **Blocker (verified 2026-07-17):** `plm::pgmm` is **broken in this environment
   on BOTH installed R versions** — R 4.6.1 AND R 4.5.2 (plm freshly installed
@@ -380,7 +382,9 @@ relaxed tolerances (standing rule 2).
      source" intent).  Only use a hand-roll as a last resort and label it
      explicitly as a self-consistency check, not parity.
 - **Status:** DEFERRED (accepted).  Stata `xtabond2` parity is complete and
-  authoritative; R parity is intentionally not covered.  The simulation-only
+  authoritative (difference GMM **and** Blundell-Bond system GMM, all four
+  flavors matching AR tests to < 1e-7); R parity is intentionally not covered.
+  The simulation-only
   `tests/non_stata_nor_r/test_abond.py` stays as the only non-Stata abond
   coverage; it is NOT a parity anchor (rule 7: it belongs in the deferred-
   migration bucket, not in `tests/r/`).
