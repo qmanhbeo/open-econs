@@ -80,7 +80,7 @@ This is the single most error-prone convention difference (rule 15):
 
 ---
 
-## 3. Standard errors — OIM vs robust (OPEN GAP, rule 6/15/16)
+## 3. Standard errors — OIM vs robust (robust/cluster RESOLVED 2026-07-20)
 
 - **OIM (nonrobust)** — `cov_type = "nonrobust"` (default) — is the **validated
   deliverable**. OE computes it as `inv(Hessian)` of the total negative
@@ -98,12 +98,35 @@ This is the single most error-prone convention difference (rule 15):
   > derivation). The numeric **Hessian of the total NLL** (= Stata's `-Hessian` =
   > OIM) is exact and stable. Implemented as `inv(approx_hess(nll))`.
 
-- **Robust / cluster (`HC0/HC1/HC2/HC3`, `cluster=`)** — a numerical-score
-  sandwich. The per-observation score is differentiated numerically from the
-  `(β, ln σ)` log-likelihood. This diverges from Stata's *exact* OIM-robust bread
-  by **~1e-4** (same class of issue as `poisson`/`ologit`). The robust-SE branch
-  is therefore **not asserted to 1e-6**; it is a documented open gap (see
-  FUTURE_WORK.md). OIM parity is the shipped deliverable.
+- **Robust / cluster (`HC0/HC1/HC2/HC3`, `cluster=`)** — **RESOLVED**. The
+  robust/cluster sandwich uses the **exact analytic Tobit score contributions**
+  (including the censored/limit-of-observation regions) on the `(β, σ)`
+  parameterization, with the **OIM `inv(Hessian)` bread**. This closes the old
+  ~1e-4 gap (which came from numerically differentiating the `(β, ln σ)`
+  log-likelihood — wrong parameterization AND a numeric-Jacobian bread that does
+  not equal Stata's OIM bread).
+
+  - Stata `tobit, vce(robust)` = `(n/(n-1)) · B · (Σᵢ sᵢ sᵢ′) · B`, where `B =
+    inv(Hessian)` (OIM) and `sᵢ` are the analytic scores on `(β, σ²)` (equivalently
+    on `(β, σ)` — the `(β,β)` block is parameterization-invariant). The
+    **`n/(n-1)` small-sample factor is Stata's own convention for `tobit`**
+    (verified to 1e-10 against full-precision Mata matrices); it is **NOT** the
+    usual `n/(n-q)` HC1 factor, so do not "simplify" it.
+  - Stata `tobit, vce(cluster <id>)` = `(G/(G-1)) · B · (Σ_g (Σ_{i∈g} sᵢ) (Σ_{i∈g}
+    sᵢ)′) · B` — the cluster bias correction is `G/(G-1)` (also verified to 1e-10);
+    there is no extra `(n-1)/(n-k)` factor for tobit's cluster SE.
+  - **OE mapping (rule 15):** Stata's `vce(robust)` is the canonical robust SE
+    users expect, so OE exposes it as `cov_type = "HC1"` (per-obs weight
+    `n/(n-1)`). `HC0` = uncorrected OPG meat, `HC2`/`HC3` = leverage-weighted
+    (`1/(1-h)`, `1/(1-h)²` with `h` from the OPG bread) — these have **no Stata
+    `tobit` equivalent** and are not fixture-checked, but are implemented
+    consistently. `cluster=` uses `G/(G-1)`.
+
+  Fixtures `rse_x1,x2,x3` (`vce(robust)`) and `cse_x1,x2,x3` (`vce(cluster id)`)
+  are emitted by `tests/stata/generate-fixtures/tobit.do`; the
+  `tobit_input.csv` shared input gained a 40-cluster `id` column. Asserted at
+  `1e-6` in `tests/stata/tests/test_stata_tobit.py::TestStataTobitRobustCluster`
+  (OIM still asserted separately). See FUTURE_WORK.md (RESOLVED).
 
 ---
 

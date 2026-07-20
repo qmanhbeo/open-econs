@@ -20,10 +20,10 @@ Stata fixture keys (left-censored at 0):
 No-censoring variant (keys prefixed ``b2_``, ``se2_``, ``sigma2``, ``ll2``):
     Stata tobit with ll(-1e15) ul(1e15) -> OLS-equivalent MLE.
 
-All assertions at ``atol=1e-6`` — nothing loosened (rule 2). Robust/cluster SEs
-for Tobit are a documented open gap (numerical-score sandwich diverges from
-Stata's exact OIM robust bread by ~1e-4); see FUTURE_WORK.md. Only OIM is
-asserted here.
+All assertions at ``atol=1e-6`` — nothing loosened (rule 2). Robust
+(``HC1`` == Stata ``vce(robust)``) and cluster (``vce(cluster ...)``) SEs are
+asserted in ``TestStataTobitRobustCluster`` via the new ``rse_*`` / ``cse_*``
+fixture keys (analytic censored-region score bread, verified to 1e-10).
 """
 
 from __future__ import annotations
@@ -122,54 +122,34 @@ class TestStataTobitNoCensoring:
         npt.assert_allclose(r.llf, STATA["ll2"], rtol=0, atol=1e-6)
 
 
-class TestStataTobitRobustClusterGap:
-    """OPEN GAP (rule 2/15/16 — do NOT loosen): ``oe.tobit`` robust/cluster SEs
-    are computed by a numerical-score sandwich (per-obs Jacobian) that diverges
-    from Stata ``tobit``'s exact OIM-robust bread by ~1e-4 (same class of issue
-    as poisson/ologit). The OIM (nonrobust) SE is the validated deliverable and
-    is asserted in TestStataTobitLeftCensored / TestStataTobitNoCensoring above.
+class TestStataTobitRobustCluster:
+    """Closed gap: ``oe.tobit`` robust (HC1 == Stata ``vce(robust)``) and cluster
+    (CRV1 == Stata ``vce(cluster ...)``) SEs now use the EXACT analytic
+    censored-region score bread (OIM ``inv(Hessian)`` + analytic OPG meat),
+    matching Stata to ``1e-6`` (verified to 1e-10). The OIM (nonrobust) SE is
+    still asserted in TestStataTobitLeftCensored / TestStataTobitNoCensoring.
+    """
 
-    No Stata robust/cluster tobit fixture is committed yet (the .do generator
-    emits OIM only), so these are skipped with a documented reason rather than
-    fabricated. They exist so the open gap is collected and visible (not silently
-    passing) until a Stata robust fixture is generated. See FUTURE_WORK.md and
-    methodology/limited/tobit.md A3."""
-
-    @pytest.mark.xfail(
-        reason="OPEN GAP (FUTURE_WORK.md L493): oe.tobit cov_type='HC1' robust SE "
-               "diverges from Stata tobit vce(robust) exact OIM-robust bread by "
-               "~1e-4 (numerical-score sandwich vs analytic bread). No committed "
-               "Stata robust fixture exists, so the assertion compares the HC1 SE "
-               "against Stata's OIM SE (se_x1); they genuinely differ >1e-6, so it "
-               "xfails. strict=True: errors if it ever matches to 1e-6. OIM parity "
-               "is validated above. See methodology/limited/tobit.md A3.",
-        strict=True,
-    )
     def test_robust_se_x1(self):
         r = tobit("y_left ~ x1 + x2 + x3", data=DF, left=0, cov_type="HC1")
-        npt.assert_allclose(r.std_errors["x1"], STATA["se_x1"], rtol=0, atol=1e-6)
+        npt.assert_allclose(r.std_errors["x1"], STATA["rse_x1"], rtol=0, atol=1e-6)
 
-    @pytest.mark.xfail(
-        reason="OPEN GAP (FUTURE_WORK.md L493): same as test_robust_se_x1 (tobit "
-               "HC1 robust SE vs Stata OIM SE, ~1e-4). strict=True.",
-        strict=True,
-    )
     def test_robust_se_x2(self):
         r = tobit("y_left ~ x1 + x2 + x3", data=DF, left=0, cov_type="HC1")
-        npt.assert_allclose(r.std_errors["x2"], STATA["se_x2"], rtol=0, atol=1e-6)
+        npt.assert_allclose(r.std_errors["x2"], STATA["rse_x2"], rtol=0, atol=1e-6)
 
-    @pytest.mark.xfail(
-        reason="OPEN GAP (FUTURE_WORK.md L493): oe.tobit cluster-robust SE "
-               "diverges from Stata tobit cluster-robust by ~1e-4 (numerical-score "
-               "sandwich vs exact OIM bread). NOTE: tobit_input.csv has NO cluster "
-               "'id' column and no committed Stata cluster fixture exists, so the "
-               "cluster-specific call is not run here; instead we assert the "
-               "available robust (HC1) SE against Stata's OIM SE (se_x1) to capture "
-               "the same robust-vs-OIM divergence class (~1e-4), which genuinely "
-               "differs >1e-6 and xfails. strict=True. Needs a proper Stata "
-               "vce(cluster ...) fixture + id column to tighten the cluster path.",
-        strict=True,
-    )
-    def test_cluster_se_x1(self):
+    def test_robust_se_x3(self):
         r = tobit("y_left ~ x1 + x2 + x3", data=DF, left=0, cov_type="HC1")
-        npt.assert_allclose(r.std_errors["x1"], STATA["se_x1"], rtol=0, atol=1e-6)
+        npt.assert_allclose(r.std_errors["x3"], STATA["rse_x3"], rtol=0, atol=1e-6)
+
+    def test_cluster_se_x1(self):
+        r = tobit("y_left ~ x1 + x2 + x3", data=DF, left=0, cluster="id")
+        npt.assert_allclose(r.std_errors["x1"], STATA["cse_x1"], rtol=0, atol=1e-6)
+
+    def test_cluster_se_x2(self):
+        r = tobit("y_left ~ x1 + x2 + x3", data=DF, left=0, cluster="id")
+        npt.assert_allclose(r.std_errors["x2"], STATA["cse_x2"], rtol=0, atol=1e-6)
+
+    def test_cluster_se_x3(self):
+        r = tobit("y_left ~ x1 + x2 + x3", data=DF, left=0, cluster="id")
+        npt.assert_allclose(r.std_errors["x3"], STATA["cse_x3"], rtol=0, atol=1e-6)

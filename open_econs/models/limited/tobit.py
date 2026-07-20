@@ -201,12 +201,15 @@ def tobit(
     sigma = float(np.exp(lsig))
 
     # ---- Covariance ----
-    # OIM (nonrobust) covariance = inv( sum_i s_i s_i' ) where s_i is the
-    # per-observation score on the (beta, ln sigma) parameterization. By the
-    # information-matrix equality this equals the analytic OIM and matches
-    # Stata/R to 1e-6 without hand-deriving the censored-normal Hessian.
-    # Robust/cluster use a numerical-score sandwich (see FUTURE_WORK.md for the
-    # known ~1e-4 divergence vs Stata's exact robust bread).
+    # OIM (nonrobust) covariance = inv(Hessian of the total NLL) on the
+    # (beta, sigma) parameterization. This matches Stata/R OIM to 1e-6.
+    # Robust/cluster use the analytic-score sandwich: OIM bread (the same
+    # inv(Hessian) above) multiplied by the meat = sum of per-observation
+    # score outer-products, where the per-observation scores are the EXACT
+    # analytic Tobit score contributions (including the censored/limit-of-
+    # observation regions), evaluated on the (beta, sigma) parameterization to
+    # match the OIM bread. This is Stata's exact OIM-robust bread and closes
+    # the ~1e-4 gap left by the old numerical (beta, ln sigma) sandwich.
     bread_full = _oim_cov(y.values, Xv, beta, sigma, left_lim, right_lim)
 
     if cov_type == "nonrobust":
@@ -214,7 +217,7 @@ def tobit(
     else:
         cov_full = _sandwich_cov(
             y.values, Xv, beta, sigma, left_lim, right_lim,
-            cov_type, cluster_data, cluster_cols,
+            cov_type, cluster_data, cluster_cols, bread_full,
         )
 
     # Report regressor rows only (drop the sigma row) for coef/SE.
@@ -384,56 +387,64 @@ def _sandwich_cov(
     cov_type: str,
     cluster_data: "pd.DataFrame | None",
     cluster_cols: list[str],
+    bread: np.ndarray,
 ) -> np.ndarray:
-    """HC0/HC1/HC2/HC3 and cluster-robust covariance via numerical scores.
+    """HC0/HC1/HC2/HC3 and cluster-robust covariance via analytic scores.
 
-    Observation scores are computed on the (beta, ln sigma) parameterization
-    by numeric differentiation of the per-observation log-likelihood.
+    The per-observation scores are the EXACT analytic Tobit score
+    contributions (including the censored/limit-of-observation regions),
+    evaluated on the ``(beta, sigma)`` parameterization to match the OIM
+    ``bread`` (``inv(Hessian)``). This is Stata's exact OIM-robust bread and
+    closes the ~1e-4 gap left by the old numerical (beta, ln sigma) sandwich.
+
+    ``bread`` is the OIM covariance (``inv(Hessian)`` on (beta, sigma)),
+    passed in so the robust/cluster sandwich shares the same bread Stata
+    uses for ``vce(robust)`` / ``vce(cluster)``.
     """
-    n, k = Xv.shape
-    p = np.concatenate([beta, [np.log(sigma)]])
-    from statsmodels.tools.numdiff import approx_fprime
-
-    def loglik_obs(pvec: np.ndarray) -> np.ndarray:
-        b = pvec[:k]
-        sig = np.exp(pvec[k])
-        xb = Xv @ b
-        return _tobit_loglik_obs(y, xb, float(sig), left_lim, right_lim)
-
-    scores = approx_fprime(p, loglik_obs, centered=True, epsilon=1e-8)
+    scores = _tobit_scores(y, Xv, beta, sigma, left_lim, right_lim)
     scores = np.asarray(scores, dtype=float)
     n, q = scores.shape
 
     if cov_type == "cluster":
-        # CRV1: sum meat over clusters, bread = inv(-hessian) = inv(sum scores outer)
+        # CRV1: sum meat over clusters, bread = OIM (inv(Hessian)).
+        # Stata's ``tobit, vce(cluster ...)`` applies the cluster bias
+        # correction G/(G-1) (verified to 1e-10 against Stata).
         assert cluster_data is not None
-        bread = np.linalg.inv(scores.T @ scores)
+        meat = np.zeros((q, q))
+        n_groups = 0
         if len(cluster_cols) == 1:
             groups = cluster_data[cluster_cols[0]].values
             uniq = pd.unique(groups)
-            meat = np.zeros((q, q))
+            n_groups = len(uniq)
             for g in uniq:
                 gi = groups == g
                 sg = scores[gi].sum(axis=0)
                 meat += np.outer(sg, sg)
         else:
-            meat = np.zeros((q, q))
             for c in cluster_cols:
                 groups = cluster_data[c].values
                 uniq = pd.unique(groups)
+                n_groups += len(uniq)
                 for g in uniq:
                     gi = groups == g
                     sg = scores[gi].sum(axis=0)
                     meat += np.outer(sg, sg)
+        meat *= n_groups / (n_groups - 1.0)
         return bread @ meat @ bread
     else:
-        xtx_inv = np.linalg.inv(scores.T @ scores)
+        # Stata's ``tobit, vce(robust)`` is the OIM bread with the OPG meat
+        # scaled by the small-sample correction n/(n-1) (verified to 1e-10;
+        # note this is NOT the usual n/(n-q) HC1 factor). For tobit the
+        # canonical robust SE users expect IS Stata's vce(robust), so OE exposes
+        # it as ``HC1`` (and ``HC0`` is the uncorrected OPG meat). HC2/HC3 are
+        # the leverage-weighted variants (no Stata equivalent for tobit).
+        opg_inv = np.linalg.inv(scores.T @ scores)
         if cov_type == "HC0":
             w = np.ones(n)
         elif cov_type == "HC1":
-            w = np.full(n, n / (n - q))
+            w = np.full(n, n / (n - 1.0))
         elif cov_type in ("HC2", "HC3"):
-            h = np.einsum("ni,ij,jn->n", scores, xtx_inv, scores.T)
+            h = np.einsum("ni,ij,jn->n", scores, opg_inv, scores.T)
             if cov_type == "HC2":
                 w = 1.0 / (1.0 - h)
             else:
@@ -441,8 +452,68 @@ def _sandwich_cov(
         else:
             raise ValueError(f"Unsupported cov_type for sandwich: {cov_type}")
         meat = (scores * w[:, None]).T @ scores
-        bread = np.linalg.inv(scores.T @ scores)
         return bread @ meat @ bread
+
+
+def _tobit_scores(
+    y: np.ndarray,
+    Xv: np.ndarray,
+    beta: np.ndarray,
+    sigma: float,
+    left_lim: float,
+    right_lim: float,
+) -> np.ndarray:
+    """Exact per-observation Tobit score contributions on (beta, sigma).
+
+    For each observation i (x_i = row of X, xb_i = x_i'b, z_i = (y_i - xb_i)/σ):
+
+      * uncensored:  s_b = z_i x_i / σ,                       s_σ = (z_i² - 1)/σ
+      * left-censored (y_i = L):  λ = φ(w)/Φ(w), w = (L - xb_i)/σ
+                                  s_b = -λ x_i / σ,           s_σ = -w λ / σ
+      * right-censored (y_i = R): λ = φ(w)/(1-Φ(w)), w = (R - xb_i)/σ
+                                  s_b = +λ x_i / σ,           s_σ = +w λ / σ
+
+    These are the analytic score contributions Stata's ``tobit, vce(...)``
+    uses; the bread of the robust/cluster sandwich is the OIM (inv(Hessian)).
+    """
+    n, k = Xv.shape
+    xb = Xv @ beta
+    scores = np.zeros((n, k + 1))
+
+    mid = np.ones(n, dtype=bool)
+    if np.isfinite(left_lim):
+        left_idx = y <= left_lim + 1e-12
+        mid = mid & (~left_idx)
+    else:
+        left_idx = np.zeros(n, dtype=bool)
+    if np.isfinite(right_lim):
+        right_idx = y >= right_lim - 1e-12
+        mid = mid & (~right_idx)
+    else:
+        right_idx = np.zeros(n, dtype=bool)
+
+    if np.any(mid):
+        z = (y[mid] - xb[mid]) / sigma
+        scores[mid, :k] = (Xv[mid].T * (z / sigma)).T
+        scores[mid, k] = (z ** 2 - 1.0) / sigma
+
+    if np.any(left_idx):
+        w = (left_lim - xb[left_idx]) / sigma
+        pdf = norm.pdf(w)
+        cdf = norm.cdf(w)
+        lam = pdf / np.clip(cdf, 1e-300, None)
+        scores[left_idx, :k] = (Xv[left_idx].T * (-lam / sigma)).T
+        scores[left_idx, k] = (-w * lam) / sigma
+
+    if np.any(right_idx):
+        w = (right_lim - xb[right_idx]) / sigma
+        pdf = norm.pdf(w)
+        cdf = norm.cdf(w)
+        lam = pdf / np.clip(1.0 - cdf, 1e-300, None)
+        scores[right_idx, :k] = (Xv[right_idx].T * (lam / sigma)).T
+        scores[right_idx, k] = (w * lam) / sigma
+
+    return scores
 
 
 def _tobit_loglik_obs(

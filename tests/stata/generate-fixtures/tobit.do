@@ -37,6 +37,16 @@ scalar ll_l = e(ll)
 scalar n_left_l = e(N_lc)
 scalar n_right_l = e(N_rc)
 
+* --- robust (vce(robust)) and cluster (vce(cluster id)) SEs (left-censored) ---
+tobit y_left x1 x2 x3, ll(0) vce(robust)
+scalar rse_x1 = _se[x1]
+scalar rse_x2 = _se[x2]
+scalar rse_x3 = _se[x3]
+tobit y_left x1 x2 x3, ll(0) vce(cluster id)
+scalar cse_x1 = _se[x1]
+scalar cse_x2 = _se[x2]
+scalar cse_x3 = _se[x3]
+
 * --- no-censoring variant (left(-inf) right(inf)): OLS-equivalent MLE ---
 tobit y_nocens x1 x2 x3, ll(-1e15) ul(1e15)
 matrix b2 = e(b)
@@ -58,6 +68,7 @@ gen double value = .
 
 local i = 1
 foreach v in b_x1 b_x2 b_x3 se_x1 se_x2 se_x3 sigma_l logscale_l ll_l n_left_l n_right_l ///
+               rse_x1 rse_x2 rse_x3 cse_x1 cse_x2 cse_x3 ///
                b2_x1 b2_x2 b2_x3 se2_x1 se2_x2 se2_x3 sigma2 ll2 {
     replace name = "`v'" in `i'
     replace value = `v' in `i'
