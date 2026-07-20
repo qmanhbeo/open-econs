@@ -424,7 +424,7 @@ def abond(
             n_iv_i = len(iv_cols)
             n_instr_i = n_gmm_i + n_iv_i
 
-            Z_i = np.zeros((T_i, n_instr_i))
+            Z_i: np.ndarray[Any, Any] = np.zeros((T_i, n_instr_i))
             col = 0
             for d in depths:
                 # L.y block — lag_offset = lags
