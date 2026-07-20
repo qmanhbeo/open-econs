@@ -1,28 +1,29 @@
-*! VAR/VECM fixture generation for open-econs parity tests
+﻿*! VAR/VECM fixture generation for open-econs parity tests
 *! Uses var_input.csv (200 obs, 2 variables: y1, y2)
 *!
 *! Johansen cases (Osterwald-Lenum 1992):
-*!   Case 1: trend(none)       — no deterministic term
-*!   Case 2: trend(rconstant)  — restricted constant (in CE only)
-*!   Case 3: trend(constant)   — unrestricted constant (default)
-*!   Case 4: trend(rtrend)     — restricted trend (in CE only)
-*!   Case 5: trend(trend)      — unrestricted trend
+*!   Case 1: trend(none)       â€” no deterministic term
+*!   Case 2: trend(rconstant)  â€” restricted constant (in CE only)
+*!   Case 3: trend(constant)   â€” unrestricted constant (default)
+*!   Case 4: trend(rtrend)     â€” restricted trend (in CE only)
+*!   Case 5: trend(trend)      â€” unrestricted trend
 
 clear all
 set more off
 
 * Import data
+set type double
 import delimited "tests/r/fixtures/inputs/var_input.csv", clear
 
 * Create time index for tsset
 gen t = _n
 tsset t
 
-* ── 1. VAR lag order selection (varsoc) ──────────────────────────
+* â”€â”€ 1. VAR lag order selection (varsoc) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 var y1 y2, lags(1/5)
 varsoc, max(5)
 
-* ── 2. VAR estimation at lag 2 ──────────────────────────────────
+* â”€â”€ 2. VAR estimation at lag 2 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 var y1 y2, lags(1/2)
 estat ic
 
@@ -33,7 +34,7 @@ scalar aic_var = e(aic)
 scalar bic_var = e(N) * e(sbic)
 scalar hqic_var = e(hqic)
 
-* ── 3. Johansen cointegration — all 5 cases ─────────────────────
+* â”€â”€ 3. Johansen cointegration â€” all 5 cases â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 * vecrank uses trend() option: none/rconstant/constant/rtrend/trend
 * For 2 variables: e(trace) and e(max) are 1x2 matrices [r<=0, r<=1]
 * CVs from _vecgetcv are 11x5 matrices [K-r x trend_type]
@@ -83,14 +84,14 @@ matrix cv_tr5 = r(cv95)
 _vecgetcv max
 matrix cv_me5 = r(cv95)
 
-* ── 4. Granger causality (vargranger) ───────────────────────────
+* â”€â”€ 4. Granger causality (vargranger) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 * Re-estimate VAR for vargranger
 var y1 y2, lags(1/2)
 
 * Default: chi-squared (Wald)
 vargranger
 
-* ── 5. Save results as .dta ─────────────────────────────────────
+* â”€â”€ 5. Save results as .dta â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 * Structure: name-value pairs for all quantities
 * For 2 variables, vecrank produces 2 test statistics per test type per case
 
@@ -113,7 +114,7 @@ local i = `i' + 1
 replace name = "hqic_var" in `i'
 replace value = hqic_var in `i'
 
-* ── Johansen trace statistics (e(trace) is 1 x k, columns = r<=0, r<=1) ──
+* â”€â”€ Johansen trace statistics (e(trace) is 1 x k, columns = r<=0, r<=1) â”€â”€
 
 * Case 1: trace
 local i = `i' + 1
@@ -155,7 +156,7 @@ local i = `i' + 1
 replace name = "trace_case5_r2" in `i'
 replace value = tr5[1, 2] in `i'
 
-* ── Johansen max-eigenvalue statistics (e(max) is 1 x k) ───────
+* â”€â”€ Johansen max-eigenvalue statistics (e(max) is 1 x k) â”€â”€â”€â”€â”€â”€â”€
 
 * Case 1: maxeig
 local i = `i' + 1
@@ -197,7 +198,7 @@ local i = `i' + 1
 replace name = "maxeig_case5_r2" in `i'
 replace value = me5[1, 2] in `i'
 
-* ── Johansen 5% CVs from _vecgetcv ──────────────────────────────
+* â”€â”€ Johansen 5% CVs from _vecgetcv â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 * cv95 is 11x5: rows = K-r (1..11), cols = trend type (1..5)
 * For 2 vars: K=2, so K-r=2 at r=0, K-r=1 at r=1
 
@@ -241,7 +242,7 @@ local i = `i' + 1
 replace name = "cv_trace5_case5_r2" in `i'
 replace value = cv_tr5[1, 5] in `i'
 
-* ── Johansen 5% CVs — max-eigenvalue ────────────────────────────
+* â”€â”€ Johansen 5% CVs â€” max-eigenvalue â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 * Case 1 (trend col=1): cv_maxeig5
 local i = `i' + 1

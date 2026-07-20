@@ -1,8 +1,9 @@
-*! diag_estat.do — diagnostic parity fixtures (White / Breusch-Godfrey /
+﻿*! diag_estat.do â€” diagnostic parity fixtures (White / Breusch-Godfrey /
 *!   Cook's D / leverage / dfbeta / Ljung-Box) for OLS y ~ x1 + x2.
 clear all
 set more off
 log using "C:\Users\manhn\Desktop\open-econs\tests\stata\generate-fixtures\diag_estat_run.log", text replace
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_ols.csv", clear
 regress y x1 x2
 

@@ -1,7 +1,8 @@
-*! oaxaca_two_fold.do — Oaxaca-Blinder two-fold via pooled, omega, weight(1), weight(0)
+﻿*! oaxaca_two_fold.do â€” Oaxaca-Blinder two-fold via pooled, omega, weight(1), weight(0)
 *! (SSC: oaxaca v4.1.1, Ben Jann)
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_oaxaca.csv", clear
 
 * --- pooled reference ---

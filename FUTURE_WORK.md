@@ -432,8 +432,13 @@ relaxed tolerances (standing rule 2).
 - **Scope:** grep `tests/stata/generate-fixtures/*.do` for `import delimited`
   without a preceding `set type double`; add it defensively and re-run the drift
   check. Low risk, mechanical; good subagent task (rule 9).
-- **Status:** PENDING (out of scope for the v1.1.2 commit set). Recorded per
-  rules 12/18 so it is not lost.
+- **Status:** CLOSED (2026-07-20). All 63 `*.do` generators that `import
+  delimited` now carry `set type double` immediately before the import (5 were
+  already correct: `ardl.do`, `nbreg.do`, `ordered.do`, `poisson.do`,
+  `tobit.do`; 58 were fixed). The drift check was re-run and no committed
+  `.dta` fixture changed (current inputs are well-conditioned; the footgun only
+  bites ill-conditioned data, per rule 6 any future drift would be investigated,
+  not absorbed).
 - **Context:** root cause fully written up in `methodology/timeseries/ardl.md`
   and the inline comment block of `tests/stata/generate-fixtures/ardl.do`.
 

@@ -1,6 +1,7 @@
-*! panel_pooled.do — Pooled OLS (regress)
+﻿*! panel_pooled.do â€” Pooled OLS (regress)
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 regress y x z
 

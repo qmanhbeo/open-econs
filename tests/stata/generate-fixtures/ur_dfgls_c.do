@@ -1,4 +1,5 @@
-clear
+﻿clear
+set type double
 import delimited using "tests/r/fixtures/inputs/ur_input.csv", clear
 gen t = _n
 tsset t

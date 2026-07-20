@@ -1,7 +1,8 @@
-*! toy_sysgmm.do — Tiny synthetic panel for system-GMM AR test triangulation.
+﻿*! toy_sysgmm.do â€” Tiny synthetic panel for system-GMM AR test triangulation.
 clear all
 set more off
 
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\generate-fixtures\toy_sysgmm.csv", clear
 xtset entity time
 

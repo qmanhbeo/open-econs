@@ -1,6 +1,7 @@
-*! panel_fd.do — First difference estimator via manual differencing
+﻿*! panel_fd.do â€” First difference estimator via manual differencing
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 xtset entity time
 gen dy = D.y

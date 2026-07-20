@@ -1,10 +1,11 @@
-*! abond.do — All 8 Arellano-Bond flavors (collapsed + non-collapsed) against xtabond2.
+﻿*! abond.do â€” All 8 Arellano-Bond flavors (collapsed + non-collapsed) against xtabond2.
 *! xtabond2 3.7.2 (David Roodman, Feb 2025), Stata/MP 17.0.
 *! Reference: https://github.com/droodman/xtabond2
 clear all
 set more off
 capture ssc install xtabond2
 
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 xtset entity time
 

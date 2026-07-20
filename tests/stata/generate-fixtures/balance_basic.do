@@ -1,6 +1,7 @@
-*! balance_basic.do — Covariate balance (Welch t-tests, Treated - Control)
+﻿*! balance_basic.do â€” Covariate balance (Welch t-tests, Treated - Control)
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_ols.csv", clear
 gen treat = (province == "north")
 

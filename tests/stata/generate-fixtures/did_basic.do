@@ -1,6 +1,7 @@
-*! did_basic.do — Two-period DiD
+﻿*! did_basic.do â€” Two-period DiD
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_did.csv", clear
 gen treat_post = treat * post
 regress y treat post treat_post

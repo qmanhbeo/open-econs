@@ -1,6 +1,7 @@
-*! panel_fe.do — Fixed effects (xtreg, fe)
+﻿*! panel_fe.do â€” Fixed effects (xtreg, fe)
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 xtset entity time
 xtreg y x z, fe

@@ -1,6 +1,7 @@
-*! panel_fe_multiway_cluster.do — FE with multiway cluster SEs (reghdfe)
+﻿*! panel_fe_multiway_cluster.do â€” FE with multiway cluster SEs (reghdfe)
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 
 * Two-way cluster on entity and time, absorb both as FE

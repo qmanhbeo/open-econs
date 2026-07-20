@@ -1,4 +1,4 @@
-*! rreg.do — Stata rreg (robust regression, Tukey bisquare M-estimator) parity fixture.
+﻿*! rreg.do â€” Stata rreg (robust regression, Tukey bisquare M-estimator) parity fixture.
 *! Stata/MP 17.0, `rreg` command.
 *!
 *! Stata `rreg y x1 x2` = robust regression: M-estimator with Tukey bisquare
@@ -6,6 +6,7 @@
 *! robust (sandwich) e(V) by default. We dump e(b), e(se), and e(V) to a .dta.
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\rreg_input.csv", clear
 
 rreg y x1 x2

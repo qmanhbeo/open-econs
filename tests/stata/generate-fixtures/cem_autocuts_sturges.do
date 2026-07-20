@@ -1,7 +1,8 @@
-*! cem_autocuts_sturges.do — CEM with Sturges autocuts, export full results
+﻿*! cem_autocuts_sturges.do â€” CEM with Sturges autocuts, export full results
 clear all
 set more off
 
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_cem_autocuts.csv", clear
 
 * Run CEM with autocuts(sturges) (default)

@@ -1,6 +1,7 @@
-*! panel_re.do — Random effects (xtreg, re)
+﻿*! panel_re.do â€” Random effects (xtreg, re)
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 xtset entity time
 xtreg y x z, re

@@ -1,8 +1,9 @@
-*! psm_basic.do — PSM 1:1 with replacement, ATE, logit PS, no effective caliper.
+﻿*! psm_basic.do â€” PSM 1:1 with replacement, ATE, logit PS, no effective caliper.
 *! teffects psmatch only supports matching WITH replacement (no noreplacement opt).
 *! caliper(1.0) removes the caliper constraint (PS in [0,1]).
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_psm.csv", clear
 
 teffects psmatch (y) (t x1 x2, logit), ate caliper(1.0)

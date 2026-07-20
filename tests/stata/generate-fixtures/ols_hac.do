@@ -1,6 +1,7 @@
-*! ols_hac.do — OLS with Newey-West HAC SEs (lag 2)
+﻿*! ols_hac.do â€” OLS with Newey-West HAC SEs (lag 2)
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_ols.csv", clear
 gen t = _n
 tsset t

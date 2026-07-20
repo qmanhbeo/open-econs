@@ -1,6 +1,7 @@
-*! did_cs_unbalanced.do — Callaway & Sant'Anna (2021) DiD — unbalanced cohorts
+﻿*! did_cs_unbalanced.do â€” Callaway & Sant'Anna (2021) DiD â€” unbalanced cohorts
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel_unbalanced.csv", clear
 
 * Match the Python-side unbalanced test: keep entities 0-22 only.

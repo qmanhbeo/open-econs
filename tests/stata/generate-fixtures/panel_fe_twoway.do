@@ -1,6 +1,7 @@
-*! panel_fe_twoway.do — Two-way FE: entity + time dummies
+﻿*! panel_fe_twoway.do â€” Two-way FE: entity + time dummies
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 xtset entity time
 xtreg y x z i.time, fe

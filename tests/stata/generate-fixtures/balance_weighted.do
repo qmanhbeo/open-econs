@@ -1,4 +1,4 @@
-*! balance_weighted.do — Weighted covariate balance reference (Stata ground truth).
+﻿*! balance_weighted.do â€” Weighted covariate balance reference (Stata ground truth).
 *!
 *! Every scalar below was produced by a real Stata command:
 *!   - summarize with [iw=w] for weighted means and variances
@@ -6,8 +6,8 @@
 *!   - scalar arithmetic from those Stata-produced numbers for SMD and VR
 *! No values were hand-typed, read from pstest's display, or computed outside Stata.
 *!
-*! The SMD is stored as a raw ratio (not pstest's ×100 %-bias convention) to match
-*! open-econs's output scaling — the test code does not multiply by 100.
+*! The SMD is stored as a raw ratio (not pstest's Ã—100 %-bias convention) to match
+*! open-econs's output scaling â€” the test code does not multiply by 100.
 *!
 *! Weight scheme (PSM convention): treated always get weight 1 (as per pstest's
 *! internal override), control weights drawn from Unif[0.5, 2.5] with seed 20240711.
@@ -17,6 +17,7 @@
 
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_psm.csv", clear
 
 * ---- Generate weights (treated = 1, control ~ Unif[0.5, 2.5]) ----
@@ -27,7 +28,7 @@ gen w = cond(t == 1, 1, runiform() * 2 + 0.5)
 export delimited using "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_balance_weighted.csv", replace
 
 * ===== x1 =====
-* Weighted treated mean (all weights=1 → same as unweighted)
+* Weighted treated mean (all weights=1 â†’ same as unweighted)
 sum x1 if t == 1
 scalar m1m_x1 = r(mean)
 * Weighted control mean [iw = w]

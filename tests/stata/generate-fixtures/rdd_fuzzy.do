@@ -1,7 +1,8 @@
-*! rdd_fuzzy.do — Fuzzy RDD (SSC: rdrobust)
+﻿*! rdd_fuzzy.do â€” Fuzzy RDD (SSC: rdrobust)
 clear all
 set more off
 capture ssc install rdrobust
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_rdd.csv", clear
 rdrobust y_fuzzy x, c(0) fuzzy(treat)
 

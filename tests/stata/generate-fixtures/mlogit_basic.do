@@ -1,6 +1,7 @@
-*! mlogit_basic.do -- Multinomial logit parity fixture (base = 1, pinned on both sides)
+﻿*! mlogit_basic.do -- Multinomial logit parity fixture (base = 1, pinned on both sides)
 clear
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_mlogit.csv", clear
 
 * --- cluster-robust estimation (also yields coefficients) ---

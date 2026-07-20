@@ -1,6 +1,7 @@
-*! logit_basic.do — Binary logit
+﻿*! logit_basic.do â€” Binary logit
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_logit.csv", clear
 logit y x1 x2
 

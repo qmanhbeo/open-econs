@@ -1,6 +1,7 @@
-*! iv_cluster.do — IV / 2SLS with single-way cluster SEs
+﻿*! iv_cluster.do â€” IV / 2SLS with single-way cluster SEs
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_iv_cluster.csv", clear
 ivregress 2sls y w (x = z), cluster(firm)
 

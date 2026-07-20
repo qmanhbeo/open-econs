@@ -1,6 +1,7 @@
-*! iv_robust.do — IV/2SLS overidentified, HC1 robust SEs (Stata parity)
+﻿*! iv_robust.do â€” IV/2SLS overidentified, HC1 robust SEs (Stata parity)
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_iv_panel.csv", clear
 ivregress 2sls y w (x = z1 z2), vce(robust)
 scalar s_b0  = _b[_cons]

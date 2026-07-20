@@ -1,7 +1,8 @@
-*! iv_fe.do  IV/2SLS with entity fixed effects, Stata xtivreg,fe parity
+﻿*! iv_fe.do  IV/2SLS with entity fixed effects, Stata xtivreg,fe parity
 *! Captures robust and nonrobust SEs. xtivreg,fe sweeps the intercept.
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_iv_panel.csv", clear
 xtset id t
 

@@ -1,4 +1,4 @@
-*! cem_basic.do — CEM with explicit cutpoints, export per-observation results.
+﻿*! cem_basic.do â€” CEM with explicit cutpoints, export per-observation results.
 *!
 *! Cutpoints:
 *!   x1: 5 equally-spaced breakpoints (-2, -1, 0, 1, 2) -> 4 bins
@@ -8,6 +8,7 @@
 clear all
 set more off
 
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_cem.csv", clear
 
 * Display data summary

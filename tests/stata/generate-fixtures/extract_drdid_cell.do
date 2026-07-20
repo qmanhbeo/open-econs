@@ -1,5 +1,6 @@
-clear all
+﻿clear all
 log using "C:\Users\manhn\AppData\Local\Temp\opencode\extract.log", text replace
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 drop if entity >= 20
 

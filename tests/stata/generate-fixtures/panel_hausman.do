@@ -1,7 +1,8 @@
-*! panel_hausman.do — Hausman test (FE vs RE)
+﻿*! panel_hausman.do â€” Hausman test (FE vs RE)
 *! Stores the DISPLAYED chi2, not e(chi2) which is a ghost variable.
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 xtset entity time
 
@@ -19,7 +20,7 @@ matrix V_re_full = e(V)
 hausman fe_model re_model
 
 * Compute the DISPLAYED chi2 manually from the quadratic form
-* (e(chi2) is unreliable — it stores a different statistic)
+* (e(chi2) is unreliable â€” it stores a different statistic)
 matrix b_fe = b_fe_full[1, 1..2]
 matrix b_re = b_re_full[1, 1..2]
 matrix V_fe = V_fe_full[1..2, 1..2]

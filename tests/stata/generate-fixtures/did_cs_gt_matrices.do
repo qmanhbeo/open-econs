@@ -1,8 +1,9 @@
-*! did_cs_gt_matrices.do ??? Extract csdid per-obs RIF + cell V/ATT (svmat)
+﻿*! did_cs_gt_matrices.do ??? Extract csdid per-obs RIF + cell V/ATT (svmat)
 clear all
 set more off
 log using "tests/stata/fixtures/expected/did_cs_gt_matrices.log", replace text
 
+set type double
 import delimited "tests/stata/fixtures/inputs/df_panel.csv", clear
 drop if entity >= 20
 gen gvar = 0

@@ -1,11 +1,12 @@
-*! event_study.do — Event-study regression parity fixture
+﻿*! event_study.do â€” Event-study regression parity fixture
 *!
 *! Note: Stata rejects negative values in factor variables (e.g. event_time = -1).
 *! We use `post if treated == 1` instead, because for treated units
-*!   event_time = post - 1  ⇒  D(event_time = 0) = post,
+*!   event_time = post - 1  â‡’  D(event_time = 0) = post,
 *! so the model is algebraically identical.
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_event_study.csv", clear
 
 * ===== Model 1: no covariates  ==============================================

@@ -1,7 +1,8 @@
-*! cem_autocuts_scott.do — CEM with Scott autocuts, export full results
+﻿*! cem_autocuts_scott.do â€” CEM with Scott autocuts, export full results
 clear all
 set more off
 
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_cem_autocuts.csv", clear
 
 cap noi cem x1 x2 x3, treatment(t) autocuts(scott)

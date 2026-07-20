@@ -1,8 +1,8 @@
-*! gmm.do — Linear GMM parity fixtures for open-econs gmm() vs Stata gmm.
+﻿*! gmm.do â€” Linear GMM parity fixtures for open-econs gmm() vs Stata gmm.
 *! Stata/MP 17.0, Stata `gmm` command.
 *!
 *! Exactly-identified cases: expression form with winitial(identity) (already
-*! matches OE to machine epsilon — identity weighting gives the same
+*! matches OE to machine epsilon â€” identity weighting gives the same
 *! estimator as (Z'Z)^{-1} when L == p).
 *!
 *! Over-identified cases: single-equation form with instruments() and
@@ -10,7 +10,7 @@
 *! (b = (X'Z(Z'Z)^{-1}Z'X)^{-1} X'Z(Z'Z)^{-1}Z'Y), matching OE's
 *! closed-form two-step GMM coefficients exactly.  The previous fixture
 *! used expression-form moment conditions with winitial(identity), which
-*! minimizes (Y-Xb)'ZZ'(Y-Xb) — a different objective that does NOT
+*! minimizes (Y-Xb)'ZZ'(Y-Xb) â€” a different objective that does NOT
 *! give 2SLS in the overidentified case (confirmed 2026-07-17).
 *!
 *! NOTE on two-step SEs: Stata's `gmm` does NOT apply the Windmeijer
@@ -19,6 +19,7 @@
 *! (~15%) and are NOT valid parity targets for SE assertions.
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_gmm.csv", clear
 
 postfile handle str32 name double value ///

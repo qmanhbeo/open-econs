@@ -1,7 +1,8 @@
-*! logit_margins.do — Logit marginal effects (AME)
+﻿*! logit_margins.do â€” Logit marginal effects (AME)
 * Computes Average Marginal Effects (AME) to match Stata's default margins
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_logit.csv", clear
 
 * Estimate logit

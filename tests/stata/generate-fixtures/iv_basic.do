@@ -1,6 +1,7 @@
-*! iv_basic.do — IV / 2SLS
+﻿*! iv_basic.do â€” IV / 2SLS
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_iv.csv", clear
 ivregress 2sls y x2 (x = z)
 

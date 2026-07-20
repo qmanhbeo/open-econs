@@ -1,6 +1,7 @@
-*! did_cs.do — Callaway & Sant'Anna (2021) DiD via csdid — balanced cohorts
+﻿*! did_cs.do â€” Callaway & Sant'Anna (2021) DiD via csdid â€” balanced cohorts
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_panel.csv", clear
 
 * Match the Python-side balanced test: keep entities 0-19 only.

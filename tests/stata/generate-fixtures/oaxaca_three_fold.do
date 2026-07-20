@@ -1,7 +1,8 @@
-*! oaxaca_three_fold.do — Oaxaca-Blinder three-fold (default + reverse)
+﻿*! oaxaca_three_fold.do â€” Oaxaca-Blinder three-fold (default + reverse)
 *! (SSC: oaxaca v4.1.1, Ben Jann)
 clear all
 set more off
+set type double
 import delimited "C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\inputs\df_oaxaca.csv", clear
 
 * --- three-fold default (group 2 coefficients as reference) ---
