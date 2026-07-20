@@ -75,11 +75,18 @@ def nbreg(
     cov_type : str, default "HC1"
         Heteroskedasticity-robust estimator used when *cluster* is not set.
         One of ``"nonrobust"``, ``"HC0"``, ``"HC1"``, ``"HC2"``, ``"HC3"``.
-    dispersion : {"const", "mean"}, default "const"
+    dispersion : {"const", "mean", "const_stata"}, default "const"
         Overdispersion structure (Stata ``nbreg, dispersion(...))`` naming).
 
-        - ``"const"`` -> **NB2** (DEFAULT): ``Var = mu + alpha*mu**2``.
+        - ``"const"`` -> **NB2** (DEFAULT): ``Var = mu + alpha*mu**2``. Matches
+          R ``MASS::glm.nb`` / ``fixest::fenegbin`` and Stata
+          ``nbreg, dispersion(mean)`` to 1e-6 on this dataset.
         - ``"mean"``  -> **NB1**: ``Var = mu * (1 + alpha)``.
+        - ``"const_stata"`` -> **Stata ``nbreg, dispersion(constant)``**: the
+          Stata-specific NB2 MLE (Var = ``mu * (1 + delta)``, source: Stata
+          ``nbreg_al.ado``). This reproduces Stata's ``dispersion(constant)``
+          coefficients, ``delta``, and log-likelihood to 1e-6 (a different MLE
+          from textbook NB2).  Pooled estimation only.
     vcov_backend : {"fixest", "stata"}, default "fixest"
         Small-sample convention for the reported variance (rule-15 toggle).
         Only rescales the cluster/robust variance — point estimates, deviance,
@@ -124,14 +131,21 @@ def nbreg(
         accepted={"nonrobust", "HC0", "HC1", "HC2", "HC3"},
         estimator="nbreg()",
     )
-    if dispersion not in ("const", "mean"):
+    if dispersion not in ("const", "mean", "const_stata"):
         raise ValueError(
-            f"dispersion must be 'const' (NB2) or 'mean' (NB1), got "
+            f"dispersion must be 'const' (NB2), 'mean' (NB1), or "
+            f"'const_stata' (Stata nbreg, dispersion(constant)), got "
             f"{dispersion!r}."
         )
 
     fe_parts: list[str] = list(fixed_effects) if fixed_effects else []
     has_fe = len(fe_parts) > 0
+    if dispersion == "const_stata" and has_fe:
+        raise NotImplementedError(
+            "dispersion='const_stata' (Stata nbreg, dispersion(constant)) is "
+            "implemented for pooled estimation only; fixed effects are not yet "
+            "supported for the Stata constant-dispersion NB2 MLE."
+        )
 
     lhs = formula.split("~", 1)[0].strip()
     rhs_formula = formula.split("~", 1)[1].strip()
@@ -270,7 +284,9 @@ def nbreg(
 def _nb_var(mu: np.ndarray, alpha: float, dispersion: str) -> np.ndarray:
     if dispersion == "const":  # NB2
         return mu + alpha * mu ** 2
-    return mu * (1.0 + alpha)  # NB1
+    # NB1 (Hilbe) and Stata "const_stata" both have Var = mu*(1+overdispersion)
+    # (for const_stata the overdispersion slot carries Stata's delta).
+    return mu * (1.0 + alpha)
 
 
 def _nb_loglik(
@@ -289,6 +305,22 @@ def _nb_loglik(
                 + gammaln(y + a)
                 - gammaln(a)
                 - gammaln(y + 1.0)
+            )
+        return float(np.sum(wts * term))
+    if dispersion == "const_stata":  # Stata nbreg_al, dispersion(constant)
+        # Source: Stata base nbreg_al.ado.  Parameters: xb = X*beta, delta =
+        # exp(lndelta) (Stata e(delta)); mu = exp(xb), m = mu/delta.  This is a
+        # Stata-specific NB2 MLE (Var = mu*(1+delta)) that differs from the
+        # textbook NB2 gamma mixture (oe "const") and from R glm.nb.
+        delta = alpha
+        with np.errstate(divide="ignore", invalid="ignore"):
+            m = mu / delta
+            term = (
+                gammaln(y + m)
+                - gammaln(y + 1.0)
+                - gammaln(m)
+                + np.log(delta) * y
+                - (y + m) * np.log1p(delta)
             )
         return float(np.sum(wts * term))
     else:  # NB1: Var = mu*(1+alpha) (Hilbe NB1)
@@ -322,25 +354,97 @@ def _nb_deviance(y: np.ndarray, mu: np.ndarray, alpha: float, dispersion: str) -
                 0.0,
             )
             return float(2.0 * np.sum(ll_sat - ll_mod))
-        else:
+        if dispersion == "const_stata":
+            delta = alpha
+            m = mu / delta
+            ll_mod = (
+                gammaln(y + m) - gammaln(y + 1.0) - gammaln(m)
+                + np.log(delta) * y - (y + m) * np.log1p(delta)
+            )
+            ms = np.where(y > 0, y / delta, 0.0)
+            ll_sat = np.where(
+                y > 0,
+                gammaln(y + ms) - gammaln(y + 1.0) - gammaln(ms)
+                + np.log(delta) * y - (y + ms) * np.log1p(delta),
+                0.0,
+            )
+            return float(2.0 * np.sum(ll_sat - ll_mod))
+        elif dispersion == "mean":  # NB1: Var = mu*(1+alpha) (Hilbe NB1)
             a = 1.0 / alpha
             ll_mod = (
                 y * np.log(np.where(mu > 0, mu, 1.0))
                 - (y + a) * np.log(mu + alpha)
-                + a * np.log(alpha) + gammaln(y + a) - gammaln(a) - gammaln(y + 1.0)
+                + a * np.log(alpha)
+                + gammaln(y + a) - gammaln(a) - gammaln(y + 1.0)
             )
             ll_sat = np.where(
                 y > 0,
                 y * np.log(y) - (y + a) * np.log(y + alpha)
-                + a * np.log(alpha) + gammaln(y + a) - gammaln(a) - gammaln(y + 1.0),
+                + a * np.log(alpha) + gammaln(y + a) - gammaln(a)
+                - gammaln(y + 1.0),
                 0.0,
             )
             return float(2.0 * np.sum(ll_sat - ll_mod))
+        raise ValueError(f"unknown dispersion: {dispersion}")
 
 
 # --------------------------------------------------------------------------- #
 # Fitting
 # --------------------------------------------------------------------------- #
+def _nb_oim_bread(
+    *, y: np.ndarray, X: np.ndarray, beta: np.ndarray, alpha: float,
+    mu: np.ndarray, dispersion: str,
+) -> np.ndarray:
+    """Stata ``nbreg`` OIM (observed-information) bread for the beta block.
+
+    Stata ``nbreg`` non-clustered SEs use the inverse of the **full** observed
+    information matrix (beta and the overdispersion aux parameter jointly), not
+    the GLM-style ``inv(X' W X)`` bread that R ``glm.nb`` / ``fixest`` use.  This
+    is the "robustified OIM" divergence documented in
+    ``methodology/limited/nbreg.md`` §2.2.
+
+    Source: Stata base ``nbreg_lf.ado`` (dispersion mean/``const`` here) and
+    ``nbreg_al.ado`` (``const_stata``).  Returns the k-by-k OIM bread, i.e. the
+    beta-beta block of ``inv(-H)`` where ``H`` is the full (k+1)x(k+1) observed
+    Hessian of the log-likelihood wrt ``(beta, ln_aux)``.
+    """
+    from scipy.special import digamma, polygamma
+
+    k = X.shape[1]
+    if dispersion == "const_stata":
+        delta = alpha
+        m = mu / delta
+        dd = -m * (
+            digamma(y + m) - digamma(m) - np.log1p(delta)
+            + m * (polygamma(1, y + m) - polygamma(1, m))
+        )
+        d11 = (X * dd[:, None]).T @ X
+        d12 = ((m * delta / (1.0 + delta) - dd)[:, None] * X).sum(axis=0)
+        d22 = np.sum(
+            delta * (y - m * (1.0 + 2.0 * delta)) / (1.0 + delta) ** 2 + dd
+        )
+    else:  # textbook NB2 gamma mixture (oe "const"); aux = alpha = 1/m
+        a = 1.0 / alpha
+        p = 1.0 / (1.0 + mu * alpha)
+        w11 = mu * p * (alpha * p * (y - mu) + 1.0)
+        d11 = (X * w11[:, None]).T @ X
+        w12 = alpha * mu * p ** 2 * (y - mu)
+        d12 = ((w12[:, None]) * X).sum(axis=0)
+        t1 = a * (digamma(a) - digamma(y + a) - np.log(p))
+        t2 = a ** 2 * (polygamma(1, y + a) - polygamma(1, a))
+        d22 = np.sum(t1 - t2) + np.sum(mu * p * (alpha * p * (y - mu) - 1.0))
+    H = np.zeros((k + 1, k + 1))
+    H[:k, :k] = d11
+    H[:k, k] = d12
+    H[k, :k] = d12
+    H[k, k] = d22
+    try:
+        hess_inv = np.linalg.inv(H)
+    except np.linalg.LinAlgError:
+        hess_inv = np.linalg.pinv(H)
+    return hess_inv[:k, :k]
+
+
 def _fit_nb(
     *, y: np.ndarray, X: np.ndarray, fe_groups: list[np.ndarray],
     has_fe: bool, dispersion: str, wts: np.ndarray, off: np.ndarray,
@@ -558,6 +662,11 @@ def _nb_vcov(
             cov = cov * ((n - 1) / (n - k))
     else:
         if cov_type == "nonrobust":
+            if vcov_backend == "stata" and dispersion in ("const", "const_stata"):
+                # Stata robustified OIM: bread = beta block of inv(full Hess).
+                bread = _nb_oim_bread(
+                    y=y, X=X, beta=beta, alpha=alpha, mu=mu, dispersion=dispersion
+                )
             cov = bread
         else:
             if cov_type == "HC0":
@@ -570,6 +679,11 @@ def _nb_vcov(
             else:
                 w = np.ones(n)
             meat = (score_beta * w[:, None]).T @ score_beta
+            if vcov_backend == "stata" and dispersion in ("const", "const_stata"):
+                # Stata robustified OIM: OIM bread with the robust meat.
+                bread = _nb_oim_bread(
+                    y=y, X=X, beta=beta, alpha=alpha, mu=mu, dispersion=dispersion
+                )
             cov = bread @ meat @ bread
 
     se = np.sqrt(np.maximum(np.diag(cov), 0.0))

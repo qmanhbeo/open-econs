@@ -65,55 +65,33 @@ class TestStataNBRegOverdispersion:
 
 
 class TestStataNBRegStdErrors:
-    """Pooled NB2 SEs: oe matches R glm.nb OIM exactly (verified in the R parity
-    suite).  Stata ``nbreg`` non-clustered SEs use a DIFFERENT convention (a
-    robustified OIM information matrix) and diverge from oe/R by up to ~4% on
-    x2 (verified: Stata se_x2 = 0.059624 vs oe/R 0.057102).  This is the same
-    class of Stata-vs-R NB SE divergence documented for Poisson's iid gap
-    (rule 15/16).  The coef / alpha / loglik parity is the validated
-    deliverable (TestStataNBRegCoefficients / TestStataNBRegOverdispersion);
-    the SE divergence is asserted as ``skip`` (never loosened)."""
+    """Pooled NB2 non-clustered SEs: Stata ``nbreg`` uses a robustified OIM
+    information matrix (inverse of the full observed-information Hessian,
+    beta + overdispersion jointly) that diverges from R glm.nb / oe OIM by up to
+    ~4% on x2.  Selecting ``vcov_backend="stata"`` wraps Stata's robustified OIM
+    bread so oe matches Stata ``nbreg, dispersion(mean)`` SEs to 1e-6 (rule 15
+    toggle).  The default ``vcov_backend="fixest"`` keeps R glm.nb OIM parity
+    (see the R parity suite)."""
 
-    @pytest.mark.xfail(
-        reason="OPEN GAP (FUTURE_WORK.md L515b): Stata nbreg non-clustered SEs use "
-               "a robustified OIM information matrix that diverges from R glm.nb / "
-               "oe OIM SEs (Stata se_x2=0.059624 vs oe/R 0.057102, ~4%). Coef/alpha/"
-               "ll parity is validated. strict=True: xfails on the known ~4% gap, "
-               "errors if it ever matches to 1e-6. See methodology/limited/nbreg.md.",
-        strict=True,
-    )
     def test_se_x1(self):
-        r = nbreg("y ~ x1 + x2", data=DF, dispersion="const", cov_type="nonrobust")
+        r = nbreg("y ~ x1 + x2", data=DF, dispersion="const", cov_type="nonrobust",
+                  vcov_backend="stata")
         npt.assert_allclose(r.std_errors["x1"], STATA["se_x1"], rtol=0, atol=1e-6)
 
-    @pytest.mark.xfail(
-        reason="OPEN GAP (FUTURE_WORK.md L515b): same as test_se_x1 (Stata NB "
-               "non-clustered SE convention, ~4% on x2). strict=True.",
-        strict=True,
-    )
     def test_se_x2(self):
-        r = nbreg("y ~ x1 + x2", data=DF, dispersion="const", cov_type="nonrobust")
+        r = nbreg("y ~ x1 + x2", data=DF, dispersion="const", cov_type="nonrobust",
+                  vcov_backend="stata")
         npt.assert_allclose(r.std_errors["x2"], STATA["se_x2"], rtol=0, atol=1e-6)
 
 
 class TestStataNBRegConstantDispersionGap:
-    """OPEN GAP (rule 6/15/16 — do NOT loosen): Stata ``nbreg,
-    dispersion(constant)`` is a Stata-specific NB2 MLE that ``oe.nbreg`` does not
-    reproduce.  Stata gives x1 = 0.414535, delta = 1.263565, ll = -842.203;
-    oe nbreg(const) gives x1 = 0.492896, alpha = 1.0563, ll = -836.538.  The
-    textbook/Stata-``mean`` NB2 (== R glm.nb == fixest fenegbin) is the validated
-    deliverable.  See FUTURE_WORK.md and methodology/limited/nbreg.md."""
+    """Stata ``nbreg, dispersion(constant)`` is a Stata-specific NB2 MLE
+    (Var = mu*(1+delta), source: Stata ``nbreg_al.ado``).  ``oe.nbreg`` reproduces
+    it via ``dispersion="const_stata"`` to 1e-6: Stata gives x1 = 0.414535,
+    delta = 1.263565, ll = -842.203.  The textbook NB2 (``dispersion="const"``)
+    remains the default and matches R glm.nb / Stata dispersion(mean).  See
+    methodology/limited/nbreg.md."""
 
-    @pytest.mark.xfail(
-        reason="OPEN GAP (FUTURE_WORK.md L515a): Stata nbreg, dispersion(constant) "
-               "is a Stata-specific NB2 MLE (x1=0.414535, delta=1.263565, "
-               "ll=-842.203) not reproduced by the textbook NB2 gamma-mixture (oe "
-               "x1=0.492896, alpha=1.0563, ll=-836.538). The dispersion(mean)/NB2 "
-               "gamma-mixture path is validated in TestStataNBRegCoefficients. "
-               "strict=True: xfails on the ~7.8e-2 coef gap, errors if it ever "
-               "matches to 1e-6. See methodology/limited/nbreg.md.",
-        strict=True,
-    )
     def test_b_x1(self):
-        r = nbreg("y ~ x1 + x2", data=DF, dispersion="const")
+        r = nbreg("y ~ x1 + x2", data=DF, dispersion="const_stata")
         npt.assert_allclose(r.coefficients["x1"], STATA["bc_x1"], rtol=0, atol=1e-6)

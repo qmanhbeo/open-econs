@@ -21,8 +21,9 @@ assumption. Two variance structures are supported:
 
 | `dispersion` | Name | Variance `Var(y_i | x_i)`            | Stata `nbreg` flag |
 |--------------|------|--------------------------------------|--------------------|
-| `"const"`    | NB2  | `μ + α·μ²`  (DEFAULT)                | `dispersion(constant)` |
+| `"const"`    | NB2  | `μ + α·μ²`  (DEFAULT)                | `dispersion(mean)` |
 | `"mean"`     | NB1  | `μ·(1 + α)`                          | `dispersion(mean)` |
+| `"const_stata"` | NB2 (Stata `constant`) | `μ·(1 + δ)`, `δ = exp(lndelta)` | `dispersion(constant)` |
 
 `α > 0` is the **overdispersion** parameter (Stata `e(alpha)`). We additionally
 report `lnalpha = log(α)` (Stata `e(lnalpha)`) and `theta = 1/α` (R
@@ -63,7 +64,7 @@ R `glm.nb` / `fixest::fenegbin` **and** Stata `nbreg, dispersion(mean)` to
 and the **`dispersion(constant)` MLE** do NOT agree across tools. Two genuine
 divergences:
 
-### 2.1 Stata `dispersion(constant)` is a Stata-specific NB2 MLE
+### 2.1 Stata `dispersion(constant)` is a Stata-specific NB2 MLE — now reproduced
 
 Stata `nbreg`'s two dispersion settings are **different models with different
 MLEs**, not just different SE conventions:
@@ -73,26 +74,37 @@ MLEs**, not just different SE conventions:
 | `dispersion(mean)`   | 0.492896 | alpha = 1.0563 | -836.538 |
 | `dispersion(constant)` | 0.414535 | delta = 1.2636 | -842.203 |
 
-`oe.nbreg(dispersion="const")` reproduces the **`dispersion(mean)`** numbers
-exactly (x1 = 0.492896, α = 1.0563, ll = -836.538) — i.e. it follows the
-**textbook NB2 gamma mixture** (== R `glm.nb` == `fixest::fenegbin`). It does
-**NOT** reproduce Stata's `dispersion(constant)` (x1 = 0.414535, delta =
-1.2636). This is a **source-confirmed, model-level divergence**, not a
-recoverable ssc toggle. `oe.nbreg` prefers the textbook/R convention as default
-because that is what R `fixest` (the FE reference) and `MASS::glm.nb` use.
+`oe.nbreg(dispersion="const")` is the **textbook NB2 gamma mixture** (Var =
+`μ + α·μ²`), which reproduces Stata `dispersion(mean)` point estimates exactly
+(x1 = 0.492896, α = 1.0563, ll = -836.538) and equals R `glm.nb` /
+`fixest::fenegbin`. It does **NOT** reproduce Stata's `dispersion(constant)`.
 
-### 2.2 Non-clustered (OIM) SEs: Stata vs R/oe
+`oe.nbreg(dispersion="const_stata")` reproduces Stata's `dispersion(constant)`
+(Var = `μ·(1 + δ)`, `δ = exp(lndelta)`, source `nbreg_al.ado`): x1 = 0.414535,
+δ = 1.2636, ll = -842.203 — matched to machine precision. This is a
+**source-confirmed, model-level divergence**, now exposed as a toggle
+(rule 15) rather than dropped. `const_stata` is **pooled-only** (Stata base
+`nbreg` has no FE); requesting fixed effects with `const_stata` raises
+`NotImplementedError`. The default stays textbook NB2 (`"const"`) because that
+is what R `fixest` (the FE reference) and `MASS::glm.nb` use.
 
-Stata `nbreg` non-clustered SEs use a **robustified OIM information matrix** that
-diverges from R `glm.nb` / `oe` OIM SEs:
+### 2.2 Non-clustered (OIM) SEs: Stata vs R/oe — now reproducible
 
-| Coef | oe / R glm.nb (OIM) | Stata `dispersion(mean)` |
-|------|---------------------|---------------------------|
-| SE x1 | 0.061023            | 0.060959 (≈1e-4 off)      |
-| SE x2 | 0.057102            | 0.059624 (**~4% off**)    |
+Stata `nbreg` non-clustered SEs use the inverse of the **full observed-information
+Hessian** (beta + overdispersion aux jointly), not the GLM-style
+`inv(X' W X)` bread that R `glm.nb` / `oe` use. This diverges from R/oe OIM:
 
-The cluster-robust (`CRV1`) SE — the standard NB use case — is matched through
-the `vcov_backend` toggle (see §2.3) and is the validated deliverable.
+| Coef | oe / R glm.nb (OIM) | Stata `dispersion(mean)` (full OIM) |
+|------|---------------------|-------------------------------------|
+| SE x1 | 0.061023            | 0.060959 (≈1e-4 off)                |
+| SE x2 | 0.057102            | 0.059624 (**~4% off**)              |
+
+This is now **recoverable** for `dispersion in ("const", "const_stata")` via
+`vcov_backend="stata"`, which wraps Stata's robustified OIM bread
+(`_nb_oim_bread`, inverse of the full observed-information Hessian). The
+cluster-robust (`CRV1`) SE — the standard NB use case — is also matched through
+the same toggle and is the validated deliverable. Default `"fixest"` keeps R
+`glm.nb` OIM parity at `1e-6`.
 
 ### 2.3 `vcov_backend` toggle (rule 15)
 
@@ -101,8 +113,10 @@ the `vcov_backend` toggle (see §2.3) and is the validated deliverable.
 * **`"fixest"` (DEFAULT)** — `k_adj=True, G_adj=True`. Matches R `fixest`
   (and `glm.nb` OIM) to `1e-6`.
 * **`"stata"`** — `k_adj=False, G_adj=True, k_fixef="none"` (ppmlhdfe-style).
-  Rescales only the cluster/robust variance; point estimates, deviance, and
-  log-likelihood are identical across toggles.
+  For `dispersion in ("const", "const_stata")` the bread is replaced by Stata's
+  full observed-information Hessian (`_nb_oim_bread`) for both nonrobust and
+  robust/cluster SEs, so point estimates match Stata `nbreg` to `≤1e-6`.
+  Point estimates, deviance, and log-likelihood are identical across toggles.
 
 ---
 
@@ -117,10 +131,13 @@ the `vcov_backend` toggle (see §2.3) and is the validated deliverable.
 | FE NB2 x1 (firm+year)             | 0.499680           | — (no FE in base)     | `fenegbin` 0.499680     |
 | FE NB2 x2                         | −0.250800          | —                    | `fenegbin` −0.250800    |
 | FE NB2 theta / LL                 | 1.78751 / −771.784 | —                    | `fenegbin` 1.787512 / −771.784 |
-| Stata `disp(constant)` x1 / delta | (not reproduced)  | 0.414535 / 1.2636    | —                       |
+| Stata `disp(constant)` x1 / delta | 0.414535 / 1.2636 (`const_stata`) | 0.414535 / 1.2636    | —                       |
 
-All `oe` ↔ reference numbers asserted at `atol=1e-6` (rule 2) except the two
-documented divergences (§2.1, §2.2), which are `skip`-asserted (never loosened).
+All `oe` ↔ reference numbers are asserted at `atol=1e-6` (rule 2). The former
+Stata constant-dispersion MLE and Stata OIM SE divergences (§2.1, §2.2) are now
+reproduced exactly via the `dispersion="const_stata"` and
+`vcov_backend="stata"` toggles — both are covered by passing tests, never
+loosened.
 
 ---
 
@@ -141,6 +158,13 @@ r.predict()        # fitted conditional means
 
 # Pooled NB1
 r1 = oe.nbreg("y ~ x1 + x2", data=df, dispersion="mean")
+
+# Stata nbreg, dispersion(constant) MLE (== Stata to machine precision)
+rc = oe.nbreg("y ~ x1 + x2", data=df, dispersion="const_stata")
+
+# Stata nbreg non-clustered OIM SEs (full observed-information Hessian)
+rc_se = oe.nbreg("y ~ x1 + x2", data=df, dispersion="const_stata",
+                 vcov_backend="stata")
 
 # NB2 with fixed effects (matches R fixest::fenegbin) + cluster-robust SEs
 rfe = oe.nbreg("y ~ x1 + x2", data=df, fixed_effects=["firm", "year"],
