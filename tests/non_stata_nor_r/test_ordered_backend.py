@@ -145,7 +145,6 @@ class TestOrderedSandwich:
         cov0 = _sandwich_cov(m, p, bread, "HC0", cats)
         cov1 = _sandwich_cov(m, p, bread, "HC1", cats)
         n = m.nobs
-        k = p.shape[0]
         # HC1 = (n/(n-1)) * HC0 on the diagonal.  NOTE: Stata's ologit/oprobit
         # vce(robust) uses the n/(n-1) small-sample factor, NOT the textbook
         # HC1 n/(n-k) factor (verified against Stata; see

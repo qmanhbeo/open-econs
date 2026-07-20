@@ -1,6 +1,7 @@
 """Step 2/3 diagnostic: compute GMM intermediates from Stata's REAL extracted
 matrices (per-entity 5x5 H block, 150-row Z/X/Y) and from oe's current pipeline.
 """
+
 import sys
 import numpy as np
 import pandas as pd
@@ -15,16 +16,23 @@ def load(name):
     return pd.read_csv(f"{DO}\\abond_gt_{name}.csv")
 
 
-Xdf = load("X"); Ydf = load("Y"); Zdf = load("Z"); Hdf = load("H")
+Xdf = load("X")
+Ydf = load("Y")
+Zdf = load("Z")
+Hdf = load("H")
+
 
 # Matrix columns are appended AFTER the original y,x,z,entity,time cols.
 def mat_cols(df, prefix, n):
     return [c for c in df.columns if c.startswith(prefix)][:n]
 
-Z = Zdf[mat_cols(Zdf, "Zmat", 5)].to_numpy(dtype=float)   # 150 x 5 (incl. 1 zero col)
-X = Xdf[mat_cols(Xdf, "Xmat", 3)].to_numpy(dtype=float)   # 150 x 3
+
+Z = Zdf[mat_cols(Zdf, "Zmat", 5)].to_numpy(dtype=float)  # 150 x 5 (incl. 1 zero col)
+X = Xdf[mat_cols(Xdf, "Xmat", 3)].to_numpy(dtype=float)  # 150 x 3
 Y = Ydf[mat_cols(Ydf, "Ymat", 1)].to_numpy(dtype=float).ravel()  # 150
-H = Hdf[mat_cols(Hdf, "Hmat", 5)].to_numpy(dtype=float)[:5, :]   # real 5x5 block (rest NaN)
+H = Hdf[mat_cols(Hdf, "Hmat", 5)].to_numpy(dtype=float)[
+    :5, :
+]  # real 5x5 block (rest NaN)
 ent = Xdf["entity"].to_numpy()
 tvals = Xdf["time"].to_numpy()
 entities = np.unique(ent)
@@ -47,9 +55,9 @@ ZtX = np.zeros((5, 3))
 ZtY = np.zeros(5)
 for e_val in entities:
     mm = ent == e_val
-    Ze = Z[mm]          # 5 x 5
-    Xe = X[mm]          # 5 x 3
-    Ye = Y[mm]          # 5
+    Ze = Z[mm]  # 5 x 5
+    Xe = X[mm]  # 5 x 3
+    Ye = Y[mm]  # 5
     ZtHZ += Ze.T @ H @ Ze
     ZtX += Ze.T @ Xe
     ZtY += Ze.T @ Ye
@@ -84,8 +92,10 @@ def build_H_true_t0(T):
     return H
 
 
-for label, Htrue in [("H_true(t0 zeroed)", build_H_true(T)),
-                     ("H_true(t0 included)", build_H_true_t0(T))]:
+for label, Htrue in [
+    ("H_true(t0 zeroed)", build_H_true(T)),
+    ("H_true(t0 included)", build_H_true_t0(T)),
+]:
     ZtHZ_t = np.zeros((5, 5))
     for e_val in entities:
         mm = ent == e_val
@@ -101,7 +111,7 @@ for label, Htrue in [("H_true(t0 zeroed)", build_H_true(T)),
     print(f"b = {bt}")
     print(f"V diag = {np.diag(Vt)}")
     print(f"SE = {np.sqrt(np.diag(Vt))}")
-    print(f"Stata SE = {np.sqrt([0.06085416,0.03142457,0.01086979])}")
+    print(f"Stata SE = {np.sqrt([0.06085416, 0.03142457, 0.01086979])}")
 
 L = 5
 W = np.linalg.pinv(ZtHZ)
@@ -115,14 +125,24 @@ print(f"\nb (from Stata matrices) = {b}")
 print("Stata e(b)             = [-0.11984163, 1.1258209, -0.28974145]")
 print(f"sig2 = {sig2:.8f}   Stata e(sig2)=0.19753252   (df={df}, n_eq={n_eq}, p={p})")
 print(f"\nV (from Stata matrices) =\n{V}")
-print(f"\nStata e(V) diag = {np.sqrt([0.06085416,0.03142457,0.01086979])}")
+print(f"\nStata e(V) diag = {np.sqrt([0.06085416, 0.03142457, 0.01086979])}")
 print(f"V from Stata matrices diag = {np.sqrt(np.diag(V))}")
 
 # ---- Run oe current pipeline ----
-dfp = pd.read_csv(r"C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_panel.csv")
-res = oe.abond("y ~ x + z", data=dfp, entity="entity", time="time",
-               step="one-step", lags=1, exogenous=["x", "z"], collapse=True,
-               robust=False)
+dfp = pd.read_csv(
+    r"C:\Users\manhn\Desktop\open-econs\tests\stata\fixtures\df_panel.csv"
+)
+res = oe.abond(
+    "y ~ x + z",
+    data=dfp,
+    entity="entity",
+    time="time",
+    step="one-step",
+    lags=1,
+    exogenous=["x", "z"],
+    collapse=True,
+    robust=False,
+)
 print("\n=== oe.abond current pipeline ===")
 print(f"coefficients = {res.coefficients.values}")
 print(f"std_errors    = {res.std_errors.values}")

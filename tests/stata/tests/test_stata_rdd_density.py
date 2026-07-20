@@ -10,6 +10,7 @@ isolates the estimator math - the same convention used by
 
 from __future__ import annotations
 
+import sys as _sys
 import pandas as pd
 import pytest
 
@@ -20,9 +21,10 @@ from ..stata_runner import INPUTS_DIR, read_stata
 
 pytestmark = pytest.mark.stata
 
-import sys as _sys
-
 _THIS = _sys.modules[__name__]
+
+S = None
+H = None
 
 
 @pytest.fixture(scope="session", autouse=True)

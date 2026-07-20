@@ -253,7 +253,6 @@ entity_counts = dict(Counter(eq_oe.tolist()))
 
 def build_ZtHZ_oe_style(Z, eq_entity, H_sub):
     """Build Z'HZ using oe's Z (usable rows only) and H_sub."""
-    n_eq = Z.shape[0]
     L = Z.shape[1]
     ZtHZ = np.zeros((L, L))
     pos = 0

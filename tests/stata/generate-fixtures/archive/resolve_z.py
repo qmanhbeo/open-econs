@@ -14,12 +14,14 @@ import numpy as np
 import pandas as pd
 
 DF = pd.read_csv("tests/stata/fixtures/inputs/df_panel.csv")
-A1 = np.loadtxt("tests/stata/generate-fixtures/archive/A1.csv", delimiter=",", skiprows=1)
+A1 = np.loadtxt(
+    "tests/stata/generate-fixtures/archive/A1.csv", delimiter=",", skiprows=1
+)
 # True (non-padded) target: drop the all-zero 10th row/col (index 9).
 A1_true = A1[:10, :10]
 
 TS = [2, 3, 4]  # usable diff periods (t index)
-NT = len(TS)    # 3
+NT = len(TS)  # 3
 
 ents = sorted(DF.entity.unique())
 n = len(ents) * NT  # total stacked rows
@@ -125,6 +127,7 @@ def build_Z(variant, const_last=True):
     level GMM (k_level): D.L.y=y_{t-1}-y_{t-2}, DL.L.y=y_{t-2}-y_{t-3}  (2 cols)
     level IV: x, z, _cons  (3 cols)  -> k_level=7, k_diff=4, total 11.
     """
+
     def col_diff(fun):
         return np.array([fun(e, t) for (e, t) in stacked_index()], dtype=float)
 
@@ -137,7 +140,8 @@ def build_Z(variant, const_last=True):
     # ---- DIFF GMM ----
     # diff4a: col1 = y_{t-2} (period-varying); cols 2-4 = collapsed lags 2,3,4 (entity-const)
     if variant == "diff4a":
-        Zd_cols.append(col_diff(lambda e, t: get_level("y", e, t - 2))); Zd_lab.append("dg_yL2")
+        Zd_cols.append(col_diff(lambda e, t: get_level("y", e, t - 2)))
+        Zd_lab.append("dg_yL2")
         for s in (2, 3, 4):
             Zd_cols.append(col_diff(lambda e, t, s=s: collapsed_lag(e, s)))
             Zd_lab.append(f"dg_coll{s}")
@@ -148,7 +152,8 @@ def build_Z(variant, const_last=True):
             Zd_lab.append(f"dg_yL{s}")
     # diff4c: L.L.y collapsed (y_{t-2}) + L(2/4) as 3 separate collapsed lags 2,3,4
     elif variant == "diff4c":
-        Zd_cols.append(col_diff(lambda e, t: get_level("y", e, t - 2))); Zd_lab.append("dg_yL2")
+        Zd_cols.append(col_diff(lambda e, t: get_level("y", e, t - 2)))
+        Zd_lab.append("dg_yL2")
         for s in (2, 3, 4):
             Zd_cols.append(col_diff(lambda e, t, s=s: collapsed_lag(e, s)))
             Zd_lab.append(f"dg_coll{s}")
@@ -169,13 +174,19 @@ def build_Z(variant, const_last=True):
             Zd_lab.append(f"dg_yL{s}")
 
     # ---- DIFF IV: D.x, D.z ----
-    Zd_cols.append(col_diff(lambda e, t: dval("x", e, t))); Zd_lab.append("Dx")
-    Zd_cols.append(col_diff(lambda e, t: dval("z", e, t))); Zd_lab.append("Dz")
+    Zd_cols.append(col_diff(lambda e, t: dval("x", e, t)))
+    Zd_lab.append("Dx")
+    Zd_cols.append(col_diff(lambda e, t: dval("z", e, t)))
+    Zd_lab.append("Dz")
 
     # ---- LEVEL GMM: D.L.y, DL.L.y ----
-    Zl_cols.append(col_diff(lambda e, t: get_level("y", e, t - 1) - get_level("y", e, t - 2)))
+    Zl_cols.append(
+        col_diff(lambda e, t: get_level("y", e, t - 1) - get_level("y", e, t - 2))
+    )
     Zl_lab.append("lvlGMM_DLy")
-    Zl_cols.append(col_diff(lambda e, t: get_level("y", e, t - 2) - get_level("y", e, t - 3)))
+    Zl_cols.append(
+        col_diff(lambda e, t: get_level("y", e, t - 2) - get_level("y", e, t - 3))
+    )
     Zl_lab.append("lvlGMM_DLLy")
 
     # ---- LEVEL IV: x, z, _cons ----
@@ -183,10 +194,13 @@ def build_Z(variant, const_last=True):
     lz = col_diff(lambda e, t: get_level("z", e, t))
     lc = np.ones(n)
     if const_last:
-        Zl_cols += [lx, lz, lc]; Zl_lab += ["x", "z", "const"]
+        Zl_cols += [lx, lz, lc]
+        Zl_lab += ["x", "z", "const"]
     else:
-        Zl_cols = [lc] + Zl_cols; Zl_lab = ["const"] + Zl_lab
-        Zl_cols += [lx, lz]; Zl_lab += ["x", "z"]
+        Zl_cols = [lc] + Zl_cols
+        Zl_lab = ["const"] + Zl_lab
+        Zl_cols += [lx, lz]
+        Zl_lab += ["x", "z"]
 
     Zd = np.nan_to_num(np.column_stack(Zd_cols), nan=0.0)
     Zl = np.nan_to_num(np.column_stack(Zl_cols), nan=0.0)

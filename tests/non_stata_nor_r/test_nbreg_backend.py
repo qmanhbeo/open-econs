@@ -82,7 +82,7 @@ class TestNBRegDispersion:
 
 class TestNBRegFEvsPooled:
     def test_fe_changes_coefs(self, df_nb):
-        rp = nbreg("y ~ x1 + x2", data=df_nb, dispersion="const")
+        nbreg("y ~ x1 + x2", data=df_nb, dispersion="const")
         rf = nbreg("y ~ x1 + x2", data=df_nb, dispersion="const",
                    fixed_effects=["firm", "year"])
         # FE estimate need not equal pooled; just assert both finite & distinct

@@ -1,6 +1,8 @@
 """Verify sig2 formula: test various Stata sig2 conventions."""
+
 import sys
 import os
+
 ROOT = r"C:\Users\manhn\Desktop\open-econs"
 sys.path.insert(0, os.path.join(ROOT, "tests", "stata", "generate-fixtures"))
 sys.path.insert(0, os.path.join(ROOT, "tests", "stata"))
@@ -11,9 +13,13 @@ from build_H_verify import build_full_H
 from stata_runner import read_stata
 
 S = read_stata("sysgmm")
-df = pd.read_csv(os.path.join(ROOT, "tests", "stata", "fixtures", "inputs", "df_panel.csv"))
+df = pd.read_csv(
+    os.path.join(ROOT, "tests", "stata", "fixtures", "inputs", "df_panel.csv")
+)
 
-T = 5; N_ENT = 30; N_ROW_PER = 10
+T = 5
+N_ENT = 30
+N_ROW_PER = 10
 
 Z = build_Z_from_raw(df)
 H = build_full_H()
@@ -22,21 +28,29 @@ X = np.zeros((N_ENT * 2 * T, 4))
 for k in range(N_ENT):
     mask = df["entity"] == k
     sub = df.loc[mask].sort_values("time")
-    y = sub["y"].values; xv = sub["x"].values; zv = sub["z"].values
+    y = sub["y"].values
+    xv = sub["x"].values
+    zv = sub["z"].values
     base = k * 2 * T
     for t in range(T):
         dr = base + t
-        if t >= 1: Y[dr] = y[t] - y[t-1]
+        if t >= 1:
+            Y[dr] = y[t] - y[t - 1]
         if t >= 2:
-            X[dr, 0] = y[t-1] - y[t-2]; X[dr, 1] = xv[t] - xv[t-1]; X[dr, 2] = zv[t] - zv[t-1]
+            X[dr, 0] = y[t - 1] - y[t - 2]
+            X[dr, 1] = xv[t] - xv[t - 1]
+            X[dr, 2] = zv[t] - zv[t - 1]
         lr = base + T + t
         Y[lr] = y[t]
-        X[lr, 0] = y[t-1] if t >= 1 else 0.0
-        X[lr, 1] = xv[t]; X[lr, 2] = zv[t]; X[lr, 3] = 1.0
+        X[lr, 0] = y[t - 1] if t >= 1 else 0.0
+        X[lr, 1] = xv[t]
+        X[lr, 2] = zv[t]
+        X[lr, 3] = 1.0
 
 ZtHZ = Z.T @ H @ Z
 A1 = np.linalg.pinv(ZtHZ)
-XZ = X.T @ Z; Zy = Z.T @ Y
+XZ = X.T @ Z
+Zy = Z.T @ Y
 b_1s = np.linalg.inv(XZ @ A1 @ XZ.T) @ (XZ @ A1 @ Zy)
 e_1s = Y - X @ b_1s
 
@@ -46,7 +60,8 @@ idx = 0
 for k in range(N_ENT):
     base = k * N_ROW_PER
     for t in range(1, T):
-        diff_resid[idx] = e_1s[base + t]; idx += 1
+        diff_resid[idx] = e_1s[base + t]
+        idx += 1
 
 # Level residuals (last T of each 10-row block)
 lev_resid = np.zeros(N_ENT * T)
@@ -54,7 +69,8 @@ idx = 0
 for k in range(N_ENT):
     base = k * N_ROW_PER + T
     for t in range(T):
-        lev_resid[idx] = e_1s[base + t]; idx += 1
+        lev_resid[idx] = e_1s[base + t]
+        idx += 1
 
 ee = float(e_1s @ e_1s)
 edd = float(diff_resid @ diff_resid)

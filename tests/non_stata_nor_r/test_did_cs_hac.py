@@ -56,7 +56,7 @@ def test_hac_lags0_equals_cluster_se():
 
 def test_hac_inflates_se_under_autocorrelation():
     df = _sim_staggered(seed=2)
-    base = oe.did_cs(
+    oe.did_cs(
         df, y="y", entity="entity", time="time", treatment="treat", cov_type="cluster"
     )
     with warnings.catch_warnings():

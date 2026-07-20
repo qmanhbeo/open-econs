@@ -76,5 +76,5 @@ try:
     print("\n=== TWO-STEP (naive S) ===")
     print(f"Computed b2: {np.round(b2, 6)}")
     print("Stata 2s:    [0.009464, 1.134976, -0.442064, 0.090758]")
-except:
+except Exception:
     print("Singular S")
