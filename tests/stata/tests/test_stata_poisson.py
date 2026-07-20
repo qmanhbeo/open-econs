@@ -66,37 +66,23 @@ class TestStataPoissonClusterSE:
 
 
 class TestStataPoissonIidSE:
-    """oe vcov_backend='stata' nonrobust SEs vs ppmlhdfe *non-clustered* SEs.
+    """oe vcov_backend='stata' non-clustered SEs vs ppmlhdfe *non-clustered* SEs.
 
-    NOTE (rule 6/15/16 — OPEN PARITY GAP, do NOT loosen): ppmlhdfe's
-    non-clustered SE is a robust (sandwich) SE, NOT an OIM iid SE. Its robust
-    factor uses the Correia-Guimaraes-Zylkin (2019) nonlinear adjustment and is
-    NOT reproduced to 1e-6 by fixest/pyfixest ``ssc(k_adj=False, G_adj=True,
-    k_fixef="none")`` (divergence ~4e-4 on x2). The cluster-robust SE — the
-    headline PPML use case — is matched to 1e-6 (TestStataPoissonClusterSE).
-    The iid/non-clustered gap is recorded in FUTURE_WORK.md ("v1.2 poisson:
-    ppmlhdfe non-clustered robust SE") and methodology/limited/poisson.md.
+    ppmlhdfe without ``cluster()`` reports a *robust (sandwich)* SE, not an OIM
+    iid SE. ``oe.poisson(..., vcov_backend="stata", cluster=None)`` wraps
+    ppmlhdfe's exact nonlinear-Poisson (Correia-Guimaraes-Zylkin 2019) robust
+    meat — ``meat = Σ_i (y_i − μ_i)^2 / μ_i · x_i x_i'`` with the OIM bread and
+    the ``k_adj = (N−1)/(N−K)`` small-sample factor — so it matches ppmlhdfe's
+    non-clustered SE to 1e-6 (rule 15 option a). The cluster-robust SE — the
+    headline PPML use case — is matched to 1e-6 in TestStataPoissonClusterSE.
+    See methodology/limited/poisson.md §2.4.
     """
 
-    @pytest.mark.xfail(
-        reason="OPEN GAP (FUTURE_WORK.md L433): ppmlhdfe non-clustered robust SE "
-               "diverges from fixest/pyfixest by ~4e-4 (x2). OE reproduces "
-               "ppmlhdfe's non-robust OIM SE, not its nonlinear-Poisson robust "
-               "meat; cluster-robust parity is validated in "
-               "TestStataPoissonClusterSE. strict=True: xfails on the known gap, "
-               "errors if it ever matches to 1e-6 (silent fix/regress).",
-        strict=True,
-    )
     def test_se_x1(self):
         r = poisson("y ~ x1 + x2", data=DF, fixed_effects=["firm", "year"],
                     cov_type="nonrobust", vcov_backend="stata")
         npt.assert_allclose(r.std_errors["x1"], STATA["se_x1_iid"], rtol=0, atol=1e-6)
 
-    @pytest.mark.xfail(
-        reason="OPEN GAP (FUTURE_WORK.md L433): same as test_se_x1 (ppmlhdfe "
-               "non-clustered robust SE, ~4e-4 on x2). strict=True.",
-        strict=True,
-    )
     def test_se_x2(self):
         r = poisson("y ~ x1 + x2", data=DF, fixed_effects=["firm", "year"],
                     cov_type="nonrobust", vcov_backend="stata")

@@ -107,18 +107,44 @@ point estimates, deviance, or log-likelihood (those are identical across tools).
 Do not "simplify" by hardcoding one factor — that silently breaks the other
 engine's parity.
 
-### 2.4 Open gap — ppmlhdfe non-clustered (iid) SE (rule 6/15/16)
+### 2.4 Resolved — ppmlhdfe non-clustered robust SE (rule 6/15/16)
 
 ppmlhdfe's SE **without** `cluster()` is a *robust (sandwich) SE*, not an OIM
 iid SE, and it applies the Correia-Guimaraes-Zylkin (2019) nonlinear Poisson
 robust factor. fixest/pyfixest — even with
 `ssc(k_adj=False, G_adj=True, k_fixef="none")` — reproduces it only to ~4e-4
 (example: x2 SE, OE/pyfixest 0.03967 vs ppmlhdfe 0.04183). This is an
-**algorithm-level divergence**, not a recoverable ssc toggle. The cluster-robust
-SE (the standard PPML use case) is matched to 1e-6 by `vcov_backend="stata"`,
-which is the validated deliverable. The iid/non-clustered gap is recorded in
-`FUTURE_WORK.md` and asserted as `skip` (never loosened) in
-`tests/stata/tests/test_stata_poisson.py`.
+**algorithm-level divergence**, not a recoverable ssc toggle — so OE wraps
+ppmlhdfe's exact bread (rule 15 option a) rather than exposing a toggle.
+
+**OE implementation** (`open_econs/models/limited/poisson.py::
+`_ppmlhdfe_robust_vcov`): for `vcov_backend="stata"` with `cluster=None`, the
+reported SE is
+
+```
+meat = Σ_i (y_i − μ_i)^2 / μ_i · x_i x_i'          # CGZ nonlinearity scaling (1/μ)
+bread = (X'WX)^{-1} ,  W = diag(μ) ,  X = FE-residualized regressors
+V = (N−1)/(N−K) · bread · meat · bread             # k_adj small-sample factor
+SE = sqrt(diag(V))
+```
+
+- The `1/μ_i` in the meat is the CGZ (2019) nonlinear-Poisson adjustment that
+  fixest/pyfixest omit; without it the SE lands ~4e-4 below ppmlhdfe.
+- `k_adj = (N−1)/(N−K)` is the small-sample factor ppmlhdfe applies to its
+  **non-clustered** robust SE. (Crucially, ppmlhdfe does **NOT** apply `k_adj`
+  to the cluster-robust SE — that branch keeps only `G_adj = G/(G−1)`, per
+  §2.2/§2.3.) `N` is the estimation-sample size and `K` the number of
+  regressors (FE are profiled out).
+- `y` is taken from the input frame and aligned to the estimation sample by
+  dropping the row labels in `fit.na_index` (NA + separated observations); `μ`
+  is `fit.predict(type="response")`.
+
+Result: OE reproduces ppmlhdfe's non-clustered SE to ≤2e-7 absolute on the
+`poisson` fixture (x1 0.038951 / x2 0.041833). The fixest backend (default) is
+untouched and still routes through pyfixest. The cluster-robust SE (the
+standard PPML use case) remains matched to 1e-6 by `vcov_backend="stata"`,
+which is the validated deliverable. Covered by real (non-`xfail`) assertions in
+`tests/stata/tests/test_stata_poisson.py::TestStataPoissonIidSE`.
 
 ---
 

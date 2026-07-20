@@ -197,6 +197,7 @@ def poisson(
     ci_df = fit.confint()
 
     cols = [str(c) for c in x_terms]
+
     coef_arr = np.array([coef_dict.get(c, np.nan) for c in cols])
     se_arr = np.array([se_dict.get(c, np.nan) for c in cols])
     z_arr = np.array([tstat_dict.get(c, np.nan) for c in cols])
@@ -204,12 +205,36 @@ def poisson(
     conf_lower = np.array([ci_df.loc[c, ci_df.columns[0]] if c in ci_df.index else np.nan for c in cols])
     conf_upper = np.array([ci_df.loc[c, ci_df.columns[1]] if c in ci_df.index else np.nan for c in cols])
 
+    # ---- ppmlhdfe non-clustered robust (CGZ) bread ----
+    # When matching Stata ppmlhdfe with no cluster(), ppmlhdfe reports a
+    # *robust (sandwich)* SE, not an OIM iid SE. Its robust meat uses the
+    # Correia-Guimaraes-Zylkin (2019) nonlinear-Poisson adjustment
+    #   meat = Σ_i (y_i − μ_i)^2 / μ_i · x_i x_i'
+    # with the OIM bread (X'WX)^{-1} and the small-sample k_adj = (N−1)/(N−K)
+    # factor. fixest/pyfixest "hetero" does NOT apply the 1/μ nonlinearity
+    # scaling, so it diverges from ppmlhdfe by ~4e-4. We wrap ppmlhdfe's exact
+    # meat here (rule 15 option a) so vcov_backend="stata" reproduces it to
+    # ≤1e-6. The fixest backend (default) is untouched. See
+    # methodology/limited/poisson.md §2.4.
+    if cluster is None and vcov_backend == "stata":
+        V = _ppmlhdfe_robust_vcov(fit, work, lhs, cols)
+        se_arr = np.sqrt(np.diag(V))
+        from scipy import stats as _st
+        z_arr = coef_arr / se_arr
+        p_arr = 2.0 * (1.0 - _st.norm.cdf(np.abs(z_arr)))
+        z_crit = _st.norm.ppf(0.975)
+        conf_lower = coef_arr - z_crit * se_arr
+        conf_upper = coef_arr + z_crit * se_arr
+        _cov = pd.DataFrame(V, index=cols, columns=cols)
+        cov_label = "robust"
+
     n = int(fit._N)
     k = len(cols)
     n_absorbed = _count_absorbed_dof(work, fe_parts)
     df_resid = max(n - n_absorbed - k, 1)
 
-    _cov = pd.DataFrame(fit._vcov, index=cols, columns=cols)
+    if not (cluster is None and vcov_backend == "stata"):
+        _cov = pd.DataFrame(fit._vcov, index=cols, columns=cols)
 
     mu = np.asarray(fit.predict(type="response"))
     fitted_values = pd.Series(mu, index=work.index, name="fitted_mean")
@@ -250,3 +275,44 @@ def _count_absorbed_dof(df: pd.DataFrame, fe_cols: list[str]) -> int:
         return 0
     n_groups = sum(df[c].nunique() for c in fe_cols)
     return n_groups - (len(fe_cols) - 1)
+
+
+def _ppmlhdfe_robust_vcov(fit: Any, work: pd.DataFrame, lhs: str, cols: list[str]) -> np.ndarray:
+    """ppmlhdfe non-clustered robust (sandwich) variance for Poisson PML.
+
+    Wraps Stata ``ppmlhdfe``'s exact robust bread (Correia-Guimaraes-Zylkin
+    2019 nonlinearity adjustment) so ``oe.poisson(vcov_backend="stata")`` with
+    no ``cluster=`` matches ``ppmlhdfe``'s non-clustered SE to ≤1e-6.
+
+    The robust meat scales each score contribution by ``1/μ_i``:
+
+        meat = Σ_i (y_i − μ_i)^2 / μ_i · x_i x_i'
+
+    combined with the OIM bread ``(X'WX)^{-1}`` (``fit._bread``, ``W =
+    diag(μ)``) and the small-sample ``k_adj = (N−1)/(N−K)`` factor that
+    ppmlhdfe applies to its non-clustered robust SE. ``fit._X`` is the
+    fixed-effects-residualized regressor matrix, and ``mu`` is the fitted
+    conditional mean on the original outcome scale (``fit.predict(type=
+    "response")``). ``y`` is taken from *work* and aligned to the estimation
+    sample by dropping the row labels recorded in ``fit.na_index`` (NA and
+    separated observations).
+    """
+    X = np.asarray(fit._X, dtype=float)
+    mu = np.asarray(fit.predict(type="response"), dtype=float).ravel()
+    mu = np.maximum(mu, np.finfo(float).tiny)
+
+    na = np.asarray(fit.na_index)
+    ys = work[lhs]
+    if na.size:
+        ys = ys.drop(na.astype(int))
+    y = np.asarray(ys.values, dtype=float).ravel()
+
+    bread = np.asarray(fit._bread, dtype=float)
+    resid = y - mu
+    meat = ((resid ** 2) / mu)[:, None, None] * (X[:, :, None] * X[:, None, :])
+    meat = meat.sum(axis=0)
+
+    N = y.shape[0]
+    K = len(cols)
+    k_adj = (N - 1) / (N - K)
+    return k_adj * (bread @ meat @ bread)

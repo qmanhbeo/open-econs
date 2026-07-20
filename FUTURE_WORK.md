@@ -455,30 +455,34 @@ v1.4.2). ARDL write-up in
 
 ---
 
-## v1.2 poisson: ppmlhdfe non-clustered robust SE (OPEN parity gap)
+## v1.2 poisson: ppmlhdfe non-clustered robust SE (RESOLVED — 2026-07-20)
 
 - **What:** `oe.poisson(..., vcov_backend="stata", cluster=None)` (Stata
   `ppmlhdfe` non-clustered default) does **not** reproduce ppmlhdfe's SE to
-  1e-6. ppmlhdfe reports a *robust (sandwich) SE*, not an OIM iid SE, and its
-  robust factor uses the Correia-Guimaraes-Zylkin (2019) nonlinear Poisson
-  adjustment. fixest/pyfixest `ssc(k_adj=False, G_adj=True, k_fixef="none")`
-  reproduces it only to ~4e-4 (x2: OE 0.03967 vs ppmlhdfe 0.04183), even via R
-  `fixest::fepois` directly. So this is a genuine algorithm-level gap, not a
-  toggle miss.
+  1e-6 via fixest/pyfixest. ppmlhdfe reports a *robust (sandwich) SE*, not an
+  OIM iid SE, and its robust factor uses the Correia-Guimaraes-Zylkin (2019)
+  nonlinear Poisson adjustment. fixest/pyfixest `ssc(k_adj=False, G_adj=True,
+  k_fixef="none")` reproduces it only to ~4e-4 (x2: OE 0.03967 vs ppmlhdfe
+  0.04183), even via R `fixest::fepois` directly.
+- **Resolution (option a):** wrapped ppmlhdfe's exact robust bread in
+  `open_econs/models/limited/poisson.py::_ppmlhdfe_robust_vcov`. For
+  `vcov_backend="stata"` with no `cluster=`, the SE is now
+  `sqrt((N-1)/(N-K)) * sqrt(diag( bread @ meat @ bread ))` with
+  `meat = Σ_i (y_i − μ_i)^2 / μ_i · x_i x_i'` and `bread = (X'WX)^{-1}` (`X`
+  = FE-residualized regressors, `W = diag(μ)`). This matches ppmlhdfe's
+  non-clustered SE to ≤2e-7 absolute on the `poisson` fixture
+  (x1 0.038951 / x2 0.041833). The `k_adj = (N-1)/(N-K)` factor is what
+  ppmlhdfe applies to its *non-clustered* robust SE (it does NOT apply it to
+  the cluster-robust SE, which keeps `G_adj` only).
 - **In scope / passing:** the **cluster-robust** SE — the headline PPML use
   case — matches ppmlhdfe to 1e-6 (`vcov_backend="stata"` + `cluster=...`).
   Verified: x1 0.041178 / x2 0.047180 (= ppmlhdfe). Point estimates, deviance,
   and log-pseudolikelihood match to 1e-6 across Stata/R/pyfixest.
 - **Where OE lives:** `open_econs/models/limited/poisson.py`; root cause written
-  up in `methodology/limited/poisson.md` §2.
-- **Status:** OPEN. The non-clustered-SE gap is asserted as
-  `xfail(strict=True)` (rule 22, not loosened) in
-  `tests/stata/tests/test_stata_poisson.py::TestStataPoissonIidSE`.
-  Resolve only by either (a) wrapping ppmlhdfe's exact robust meat, or (b)
-  exposing a documented `robust` convention toggle and accepting the fixest
-  number. Do NOT silently tighten the tolerance to paper over it (rule 2).
-- **Next agent:** treat as open, not pending-merge-blocker; cluster parity is
-  the shipped deliverable.
+  up in `methodology/limited/poisson.md` §2.4.
+- **Status:** RESOLVED. `tests/stata/tests/test_stata_poisson.py::
+  TestStataPoissonIidSE` now passes to 1e-6 (xfail removed, real pass). The
+  fixest backend (default) is untouched.
 
 ---
 
