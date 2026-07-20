@@ -284,6 +284,7 @@ class ArellanoBondResult(BaseModel):
         n_entities: int,
         n_obs: int,
         n_instruments: int,
+        zrank: int = 0,
         hansen_j: float,
         hansen_j_pvalue: float,
         hansen_j_dof: int,
@@ -311,6 +312,7 @@ class ArellanoBondResult(BaseModel):
         self.n_entities = n_entities
         self.n_obs = n_obs
         self.n_instruments = n_instruments
+        self.zrank = zrank
         self.hansen_j = hansen_j
         self.hansen_j_pvalue = hansen_j_pvalue
         self.hansen_j_dof = hansen_j_dof
