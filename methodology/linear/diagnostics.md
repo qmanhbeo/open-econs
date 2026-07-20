@@ -157,8 +157,15 @@ diag  = r.diagnostics()              # dict (legacy JB/BP/DW/RESET form)
   DataFrame.** The dict form is retained for backward compatibility (an
   existing test asserts dict). See the roadmap note about flipping
   `diagnostics()` to a DataFrame in a future minor.
-- **DFBETAS convention divergence (OPEN):** oe standardizes by the leave-one-out
-  SE `s_{(-i)}`; `statsmodels.OLSInfluence.dfbetas` uses a different leave-one-out
-  variance. The two agree to ~8.6e-4 relative (max abs ~4.8e-4) but NOT the 1e-6
-  rule-2 tolerance. Covered by a strict `xfail` test rather than a loosened
-  tolerance. A future toggle could align to the statsmodels bread.
+- **DFBETAS convention (RESOLVED):** oe standardizes by the leave-one-out
+  variance `s_{(-i)}^2 = (RSS - e_i^2/(1-h_ii)) / (n-k-1)`, matching R
+  `stats::dfbetas` and Stata `predict, dfbeta`. `statsmodels.OLSInfluence.dfbetas`
+  uses the *same* leave-one-out variance (`sigma2_not_obsi`); the two now agree to
+  machine precision (~9e-14), so the former ~8.6e-4 divergence recorded in
+  FUTURE_WORK is gone (the LOO-variance factor `1/(1-h_i)` was fixed; see
+  `tests/r/tests/test_r_diagnostics.py::test_dfbetas_gap_magnitude`). The
+  `dfbetas(backend=...)` toggle (default `"stata_r"`, alternative
+  `"statsmodels"`) exposes the convention choice per AGENTS.md rule 15 so the
+  reference is explicit and auditable, not hidden. The default is validated
+  against the authoritative Stata/R fixture (not statsmodels) in
+  `tests/non_stata_nor_r/test_diagnostics.py`.

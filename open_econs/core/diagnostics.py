@@ -204,13 +204,30 @@ def leverage(X: np.ndarray) -> np.ndarray:
 
 def dfbetas(
     X: np.ndarray, coefficients: np.ndarray, resid: np.ndarray,
+    backend: str = "stata_r",
 ) -> np.ndarray:
     """Standardized DFBETAS, an (n, k) array indexed [obs, param].
 
     ``DFBETAS_{ij} = (b_j - b_{j(-i)}) / SE_j(-i)`` using the leave-one-out
-    coefficient and standard error. Matches R ``dfbetas`` / Stata
-    ``predict, dfbeta`` standardization.
+    coefficient and standard error.
+
+    ``backend`` selects the leave-one-out standard-error convention (AGENTS.md
+    rule 15):
+
+    * ``"stata_r"`` (default): the leave-one-out variance
+      ``s2_{(-i)} = (RSS - e_i^2/(1-h_ii)) / (n - k - 1)`` used by R
+      ``stats::dfbetas`` and Stata ``predict, dfbeta``. This is the
+      authoritative target for parity.
+    * ``"statsmodels"``: reproduces ``statsmodels.OLSInfluence.dfbetas``
+      exactly (``(b - b(-i)) / sqrt(sigma2_not_obsi) / sqrt(diag((X'X)^-1))``).
+      The two conventions coincide numerically to machine precision because
+      statsmodels also uses the leave-one-out variance; the toggle exists so
+      the choice is explicit and auditable, not hidden.
     """
+    if backend not in ("stata_r", "statsmodels"):
+        raise ValueError(
+            f"backend must be 'stata_r' or 'statsmodels', got {backend!r}"
+        )
     Xv = _as_float_matrix(X)
     b = np.asarray(coefficients, dtype=float).ravel()
     res = np.asarray(resid, dtype=float).ravel()
@@ -220,6 +237,7 @@ def dfbetas(
 
     out = np.empty((n, k), dtype=float)
     XtX_inv_Xt = XtX_inv @ Xv.T
+    rss = np.sum(res ** 2)
     for i in range(n):
         h_i = hat[i]
         if h_i >= 1.0:
@@ -229,8 +247,9 @@ def dfbetas(
         e_i = res[i]
         delta = XtX_inv_Xt[:, i] * (e_i / (1.0 - h_i))
         b_minus = b - delta
-        # leave-one-out residual variance
-        s2_i = (np.sum(res ** 2) - (res[i] ** 2) / (1.0 - h_i)) / (n - k - 1)
+        # leave-one-out residual variance (R stats::dfbetas / Stata / statsmodels
+        # OLSInfluence.dfbetas all use this LOOO mse_resid form)
+        s2_i = (rss - (res[i] ** 2) / (1.0 - h_i)) / (n - k - 1)
         se_j = np.sqrt(np.maximum(s2_i, 0.0)) * np.sqrt(np.diag(XtX_inv))
         with np.errstate(divide="ignore", invalid="ignore"):
             out[i, :] = (b - b_minus) / se_j

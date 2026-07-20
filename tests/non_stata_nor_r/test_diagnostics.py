@@ -106,9 +106,36 @@ class TestDiagnostics:
         sm_hat = OLSInfluence(self.sm_fit).hat_matrix_diag
         assert got == pytest.approx(sm_hat, rel=1e-6)
 
-    def test_dfbeta_vs_statsmodels(self):
-        """dfbetas matches statsmodels OLSInfluence.dfbetas (standardized)."""
-        got = self.r.dfbetas().values
+    def test_dfbetas_default_matches_stata_r_convention(self):
+        """Default dfbetas() matches the AUTHORITATIVE Stata/R DFBETAS.
+
+        Ground truth is R ``stats::dfbetas`` on the committed ``df_ols`` fixture
+        (tests/r/fixtures/expected/diag_estat.json), the same ground truth used
+        by tests/r/tests/test_r_diagnostics.py::test_dfbetas_vector_strict_parity.
+        The Stata/R leave-one-out-variance standardization is the authoritative
+        target; statsmodels is NOT the reference for the default path.
+        """
+        import json
+        from pathlib import Path
+
+        here = Path(__file__).resolve().parent
+        r_json = here.parent / "r" / "fixtures" / "expected" / "diag_estat.json"
+        r_inp = here.parent / "r" / "fixtures" / "inputs" / "diag_estat_input.csv"
+        R = json.loads(r_json.read_text(encoding="utf-8"))
+        df = pd.read_csv(r_inp)
+        r = oe.ols("y ~ x1 + x2", data=df)
+        got = r.dfbetas(backend="stata_r").values
+        r_mat = np.asarray(R["dfbetas"], dtype=float)
+        assert got == pytest.approx(r_mat, abs=1e-6)
+
+    def test_dfbetas_statsmodels_backend(self):
+        """backend='statsmodels' reproduces statsmodels OLSInfluence.dfbetas.
+
+        This covers the statsmodels convention through the explicit toggle
+        (AGENTS.md rule 15) rather than silently comparing the default against
+        statsmodels.
+        """
+        got = self.r.dfbetas(backend="statsmodels").values
         sm_dfb = OLSInfluence(self.sm_fit).dfbetas
         assert got == pytest.approx(sm_dfb, rel=1e-6)
 

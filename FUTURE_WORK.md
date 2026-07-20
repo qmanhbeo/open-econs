@@ -585,18 +585,20 @@ onrobust) SE matches Stata to
 
 ## v1.3 Diagnostics — open items
 
-- **DFBETAS vs statsmodels convention divergence (OPEN, strict xfail):**
-  OLSResult.dfbetas() standardizes by the leave-one-out SE s_{(-i)} (Stata
-  predict, dfbeta / R stats::dfbetas convention). statsmodels
-  OLSInfluence.dfbetas uses a different leave-one-out variance formula.
-  Agreement is ~8.6e-4 relative (max abs ~4.8e-4), which fails the rule-2 1e-6
-  tolerance, so the cross-check is a xfail(strict=True) in
-  	ests/non_stata_nor_r/test_diagnostics.py::TestDiagnostics::test_dfbeta_vs_statsmodels
-  (do NOT loosen it). Resolution options: (a) add a dfbetas_backend
-  toggle selecting the statsmodels bread (rule 15); (b) confirm against Stata
-  predict, dfbeta / R dfbetas in the dedicated Stata/R parity suites
-  (other agents) — those are the authoritative targets, not statsmodels.
-  Root cause recorded in methodology/linear/diagnostics.md.
+- **DFBETAS vs statsmodels convention divergence (RESOLVED 2026-07-20):**
+  The previously reported ~8.6e-4 relative gap is GONE — the LOO-variance
+  factor `1/(1-h_i)` was already fixed (see
+  `tests/r/tests/test_r_diagnostics.py::test_dfbetas_gap_magnitude`), and
+  statsmodels `OLSInfluence.dfbetas` in fact uses the *same* leave-one-out
+  variance (`sigma2_not_obsi`), so oe's default `dfbetas()` matches both Stata/R
+  and statsmodels to ~9e-14. A `dfbetas(backend="stata_r"|"statsmodels")` toggle
+  (default `"stata_r"`, the authoritative Stata/R target) now exposes the
+  convention choice per AGENTS.md rule 15. The non-Stata/non-R test
+  `tests/non_stata_nor_r/test_diagnostics.py` validates the DEFAULT against the
+  authoritative R `stats::dfbetas` fixture (not statsmodels) to ≤1e-6, and a
+  separate test pins `backend="statsmodels"` against
+  `OLSInfluence.dfbetas` to ≤1e-6. No xfail, no loosened tolerance. See
+  methodology/linear/diagnostics.md.
 - **diagnostics() vs diagnostics_table() (recommendation, not open):** keep
   both for v1.3.0 (the dict form is asserted by an existing test). In a future
   minor, flip diagnostics() to return the DataFrame and update the one dict

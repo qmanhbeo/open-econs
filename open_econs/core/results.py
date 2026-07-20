@@ -310,16 +310,24 @@ f"Prob (F-statistic):          {self._fmt(self.f_p_value, '.6e')}\n"
         vals = _leverage(self._X.values)
         return pd.Series(vals, index=self.residuals.index, name="leverage")
 
-    def dfbetas(self) -> pd.DataFrame:
+    def dfbetas(self, backend: str = "stata_r") -> pd.DataFrame:
         """Standardized DFBETAS (b_j - b_{j(-i)}) / SE_j(-i), one row per obs.
 
         Columns = parameter names. Matches R ``dfbetas`` / Stata
         ``predict, dfbeta`` standardization. For Stata's RAW ``dfbeta``
         (which drops the constant by default) use ``dfbeta()``.
+
+        ``backend`` selects the leave-one-out standard-error convention
+        (AGENTS.md rule 15): ``"stata_r"`` (default, the authoritative Stata/R
+        target) or ``"statsmodels"`` (reproduces
+        ``statsmodels.OLSInfluence.dfbetas``). The two coincide numerically to
+        machine precision; the toggle makes the choice explicit and auditable.
         """
         if self._X is None:
             raise ValueError("dfbetas requires the design matrix (self._X).")
-        vals = _dfbetas(self._X.values, self.coefficients.values, self.residuals.values)
+        vals = _dfbetas(
+            self._X.values, self.coefficients.values, self.residuals.values, backend=backend
+        )
         return pd.DataFrame(vals, index=self.residuals.index, columns=self.coefficients.index)
 
     def dfbeta(self) -> pd.DataFrame:
