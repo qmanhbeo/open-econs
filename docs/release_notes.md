@@ -1,13 +1,15 @@
 # open-econs — PyPI Launch Notes
 
-**Status: PRE-RELEASE / NOT PUBLISHED.** This document drafts the public PyPI
-launch notes for `open-econs`. Per the project's Standard of Practice (rule 23),
-no publish has been performed: no `git tag`, no `twine upload`, no `git push`.
-Publication is blocked pending explicit PM go-ahead. These notes are written so
-they can be attached to the GitHub Release / PyPI upload the moment that go-ahead
-is given.
+**Status: DRAFT FOR NEXT RELEASE.** `open-econs` **is already published on
+PyPI** — the current released version is **1.4.2** (see
+`docs/release_notes_v1.4.2.md`). The work described below (limited-DV
+trust-hardening, examples, packaging) lives on `main` as an **unreleased update**
+on top of 1.4.2. Per the project's Standard of Practice (rule 23), no new
+publish/tag has been performed for this update; a version bump + trusted-publisher
+upload is blocked pending explicit PM go-ahead.
 
-Target version: **1.4.2** (current `pyproject.toml` value; valid, not bumped).
+Target version: **next release** (current `pyproject.toml` is `1.4.2`, already
+published; this update needs a version bump before publish).
 
 ## The parity thesis
 
@@ -67,10 +69,11 @@ pip install open-econs[nls]                 # + sympy for nls()
 pip install open-econs[dev,lint]            # + development & linting tools
 ```
 
-> **Note:** `open-econs` is **not yet published to PyPI** at the time of writing
-> these launch notes. The command above will succeed only once the PM gives the
-> go-ahead and the trusted-publisher upload workflow runs. Until then, install
-> from a local checkout with `pip install -e ".[dev]"`.
+> **Note:** `open-econs` **is published on PyPI** (latest = `1.4.2`). The
+> commands above install the released version today. The limited-DV hardening and
+> `examples/` added on `main` ship in the next version, which requires a PM
+> go-ahead to bump + publish. Until then, install the unreleased `main` from a
+> local checkout with `pip install -e ".[dev]"`.
 
 Requires Python ≥ 3.10.
 
